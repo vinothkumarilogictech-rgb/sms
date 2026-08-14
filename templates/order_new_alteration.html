@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <!-- <h1>Order : {{ next_order_code or (next_order_id|fmt_id if next_order_id else "NEW") }}</h1> -->
+     <!-- <h1>Order : {{ next_order_code if next_order_code else "" }}</h1> -->
+    <!-- <p>Capture customer details and cost in one flow.</p> -->
+  </div>
+  <div class="order-type-tabs">
+    <a class="btn ghost btn-compact"
+      href="{{ url_for('order_new', customer_id=prefill_customer_id) }}">
+      Tailoring Order
+    </a>
+
+    <a class="btn ghost btn-compact active"
+      href="{{ url_for('order_new_alteration', customer_id=prefill_customer_id) }}">
+      Alteration Order
+    </a>
+
+    <a class="btn ghost btn-compact"
+      href="{{ url_for('order_new_material', customer_id=prefill_customer_id) }}">
+      Material Purchase
+    </a>
+  </div>
+
+</div>
+
+{% if error %}
+  <div class="alert">{{ error }}</div>
+{% endif %}
+
+<form class="stack" method="post">
+  <input type="hidden" name="customer_id" value="{{ prefill_customer_id or '' }}">
+  <section class="card cost-card payment-simple">
+    <div class="order-header-grid align-top single-col">
+      <div>
+        <div class="grid order-form-grid order-form-grid-four order-form-grid-tight">
+          <label>
+            Customer Name
+            <!-- <input type="text" name="name" required /> -->
+              <input type="text"
+                name="name"
+                value="{{ prefill_name or '' }}"
+                {% if prefill_customer_id %}readonly{% endif %}
+                required />
+          </label>
+          <label>
+            Phone Number
+            <!-- <input type="text" name="phone" required /> -->
+              <input type="text"
+                name="phone"
+                value="{{ prefill_phone or '' }}"
+                inputmode="tel"
+                maxlength="16"
+                pattern="^\+?[0-9]{1,15}$"
+                oninput="this.value=this.value.replace(/[^0-9+]/g,'').replace(/(?!^)\+/g,'');const d=this.value.replace(/\D/g,'').slice(0,15);this.value=(this.value.startsWith('+')?'+':'')+d;"
+                {% if prefill_customer_id %}readonly{% endif %}
+                required />
+          </label>
+          <label>
+            Order Date
+            <input type="text" value="{{ today_date }}" readonly />
+          </label>
+        </div>
+        <!-- <label>
+          Address
+          <input type="text" name="address" />
+        </label> -->
+        <label>
+          Notes
+          <textarea name="customer_notes" rows="2"></textarea>
+        </label>
+      </div>
+    </div>
+
+    <div class="cost-top">
+      <div class="cost-box">
+        <label>Total Cost</label>
+        <div class="cost-input">
+          <span>₹</span>
+          <input type="number" step="0.01" name="wage_cost" placeholder="00" data-cost="wage" min="0.01" required />
+        </div>
+      </div>
+      <div class="cost-input payment-method-top-input">
+        <select name="payment_method" aria-label="Payment method">
+          <option value="Cash" selected>Cash</option>
+          <option value="GPay">GPay</option>
+          <option value="Card">Card</option>
+        </select>
+      </div>
+      <div class="cost-summary">
+        <span>Subtotal</span>
+        <strong id="subtotal-value">₹ 0</strong>
+      </div>
+    </div>
+
+    <div class="cost-rows">
+      <div class="cost-row">
+        <div class="cost-label">Discount</div>
+        <div class="cost-input compact discount-toggle discount-box">
+          <input type="hidden" name="discount_type" value="percent" />
+          <input type="number" step="0.01" name="discount" placeholder="00" data-cost="discount" />
+          <div class="discount-switch">
+            <button type="button" class="disc-btn active" data-mode="percent">%</button>
+            <button type="button" class="disc-btn" data-mode="amount">₹</button>
+          </div>
+        </div>
+        <div class="cost-value" id="discount-value">₹ 0</div>
+      </div>
+      <div class="cost-row" data-gst-row="main">
+        <div class="cost-label">GST</div>
+        <div class="cost-input compact discount-toggle">
+          <input type="hidden" name="gst_type" id="gst-type-input" value="{{ app_setting('gst_value_mode', 'percent') }}" />
+          <input type="number" step="0.01" min="0" id="gst-input" value="{% if app_setting('gst_value_mode', 'percent') == 'amount' %}{{ app_setting('default_gst_amount', '0') }}{% else %}{{ app_setting('default_gst_percent', '0') }}{% endif %}" />
+          <div class="discount-switch" id="gst-switch">
+            <button type="button" class="disc-btn {% if app_setting('gst_value_mode', 'percent') != 'amount' %}active{% endif %}" data-mode="percent">%</button>
+            <button type="button" class="disc-btn {% if app_setting('gst_value_mode', 'percent') == 'amount' %}active{% endif %}" data-mode="amount">₹</button>
+          </div>
+        </div>
+        <div class="cost-value" id="gst-value">₹ 0</div>
+      </div>
+      <div class="cost-row" data-gst-row="cgst">
+        <div class="cost-label" id="cgst-label">CGST</div>
+        <div></div>
+        <div class="cost-value" id="cgst-value">₹ 0</div>
+      </div>
+      <div class="cost-row" data-gst-row="sgst">
+        <div class="cost-label" id="sgst-label">SGST</div>
+        <div></div>
+        <div class="cost-value" id="sgst-value">₹ 0</div>
+      </div>
+      <div class="cost-row total">
+        <div class="cost-label">Total</div>
+        <div></div>
+        <div class="cost-value" id="total-value">₹ 0</div>
+      </div>
+    </div>
+    <input type="hidden" name="total_amount" id="total-amount-input" value="0" />
+    <input type="hidden" name="taxable_amount" id="taxable-amount-input" value="0" />
+    <input type="hidden" name="gst_percent" id="gst-percent-input" value="0" />
+    <input type="hidden" name="gst_amount" id="gst-amount-input" value="0" />
+    <input type="hidden" name="cgst_percent" id="cgst-percent-input" value="0" />
+    <input type="hidden" name="cgst_amount" id="cgst-amount-input" value="0" />
+    <input type="hidden" name="sgst_percent" id="sgst-percent-input" value="0" />
+    <input type="hidden" name="sgst_amount" id="sgst-amount-input" value="0" />
+    <input type="hidden" id="gst-enabled-input" value="{{ '1' if app_setting('gst_enabled', '1') == '1' else '0' }}" />
+    <input type="hidden" name="status" value="In-Progress" />
+    <input type="hidden" name="assigned_tailor" value="" />
+  </section>
+
+  <div class="actions">
+    <button type="submit" class="btn primary">Save order</button>
+    <a class="btn ghost" href="{{ url_for('orders') }}">Cancel</a>
+  </div>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    function parseNumber(value) {
+      const parsed = parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value) {
+      return `₹ ${value.toFixed(2)}`;
+    }
+
+    function getDiscountMode() {
+      const hidden = document.querySelector('input[name="discount_type"]');
+      return hidden ? hidden.value : "percent";
+    }
+
+    function getGstMode() {
+      const hidden = document.getElementById("gst-type-input");
+      return hidden && hidden.value === "amount" ? "amount" : "percent";
+    }
+
+    function getTaxableForGstConversion() {
+      const wage = parseNumber(document.querySelector('[data-cost="wage"]')?.value);
+      const subtotal = wage;
+      const discount = parseNumber(document.querySelector('[data-cost="discount"]')?.value);
+      const mode = getDiscountMode();
+      const rawDiscountValue = mode === "amount" ? discount : subtotal * (discount / 100);
+      const discountValue = Math.max(0, Math.min(rawDiscountValue, subtotal));
+      return Math.max(0, subtotal - discountValue);
+    }
+
+    function recalcCosts() {
+      const wage = parseNumber(document.querySelector('[data-cost="wage"]')?.value);
+      const discount = parseNumber(document.querySelector('[data-cost="discount"]')?.value);
+      const subtotal = wage;
+      const mode = getDiscountMode();
+      const rawDiscountValue = mode === "amount" ? discount : subtotal * (discount / 100);
+      const discountValue = Math.max(0, Math.min(rawDiscountValue, subtotal));
+      const taxable = Math.max(0, subtotal - discountValue);
+      const gstEnabled = document.getElementById("gst-enabled-input")?.value === "1";
+      const gstMode = getGstMode();
+      const gstInputValue = parseNumber(document.getElementById("gst-input")?.value);
+      const gstAmount = gstEnabled ? (gstMode === "amount" ? Math.max(0, gstInputValue) : Math.max(0, taxable * (gstInputValue / 100))) : 0;
+      const gstPercent = gstEnabled ? (gstMode === "amount" ? (taxable > 0 ? (gstAmount * 100) / taxable : 0) : Math.max(0, gstInputValue)) : 0;
+      const cgstPercent = gstPercent / 2;
+      const sgstPercent = gstPercent / 2;
+      const cgstAmount = gstAmount / 2;
+      const sgstAmount = gstAmount / 2;
+      const total = taxable + gstAmount;
+
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = formatMoney(Math.max(0, value));
+      };
+
+      setText("subtotal-value", subtotal);
+      setText("discount-value", discountValue);
+      setText("gst-value", gstAmount);
+      setText("cgst-value", cgstAmount);
+      setText("sgst-value", sgstAmount);
+      setText("total-value", total);
+
+      const cgstLabel = document.getElementById("cgst-label");
+      const sgstLabel = document.getElementById("sgst-label");
+      if (cgstLabel) cgstLabel.textContent = `CGST (${cgstPercent.toFixed(2)}%)`;
+      if (sgstLabel) sgstLabel.textContent = `SGST (${sgstPercent.toFixed(2)}%)`;
+
+      const totalInput = document.getElementById("total-amount-input");
+      if (totalInput) {
+        totalInput.value = String(Math.max(0, total));
+      }
+      const taxableInput = document.getElementById("taxable-amount-input");
+      if (taxableInput) taxableInput.value = String(Math.max(0, taxable));
+      const gstPercentInput = document.getElementById("gst-percent-input");
+      if (gstPercentInput) gstPercentInput.value = String(Math.max(0, gstPercent));
+      const gstAmountInput = document.getElementById("gst-amount-input");
+      if (gstAmountInput) gstAmountInput.value = String(Math.max(0, gstAmount));
+      const cgstPercentInput = document.getElementById("cgst-percent-input");
+      if (cgstPercentInput) cgstPercentInput.value = String(Math.max(0, cgstPercent));
+      const cgstAmountInput = document.getElementById("cgst-amount-input");
+      if (cgstAmountInput) cgstAmountInput.value = String(Math.max(0, cgstAmount));
+      const sgstPercentInput = document.getElementById("sgst-percent-input");
+      if (sgstPercentInput) sgstPercentInput.value = String(Math.max(0, sgstPercent));
+      const sgstAmountInput = document.getElementById("sgst-amount-input");
+      if (sgstAmountInput) sgstAmountInput.value = String(Math.max(0, sgstAmount));
+    }
+
+    const form = document.querySelector("form");
+    if (form) {
+      form.addEventListener("submit", (event) => {
+        const totalInput = document.getElementById("total-amount-input");
+        const totalValue = totalInput ? parseNumber(totalInput.value) : 0;
+        if (totalValue <= 0) {
+          event.preventDefault();
+          alert("Total cost must be greater than 0.");
+        }
+      });
+    }
+
+    document.querySelectorAll("[data-cost]").forEach((input) => {
+      input.addEventListener("input", recalcCosts);
+    });
+    document.querySelectorAll(".discount-switch .disc-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.closest("#gst-switch")) return;
+        const mode = btn.dataset.mode;
+        const hidden = document.querySelector('input[name="discount_type"]');
+        if (hidden) hidden.value = mode;
+        btn.parentElement.querySelectorAll(".disc-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        recalcCosts();
+      });
+    });
+    document.querySelectorAll("#gst-switch .disc-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode;
+        const currentMode = getGstMode();
+        if (mode !== currentMode) {
+          const gstInputEl = document.getElementById("gst-input");
+          const currentValue = parseNumber(gstInputEl?.value);
+          const taxable = getTaxableForGstConversion();
+          if (gstInputEl) {
+            if (currentMode === "percent" && mode === "amount") {
+              gstInputEl.value = String(Math.max(0, taxable * (currentValue / 100)));
+            } else if (currentMode === "amount" && mode === "percent") {
+              const percent = taxable > 0 ? (currentValue * 100) / taxable : 0;
+              gstInputEl.value = String(Math.max(0, percent));
+            }
+          }
+        }
+        const hidden = document.getElementById("gst-type-input");
+        if (hidden) hidden.value = mode;
+        btn.parentElement.querySelectorAll(".disc-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        recalcCosts();
+      });
+    });
+    const gstInput = document.getElementById("gst-input");
+    const gstEnabled = document.getElementById("gst-enabled-input")?.value === "1";
+    if (!gstEnabled) {
+      document.querySelectorAll('[data-gst-row]').forEach((row) => {
+        row.style.display = "none";
+      });
+      if (gstInput) gstInput.value = "0";
+      const gstTypeInput = document.getElementById("gst-type-input");
+      if (gstTypeInput) gstTypeInput.value = "percent";
+    }
+    if (gstInput) {
+      gstInput.addEventListener("input", recalcCosts);
+      gstInput.addEventListener("change", recalcCosts);
+    }
+    recalcCosts();
+  });
+</script>
+{% endblock %}

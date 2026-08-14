@@ -1,0 +1,622 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .repair-add-actions {
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    align-items:center;
+  }
+  .repair-add-card {
+    background: #bf9fe7;
+    border: 1px solid #b18adf;
+    border-radius: 22px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 16px 30px rgba(62, 11, 99, 0.08);
+  }
+  .repair-add-card label,
+  .repair-add-card .expense-label,
+  .repair-add-title {
+    color: #3f2265;
+    font-weight: 700;
+  }
+  .repair-add-card input,
+  .repair-add-card select,
+  .repair-add-card textarea {
+    background: #fffdfd;
+  }
+  #vehicleDropdown {
+    background:#fffdfd !important;
+    border:1px solid #dcc4ef !important;
+    border-radius:16px !important;
+    box-shadow:0 14px 28px rgba(62, 11, 99, 0.12) !important;
+  }
+  #vehicleSummaryCard {
+    background:#fffdfd !important;
+    border:1px solid #dcc4ef !important;
+    border-radius:18px !important;
+  }
+  .repair-add-success {
+    background:#f3eafb !important;
+    border:1px solid #d8c0ef !important;
+    color:#4a2370 !important;
+  }
+  .repair-add-error {
+    background:#fff1f5 !important;
+    border:1px solid #efc2d7 !important;
+    color:#9b2c5d !important;
+  }
+  .repair-add-success .btn.primary {
+    background:#4a2370 !important;
+    border-color:#4a2370 !important;
+    color:#fff !important;
+  }
+  .repair-add-success .btn.ghost {
+    background:#fffdfd !important;
+    border-color:#d7c1ee !important;
+    color:#34224f !important;
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    {% set page_mode = mode or 'add' %}
+    {% set is_view = page_mode == 'view' %}
+    {% set is_edit = page_mode == 'edit' %}
+    {% set is_add = page_mode == 'add' %}
+    <h1>
+      {% if is_view %}View Repair{% elif is_edit %}Edit Repair{% else %}Add Repair{% endif %}
+    </h1>
+    <p>{% if is_view %}View vehicle expense details{% else %}Add vehicle repair/expense for a bike{% endif %}</p>
+  </div>
+  <div class="repair-add-actions">
+    {% if is_view and repair %}
+    <a class="btn primary" href="{{ url_for('expense_repair_detail', repair_id=repair.id, mode='edit') }}">Edit</a>
+    {% endif %}
+    {% if is_edit and repair %}
+    <a class="btn ghost" href="{{ url_for('expense_repair_detail', repair_id=repair.id, mode='view') }}">View</a>
+    {% endif %}
+    {% if repair %}
+    <a class="btn ghost"
+       href="{{ url_for('expense_repair_print', repair_id=repair.id, paper='customer') }}"
+       target="_blank">
+      🧾 View Bill
+    </a>
+    <button class="btn ghost" type="button"
+            onclick="printRepairBill('{{ url_for('expense_repair_print', repair_id=repair.id, paper='customer') }}')">
+      🖨️ Print
+    </button>
+    {% endif %}
+    <a class="btn ghost js-back-button"
+       href="{{ back_url or url_for('expense_dashboard', type='repair') }}"
+       data-fallback="{{ back_url or url_for('expense_dashboard', type='repair') }}"
+       data-force-fallback="1">Back</a>
+  </div>
+</div>
+
+{% if saved %}
+<div class="alert alert-success repair-add-success" style="padding:14px 18px; border-radius:12px; margin-bottom:16px; display:flex; align-items:center; gap:12px;">
+  <span style="font-size:1.4rem;">✅</span>
+  <div>
+    <strong>Repair saved successfully!</strong>
+    {% if repair %}
+    <div style="margin-top:6px; display:flex; gap:10px; flex-wrap:wrap;">
+      <a href="{{ url_for('expense_repair_print', repair_id=repair.id, paper='customer') }}"
+         target="_blank"
+         class="btn primary" style="text-decoration:none;">
+        🧾 View Bill
+      </a>
+      <button class="btn ghost" type="button"
+              onclick="printRepairBill('{{ url_for('expense_repair_print', repair_id=repair.id, paper='customer') }}')">
+        🖨️ Print Bill
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert repair-add-error" style="padding:14px 18px; border-radius:12px; margin-bottom:16px;">
+  ⚠️ {{ error }}
+</div>
+{% endif %}
+
+<section class="card repair-add-card">
+  <form class="stack" method="post" id="repairForm">
+
+    <!-- Vehicle Search -->
+    <label>
+      Vehicle
+      <div style="position:relative;">
+        <input
+          type="text"
+          id="vehicleSearchInput"
+          placeholder="Search by name or number..."
+          autocomplete="off"
+          {% if is_view or prefill_vehicle %}readonly{% endif %}
+          value="{% if repair %}{{ repair.vehicle_name }} ({{ repair.vehicle_number }}){% elif prefill_vehicle %}{{ prefill_vehicle.vehicle_name }} ({{ prefill_vehicle.vehicle_number }}){% endif %}"
+          style="width:100%; padding-right:36px;"
+        />
+        <input type="hidden" name="vehicle_name" id="hiddenVehicleName"
+               value="{% if repair %}{{ repair.vehicle_name }}{% elif prefill_vehicle %}{{ prefill_vehicle.vehicle_name }}{% endif %}" />
+        <input type="hidden" name="vehicle_number" id="hiddenVehicleNumber"
+               value="{% if repair %}{{ repair.vehicle_number }}{% elif prefill_vehicle %}{{ prefill_vehicle.vehicle_number }}{% endif %}" />
+
+        {% if (not is_view) and (not prefill_vehicle) %}
+        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#999;pointer-events:none;">🔍</span>
+        {% endif %}
+
+        <!-- Dropdown results -->
+        <div id="vehicleDropdown" style="
+          display:none;
+          position:absolute;
+          top:calc(100% + 4px);
+          left:0; right:0;
+          z-index:200;
+          max-height:260px;
+          overflow-y:auto;
+        "></div>
+      </div>
+    </label>
+
+    <!-- Vehicle summary card -->
+    <div id="vehicleSummaryCard" style="
+      display:none;
+      padding:14px 16px;
+      align-items:center;
+      gap:14px;
+    ">
+      <div id="vehiclePhotoWrap" style="width:80px;height:56px;border-radius:10px;overflow:hidden;flex:0 0 auto;background:#e2e8f0;"></div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;" id="vehicleSummaryName">-</div>
+        <div class="muted" style="font-size:0.85rem;">
+          <span id="vehicleSummaryNumber"></span>
+          <span id="vehicleSummaryYear" style="margin-left:8px;"></span>
+          <span id="vehicleSummaryStatus" style="margin-left:8px;"></span>
+        </div>
+      </div>
+    </div>
+
+    <label>
+  Date
+  <input type="date" name="repair_date"
+         value="{{ (repair.repair_date|date_only) if repair and repair.repair_date else today_date }}"
+         {% if is_view %}readonly{% endif %} required>
+</label>
+
+<label>
+  Expenses For
+  <input type="text" name="expenses_for" placeholder="e.g. Vehicle Buy Cost"
+         value="{{ repair.expenses_for if repair and repair.expenses_for else '' }}"
+         {% if is_view %}readonly{% endif %}>
+</label>
+
+<label>
+  Repair description 
+  <textarea name="description" rows="3" placeholder="Describe the repair work..."
+            {% if is_view %}readonly{% endif %} required>{{ repair.description if repair else '' }}</textarea>
+</label>
+
+<label>
+  Expenses (Rs)
+  <input type="number" step="0.01" min="0" name="total_cost" id="totalCostInput"
+         placeholder="0.00"
+         value="{{ repair.total_cost if repair and repair.total_cost is not none else '' }}"
+         {% if is_view %}readonly{% endif %} required>
+</label>
+
+    {% if false %}
+    <!-- Expense rows -->
+    <div>
+      <label class="expense-label" style="display:block; margin-bottom:8px;">Expense Items</label>
+      <div id="expenseRows" class="stack" style="gap:10px;">
+        {% if repair and repair.repair_kits %}
+          {% set kit_names = repair.repair_kits.split(',') %}
+          {% for kit in kit_names %}
+          <!-- ✅ FIX: padding-right on label, right:0 on button -->
+          <div class="expense-row grid two" style="gap:10px; align-items:end;">
+            <label style="margin:0;">
+              Expense type
+              <input type="text" name="expense_type" value="{{ kit.strip() }}"
+                     placeholder="e.g. Engine oil, Brake pad..."
+                     {% if is_view %}readonly{% endif %}>
+            </label>
+            <label style="margin:0; position:relative; padding-right:{% if not is_view %}36px{% else %}0{% endif %};">
+              Amount (₹)
+              <input type="number" step="0.01" min="0" name="expense_amount"
+                     class="expense-amount-input"
+                     value=""
+                     placeholder="0.00"
+                     {% if is_view %}readonly{% endif %}>
+              {% if not is_view %}
+              <button type="button" class="remove-expense-row"
+                      style="position:absolute;right:0;bottom:8px;background:none;border:none;color:#dc2626;font-size:1.2rem;cursor:pointer;padding:4px;">✕</button>
+              {% endif %}
+            </label>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="expense-row grid two" style="gap:10px; align-items:end;">
+            <label style="margin:0;">
+              Expense type
+              <input type="text" name="expense_type"
+                     placeholder="e.g. Engine oil, Brake pad..."
+                     {% if is_view %}readonly{% endif %}>
+            </label>
+            <label style="margin:0; position:relative; padding-right:{% if not is_view %}36px{% else %}0{% endif %};">
+              Amount (₹)
+              <input type="number" step="0.01" min="0" name="expense_amount"
+                     class="expense-amount-input"
+                     placeholder="0.00"
+                     {% if is_view %}readonly{% endif %}>
+              {% if not is_view %}
+              <button type="button" class="remove-expense-row"
+                      style="position:absolute;right:0;bottom:8px;background:none;border:none;color:#dc2626;font-size:1.2rem;cursor:pointer;padding:4px;">✕</button>
+              {% endif %}
+            </label>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if not is_view %}
+      <button type="button" id="addExpenseRow"
+              style="margin-top:10px; display:flex; align-items:center; gap:6px;"
+              class="btn ghost">
+        + Add Expense Item
+      </button>
+      {% endif %}
+    </div>
+
+    <!-- Fill existing kit costs from JSON -->
+    {% if repair and repair.repair_kit_costs %}
+    <script>
+    (function(){
+      try {
+        const costs = JSON.parse({{ repair.repair_kit_costs | tojson }});
+        document.querySelectorAll('.expense-row').forEach(function(row) {
+          const typeInput = row.querySelector('input[name="expense_type"]');
+          const amtInput = row.querySelector('input[name="expense_amount"]');
+          if (!typeInput || !amtInput) return;
+          const key = typeInput.value.trim().toLowerCase();
+          for (const [k, v] of Object.entries(costs)) {
+            if (k.trim().toLowerCase() === key) {
+              amtInput.value = v;
+              break;
+            }
+          }
+        });
+      } catch(e) {}
+    })();
+    </script>
+    {% endif %}
+
+    <div class="grid three">
+      <label>
+        Total cost
+        <input type="number" step="0.01" name="total_cost" id="totalCostInput"
+               placeholder="0.00"
+               value="{{ repair.total_cost if repair and repair.total_cost is not none else '' }}"
+               {% if is_view %}readonly{% endif %} required>
+      </label>
+
+      <label>
+        Advance amount
+        <input type="number" step="0.01" name="advance_amount"
+               placeholder="0.00"
+               value="{{ repair.advance_amount if repair and repair.advance_amount is not none else '0' }}"
+               {% if is_view %}readonly{% endif %}>
+      </label>
+
+      <label>
+        Balance
+        <input type="number" step="0.01" name="balance_display" id="balanceDisplay"
+               placeholder="0.00" readonly
+               style="background:#f8fafc; color:#666;"
+               value="">
+      </label>
+    </div>
+    {% endif %}
+
+    <div class="actions">
+      {% if not is_view %}
+      <button class="btn primary" type="submit">
+        {% if is_edit %}Save Changes{% else %}Save Repair{% endif %}
+      </button>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+<!-- Bill Preview Modal -->
+<div id="billModal" style="
+  display:none;
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.55);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+">
+  <div style="
+    background:#fff;
+    border-radius:18px;
+    max-width:480px;
+    width:94%;
+    max-height:92vh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    box-shadow:0 24px 64px rgba(0,0,0,0.22);
+  ">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--line);">
+      <strong>Repair Bill</strong>
+      <button type="button" onclick="closeBillModal()"
+              style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#666;">✕</button>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:0;">
+      <iframe id="billIframe" src="" style="width:100%; height:70vh; border:none;"></iframe>
+    </div>
+    <div style="padding:14px 20px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end;">
+      <button type="button" class="btn ghost" onclick="closeBillModal()">Close</button>
+      <button type="button" class="btn primary" onclick="triggerPrint()">🖨️ Print</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Vehicle Search ────────────────────────────────────────────────
+const allVehiclesRaw = {{ (vehicles if vehicles is defined else []) | tojson }};
+let allVehicles = (Array.isArray(allVehiclesRaw) ? allVehiclesRaw : []).map((v) => {
+  if (Array.isArray(v)) {
+    return {
+      id: v[0],
+      vehicle_name: v[1],
+      vehicle_number: v[2],
+      model_year: v[3],
+      status: v[4],
+      photo_filename: v[5],
+    };
+  }
+  const o = v || {};
+  return {
+    id: o.id ?? o[0] ?? o["0"] ?? null,
+    vehicle_name: o.vehicle_name ?? o.vehicleName ?? o[1] ?? o["1"] ?? "",
+    vehicle_number: o.vehicle_number ?? o.vehicleNumber ?? o[2] ?? o["2"] ?? "",
+    model_year: o.model_year ?? o.modelYear ?? o[3] ?? o["3"] ?? "",
+    status: o.status ?? o[4] ?? o["4"] ?? "",
+    photo_filename: o.photo_filename ?? o.photoFilename ?? o[5] ?? o["5"] ?? "",
+  };
+});
+let vehiclesLoadedFromApi = false;
+
+async function ensureVehiclesLoaded() {
+  if (allVehicles.length > 0 || vehiclesLoadedFromApi) return;
+  vehiclesLoadedFromApi = true;
+  try {
+    const resp = await fetch('/api/repair/vehicles', { credentials: 'same-origin' });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      allVehicles = data.map((o) => ({
+        id: o.id ?? null,
+        vehicle_name: o.vehicle_name ?? '',
+        vehicle_number: o.vehicle_number ?? '',
+        model_year: o.model_year ?? '',
+        status: o.status ?? '',
+        photo_filename: o.photo_filename ?? '',
+      }));
+    }
+  } catch (e) {
+    // Ignore fetch errors; dropdown will show no vehicles found.
+  }
+}
+const searchInput = document.getElementById('vehicleSearchInput');
+const dropdown = document.getElementById('vehicleDropdown');
+const hiddenName = document.getElementById('hiddenVehicleName');
+const hiddenNumber = document.getElementById('hiddenVehicleNumber');
+const summaryCard = document.getElementById('vehicleSummaryCard');
+
+function showVehicleSummary(v) {
+  if (!v) { summaryCard.style.display = 'none'; return; }
+  document.getElementById('vehicleSummaryName').textContent = v.vehicle_name || '-';
+  document.getElementById('vehicleSummaryNumber').textContent = v.vehicle_number || '';
+  document.getElementById('vehicleSummaryYear').textContent = v.model_year || '';
+  document.getElementById('vehicleSummaryStatus').textContent = v.status || '';
+  const wrap = document.getElementById('vehiclePhotoWrap');
+  if (v.photo_filename) {
+    wrap.innerHTML = `<img src="/static/uploads/vehicles/${encodeURIComponent(v.photo_filename)}"
+      style="width:80px;height:56px;object-fit:cover;border-radius:10px;" />`;
+  } else {
+    wrap.innerHTML = '<div style="width:80px;height:56px;background:#e2e8f0;border-radius:10px;"></div>';
+  }
+  summaryCard.style.display = 'flex';
+}
+
+// Pre-fill summary if editing/viewing
+{% if repair or prefill_vehicle %}
+(function(){
+  const preNum = {{ (repair.vehicle_number if repair else prefill_vehicle.vehicle_number) | tojson }};
+  const found = allVehicles.find(v => v.vehicle_number === preNum);
+  if (found) showVehicleSummary(found);
+})();
+{% endif %}
+
+{% if (not is_view) and (not prefill_vehicle) %}
+searchInput.addEventListener('input', async function() {
+  await ensureVehiclesLoaded();
+  const q = this.value.trim().toLowerCase();
+  hiddenName.value = '';
+  hiddenNumber.value = '';
+  summaryCard.style.display = 'none';
+
+  if (!q) { dropdown.style.display = 'none'; return; }
+
+  const matches = allVehicles.filter(v =>
+    (v.vehicle_name || '').toLowerCase().includes(q) ||
+    (v.vehicle_number || '').toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  if (!matches.length) {
+    dropdown.innerHTML = '<div style="padding:12px 16px;color:#666;font-size:0.9rem;">No vehicles found</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  dropdown.innerHTML = matches.map(v => `
+    <div class="vehicle-option" data-name="${v.vehicle_name}" data-number="${v.vehicle_number}"
+         data-year="${v.model_year || ''}" data-status="${v.status || ''}" data-photo="${v.photo_filename || ''}"
+         style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background 0.15s;">
+      ${v.photo_filename
+        ? `<img src="/static/uploads/vehicles/${encodeURIComponent(v.photo_filename)}"
+               style="width:44px;height:32px;object-fit:cover;border-radius:8px;flex:0 0 auto;" />`
+        : `<div style="width:44px;height:32px;background:#e2e8f0;border-radius:8px;flex:0 0 auto;"></div>`}
+      <div>
+        <div style="font-weight:700;font-size:0.93rem;">${v.vehicle_name}</div>
+        <div style="color:#666;font-size:0.8rem;">${v.vehicle_number}${v.model_year ? ' · ' + v.model_year : ''}${v.status ? ' · ' + v.status : ''}</div>
+      </div>
+    </div>
+  `).join('');
+  dropdown.style.display = 'block';
+});
+
+dropdown.addEventListener('click', function(e) {
+  const opt = e.target.closest('.vehicle-option');
+  if (!opt) return;
+  const name = opt.dataset.name;
+  const number = opt.dataset.number;
+  searchInput.value = `${name} (${number})`;
+  hiddenName.value = name;
+  hiddenNumber.value = number;
+  dropdown.style.display = 'none';
+  showVehicleSummary({
+    vehicle_name: name, vehicle_number: number,
+    model_year: opt.dataset.year, status: opt.dataset.status,
+    photo_filename: opt.dataset.photo
+  });
+});
+
+document.addEventListener('click', function(e) {
+  if (!dropdown.contains(e.target) && e.target !== searchInput) {
+    dropdown.style.display = 'none';
+  }
+});
+
+// Hover styles
+dropdown.addEventListener('mouseover', function(e) {
+  const opt = e.target.closest('.vehicle-option');
+  if (opt) opt.style.background = '#f8fafc';
+});
+dropdown.addEventListener('mouseout', function(e) {
+  const opt = e.target.closest('.vehicle-option');
+  if (opt) opt.style.background = '';
+});
+{% endif %}
+
+// ─── Expense rows ──────────────────────────────────────────────────
+// ✅ FIX: padding-right:36px on label, right:0 on button (was right:-32px causing overflow)
+if (document.getElementById('addExpenseRow')) {
+const expenseRowTemplate = `
+  <div class="expense-row grid two" style="gap:10px; align-items:end;">
+    <label style="margin:0;">
+      Expense type
+      <input type="text" name="expense_type" placeholder="e.g. Engine oil, Brake pad...">
+    </label>
+    <label style="margin:0; position:relative; padding-right:36px;">
+      Amount (₹)
+      <input type="number" step="0.01" min="0" name="expense_amount"
+             class="expense-amount-input" placeholder="0.00">
+      <button type="button" class="remove-expense-row"
+              style="position:absolute;right:0;bottom:8px;background:none;border:none;color:#dc2626;font-size:1.2rem;cursor:pointer;padding:4px;">✕</button>
+    </label>
+  </div>`;
+
+document.getElementById('addExpenseRow').addEventListener('click', function() {
+  const wrap = document.getElementById('expenseRows');
+  wrap.insertAdjacentHTML('beforeend', expenseRowTemplate);
+  wrap.querySelector('.expense-row:last-child input[name="expense_type"]').focus();
+  recalcTotal();
+  bindAmountInputs();
+});
+
+document.getElementById('expenseRows').addEventListener('click', function(e) {
+  if (e.target.classList.contains('remove-expense-row')) {
+    const rows = this.querySelectorAll('.expense-row');
+    if (rows.length > 1) {
+      e.target.closest('.expense-row').remove();
+    } else {
+      e.target.closest('.expense-row').querySelectorAll('input').forEach(i => i.value = '');
+    }
+    recalcTotal();
+  }
+});
+
+function recalcTotal() {
+  let sum = 0;
+  document.querySelectorAll('.expense-amount-input').forEach(function(inp) {
+    sum += parseFloat(inp.value || 0) || 0;
+  });
+  if (sum > 0) {
+    document.getElementById('totalCostInput').value = sum.toFixed(2);
+  }
+  recalcBalance();
+}
+
+function recalcBalance() {
+  const total = parseFloat(document.getElementById('totalCostInput').value || 0) || 0;
+  const advance = parseFloat(document.querySelector('input[name="advance_amount"]').value || 0) || 0;
+  document.getElementById('balanceDisplay').value = Math.max(0, total - advance).toFixed(2);
+}
+
+function bindAmountInputs() {
+  document.querySelectorAll('.expense-amount-input').forEach(function(inp) {
+    inp.removeEventListener('input', recalcTotal);
+    inp.addEventListener('input', recalcTotal);
+  });
+}
+
+bindAmountInputs();
+recalcTotal();
+
+document.getElementById('totalCostInput').addEventListener('input', recalcBalance);
+document.querySelector('input[name="advance_amount"]').addEventListener('input', recalcBalance);
+}
+
+// ─── Bill modal ────────────────────────────────────────────────────
+function printRepairBill(url) {
+  const iframe = document.getElementById('billIframe');
+  iframe.src = url;
+  document.getElementById('billModal').style.display = 'flex';
+}
+
+function closeBillModal() {
+  document.getElementById('billModal').style.display = 'none';
+  document.getElementById('billIframe').src = '';
+}
+
+function triggerPrint() {
+  const iframe = document.getElementById('billIframe');
+  try {
+    iframe.contentWindow.print();
+  } catch(e) {
+    window.open(iframe.src, '_blank');
+  }
+}
+
+document.getElementById('billModal').addEventListener('click', function(e) {
+  if (e.target === this) closeBillModal();
+});
+
+// ─── Form validation ──────────────────────────────────────────────
+document.getElementById('repairForm').addEventListener('submit', function(e) {
+  const vName = document.getElementById('hiddenVehicleName').value.trim();
+  const vNum = document.getElementById('hiddenVehicleNumber').value.trim();
+  if (!vName || !vNum) {
+    e.preventDefault();
+    document.getElementById('vehicleSearchInput').style.borderColor = '#dc2626';
+    document.getElementById('vehicleSearchInput').focus();
+    alert('Please select a vehicle from the search results.');
+  }
+});
+</script>
+
+{% endblock %}

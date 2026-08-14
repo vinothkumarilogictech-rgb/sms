@@ -1,0 +1,803 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+{% if request.args.get("saved") == "1" %}
+  <div class="alert">Payment saved.</div>
+{% endif %}
+{% if request.args.get("phone_error") == "1" %}
+  <div class="alert">Phone number must contain digits only. (+ is optional.)</div>
+{% endif %}
+{% if request.args.get("cancelled") == "1" %}
+  <div class="alert">Order successfully cancelled. Status is now Cancelled.</div>
+{% endif %}
+
+<div class="customer-detail-grid clean-detail">
+  <section class="card customer-info-card">
+    <div class="info-list">
+      {% if customer_images %}
+      <div class="customer-photo-top">
+        <img
+          src="{{ url_for('static', filename='uploads/' ~ customer_images[0].filename) }}"
+          alt="Customer photo"
+          class="customer-photo-thumb preview-click"
+        />
+      </div>
+      {% endif %}
+      <div><span>Name</span><strong>{{ customer.name }}</strong></div>
+      <div><span>Mobile</span><strong>{{ customer.phone }}</strong></div>
+      <div><span>Customer ID</span><strong>{{ customer.display_id|fmt_id(6) }}</strong></div>
+		      {% set order_type_lower = (latest_order.order_type or '')|lower if latest_order else '' %}
+		      {% set use_order_id_label = order_type_lower in ['alteration', 'material', 'material purchase'] %}
+		      <div class="invoice-id-row">
+		        <span>{{ 'Order ID' if use_order_id_label else 'Invoice ID' }}</span>
+		        <strong>
+		          {% if latest_order and use_order_id_label %}
+		            {{ (latest_order.order_no if latest_order.order_no else (latest_order.id|string))|replace('\\', '/') }}
+		          {% elif latest_order and latest_order.invoice_id %}
+		            {{ latest_order.invoice_id }}
+		          {% elif latest_order %}
+		            {{ 'INV' ~ '%03d'|format(latest_order.id or 0) }}
+		          {% else %}
+		            -
+		          {% endif %}
+		        </strong>
+		      </div>
+    </div>
+
+    <div class="order-list">
+      <div class="order-list-row order-list-head">
+        <span>Order</span>
+        <span>Open</span>
+        <span>Cancel</span>
+      </div>
+      {% for order in orders %}
+        {% set raw_no = (order.order_no if order.order_no else order.id|string) %}
+        {% set order_prefix = raw_no.split('\\', 1)[0] if '\\' in raw_no else raw_no %}
+        {% set item_count = order_measure_counts.get(order.id, 0) %}
+        {% if item_count > 1 %}
+          {% set measure_ids = order_measure_ids.get(order.id, []) %}
+          {% for idx in range(1, item_count + 1) %}
+          {% set mid = measure_ids[idx - 1] if (idx - 1) < (measure_ids|length) else None %}
+          <div class="order-list-row {% if selected_order_id and order.id == selected_order_id %}active{% endif %}">
+            <div class="order-code-item">
+              <a class="order-code-chip" href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">{{ order_prefix }}/{{ idx }}</a>
+            </div>
+            <span class="order-open">
+              <a class="link" href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">Open</a>
+            </span>
+            <span class="order-cancel">
+              {% if mid %}
+              <form method="post" action="{{ url_for('customer_detail', customer_id=customer.id) }}">
+                <input type="hidden" name="source" value="{{ request.args.get('source', '') }}" />
+                <input type="hidden" name="order_id" value="{{ order.id }}" />
+                <input type="hidden" name="measurement_cancel_id" value="{{ mid }}" />
+                <button class="btn ghost btn-compact" type="submit">Cancel</button>
+              </form>
+              {% endif %}
+            </span>
+          </div>
+          {% endfor %}
+        {% elif item_count == 1 %}
+          {% set measure_ids = order_measure_ids.get(order.id, []) %}
+          {% set mid = measure_ids[0] if measure_ids else None %}
+          <div class="order-list-row {% if selected_order_id and order.id == selected_order_id %}active{% endif %}">
+            <div class="order-code-item">
+              <a class="order-code-chip" href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">{{ order_prefix }}/1</a>
+            </div>
+            <span class="order-open">
+              <a class="link" href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">Open</a>
+            </span>
+            <span class="order-cancel">
+              {% if mid %}
+              <form method="post" action="{{ url_for('customer_detail', customer_id=customer.id) }}">
+                <input type="hidden" name="source" value="{{ request.args.get('source', '') }}" />
+                <input type="hidden" name="order_id" value="{{ order.id }}" />
+                <input type="hidden" name="measurement_cancel_id" value="{{ mid }}" />
+                <button class="btn ghost btn-compact" type="submit">Cancel</button>
+              </form>
+              {% endif %}
+            </span>
+          </div>
+        {% else %}
+          <div class="order-list-row {% if selected_order_id and order.id == selected_order_id %}active{% endif %}">
+            <div class="order-code-item">
+              <a class="order-code-chip" href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">{{ raw_no|replace('\\', '/') }}</a>
+            </div>
+            <span class="order-open">
+              <a class="link" href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">Open</a>
+            </span>
+            <span class="order-cancel">
+              {% if order.status != "Cancelled" %}
+              <form method="post" action="{{ url_for('order_cancel', order_id=order.id) }}">
+                <input type="hidden" name="next" value="{{ request.full_path }}" />
+                <button class="btn ghost btn-compact" type="submit">Cancel</button>
+              </form>
+              {% endif %}
+            </span>
+          </div>
+        {% endif %}
+      {% else %}
+      <div class="muted">No orders yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card customer-order-card">
+	    <form class="order-status-form" method="post">
+	      <input type="hidden" name="order_id" value="{{ latest_order.id if latest_order else '' }}" />
+	      <input type="hidden" name="source" value="{{ request.args.get('source', '') }}" />
+      <div class="detail-header">
+        <div class="detail-actions">
+	          <div class="action-group action-group-left">
+	            {% if latest_order and latest_order.order_type == "Tailoring" %}
+	            <input type="hidden" name="order_status" id="order-status-hidden" value="{{ latest_order.status or 'In-Progress' }}" />
+	            {% elif latest_order %}
+	            <input type="hidden" name="order_status" value="{{ latest_order.status or 'Delivered' }}" />
+	            {% endif %}
+          </div>
+
+          <div class="action-group action-group-right">
+            {% if latest_order %}
+	            <button
+	              class="btn primary print-btn customer-print-btn"
+	              type="button"
+	              id="detail-print-open"
+	              data-order-id="{{ latest_order.id }}"
+              data-order-type="{{ latest_order.order_type or '' }}"
+            >
+              <i class="bi bi-printer"></i> Print
+            </button>
+            {% endif %}
+            <a
+              class="btn primary btn-compact"
+              href="{{ url_for('order_new', customer_id=customer.id) }}"
+            >
+              + Create Order
+            </a>
+            <a
+              class="btn ghost btn-compact hover-red-fill"
+              href="{{ url_for('orders') }}"
+            >Back</a>
+          </div>
+        </div>
+    </div>
+	    {% if latest_order %}
+		      <div class="detail-meta">
+		        <span><small>Order Type:</small><strong>{{ latest_order.order_type or "-" }}</strong></span>
+		        <span><small>Order Date:</small><strong>{{ latest_order.created_at|datetime_display if latest_order and latest_order.created_at else "-" }}</strong></span>
+		        <span><small>Order Status:</small><strong>{{ latest_order.status or "-" }}</strong></span>
+		        {% if latest_order.order_type == "Tailoring" %}
+		        {% if measurement_status_summary %}
+		        <span>
+		          <small>Item Status:</small>
+		          <strong>
+		            {% for status_line in measurement_status_summary %}
+		              {{ status_line }}{% if not loop.last %}<br>{% endif %}
+		            {% endfor %}
+		          </strong>
+		        </span>
+		        {% endif %}
+		        {% endif %}
+      </div>
+	    <div class="detail-panel">
+	      {% if latest_order.order_type != "Alteration" %}
+	      <div class="detail-panel-head">
+	        <div class="detail-chip">
+	          <span>Category</span>
+		          <strong>
+		            {% if order_items %}
+		              {% for item in order_items %}
+		                {{ item.item_type }}{% if not loop.last %}<br>{% endif %}
+		              {% endfor %}
+		            {% else %}
+		              -
+		            {% endif %}
+	          </strong>
+	        </div>
+	        <div class="detail-chip">
+	          <span>Quantity</span>
+	          <strong>
+	            {% if order_items %}
+	              {% set qty_ns = namespace(total=0) %}
+	              {% for item in order_items %}
+	                {% set qty_ns.total = qty_ns.total + (item.qty if item.qty and item.qty > 0 else 1) %}
+	              {% endfor %}
+	              {% set total_qty = qty_ns.total %}
+	              {{ "%.2f"|format(total_qty) if total_qty % 1 else total_qty|int }}
+	            {% else %}
+	              0
+	            {% endif %}
+	          </strong>
+	        </div>
+	      </div>
+	      {% endif %}
+	      {% if order_items %}
+	      <div class="order-item-list">
+	        {% for item in order_items %}
+	          <div class="order-item-row">
+            <span>{{ item.item_type }}</span>
+            <strong>
+              {% if item.uom_name %}
+                {% if item.qty and item.qty > 0 %}{{ item.qty }}{% else %}1{% endif %} {{ item.uom_name }}
+              {% else %}
+                {% if item.qty and item.qty > 0 %}{{ item.qty }}{% else %}1{% endif %}
+              {% endif %}
+            </strong>
+	          </div>
+	        {% endfor %}
+	      </div>
+	      {% endif %}
+	      {% if latest_order and latest_order.notes %}
+	      {% set ns_notes = namespace(lines=[]) %}
+	      {% for raw_line in latest_order.notes.splitlines() %}
+	        {% set cleaned = raw_line.strip() %}
+	        {% if cleaned
+	              and not cleaned.lower().startswith("worker delivery date:")
+	              and not cleaned.lower().startswith("requirements:") %}
+	          {% set ns_notes.lines = ns_notes.lines + [cleaned] %}
+	        {% endif %}
+	      {% endfor %}
+	      {% if ns_notes.lines %}
+	      <div class="detail-section order-notes-section">
+	        <h4>Order Notes</h4>
+	        <div class="order-notes-box">
+	          {% for note_line in ns_notes.lines %}
+	            <div>{{ note_line }}</div>
+	          {% endfor %}
+	        </div>
+	      </div>
+	      {% endif %}
+	      {% endif %}
+	      {% if material_items %}
+	      <div class="detail-section">
+	        <h4>Shop Materials</h4>
+        <div class="measure-table-wrap">
+          <table class="measure-table material-table">
+            <thead>
+              <tr>
+                <th class="fw-bold">Item</th>
+                <th class="fw-bold">Qty</th>
+                <th class="fw-bold">Rate</th>
+                <th class="fw-bold">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in material_items if item.item_name %}
+              <tr>
+                <td>{{ item.item_name }}</td>
+                <td>
+                  {{ item.qty }}
+                  {% if item.uom_name %}{{ item.uom_name }}{% endif %}
+                </td>
+                <td>&#8377; {{ "%.2f"|format(item.unit_price or 0) }}</td>
+                <td>&#8377; {{ "%.2f"|format(item.line_total or 0) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+	      {% if latest_order.order_type == "Tailoring" %}
+			      <div class="detail-section measurement-photo-layout{% if not images_by_item %} no-photos{% endif %}">
+			        <div>
+	          <h4>Measurements</h4>
+	          {% if measurements %}
+	            <div class="measure-table-wrap">
+	              <div class="measure-stacked">
+		                {% for measure in measurements %}
+			                {% set ns = namespace(measure_lines=[], note_lines=[], seen_measure_labels=[], req_names=[], completed_date="", delivery_date="") %}
+	                {% for key, label in {
+	                  "neck":"Neck","chest":"Chest","waist":"Waist","hip":"Hip","shoulder":"Shoulder","sleeve":"Sleeve",
+	                  "length":"Length","cuff":"Cuff","inseam":"Inseam","outseam":"Outseam","thigh":"Thigh","knee":"Knee","bottom":"Bottom"
+	                }.items() %}
+	                  {% if measure[key] %}
+	                    {% set ns.measure_lines = ns.measure_lines + [label ~ ": " ~ (measure[key]|fmt_measure)] %}
+	                    {% set ns.seen_measure_labels = ns.seen_measure_labels + [label|lower] %}
+	                  {% endif %}
+	                {% endfor %}
+	                {% if measure.notes %}
+	                  {% for raw_line in measure.notes.splitlines() %}
+	                    {% set cleaned = raw_line.strip() %}
+                      {% set cleaned_lower = cleaned.lower() %}
+			                    {% if not cleaned %}
+			                    {% elif cleaned_lower.startswith("completed date:") %}
+			                      {% set ns.completed_date = cleaned.split(":", 1)[1].strip() %}
+			                    {% elif cleaned_lower.startswith("delivery date:") %}
+			                      {% set ns.delivery_date = cleaned.split(":", 1)[1].strip() %}
+			                    {% elif cleaned_lower.startswith("requirement") %}
+	                          {% if ":" in cleaned %}
+	                            {% set raw_req = cleaned.split(":", 1)[1] %}
+	                          {% elif "-" in cleaned %}
+	                            {% set raw_req = cleaned.split("-", 1)[1] %}
+                            {% elif " " in cleaned %}
+                              {% set raw_req = cleaned.split(" ", 1)[1] %}
+	                          {% else %}
+	                            {% set raw_req = "" %}
+	                          {% endif %}
+                          {% for req_token in raw_req.replace("|", ",").replace(";", ",").split(",") %}
+                            {% set req_name = req_token.strip() %}
+                            {% if req_name %}
+                              {% set req_key = req_name|lower %}
+                              {% if req_key not in ns.req_names %}
+                                {% set ns.req_names = ns.req_names + [req_key] %}
+                              {% endif %}
+                            {% endif %}
+                          {% endfor %}
+		                    {% elif ":" in cleaned %}
+	                      {% set parts = cleaned.split(":", 1) %}
+	                      {% set parsed_label = parts[0].strip() %}
+	                      {% set parsed_value = parts[1].strip() %}
+	                      {% if parsed_value and parsed_label|lower not in ns.seen_measure_labels and parsed_label|lower != "label" %}
+	                        {% set ns.measure_lines = ns.measure_lines + [parsed_label ~ ": " ~ (parsed_value|fmt_measure)] %}
+	                        {% set ns.seen_measure_labels = ns.seen_measure_labels + [parsed_label|lower] %}
+	                      {% elif parsed_label|lower == "label" %}
+	                        {% set ns.note_lines = ns.note_lines + [cleaned] %}
+	                      {% endif %}
+	                    {% else %}
+	                      {% set ns.note_lines = ns.note_lines + [cleaned] %}
+	                    {% endif %}
+	                  {% endfor %}
+	                {% endif %}
+			                <article class="measure-entry">
+			                  {% set order_prefix = (latest_order.order_no.split('\\', 1)[0] if latest_order and latest_order.order_no and ('\\' in latest_order.order_no) else (customer.display_id|fmt_id(6))) %}
+			                  <div class="measure-entry-title"><strong>{{ order_prefix }}/{{ loop.index }} - {{ measure.kind }}</strong></div>
+		                      <div class="measure-entry-row">
+		                        <div class="measure-entry-key">Dates</div>
+		                        <div class="measure-entry-value">
+			                          <div class="measure-date-line">
+			                            <span class="measure-date-label">Complete</span>
+			                            <span class="measure-date-colon">:</span>
+			                            <span class="measure-date-value">{{ ns.completed_date|date_only if ns.completed_date else (completed_date_display|date_only if completed_date_display else "-") }}</span>
+			                          </div>
+			                          <div class="measure-date-line">
+			                            <span class="measure-date-label">Delivery</span>
+			                            <span class="measure-date-colon">:</span>
+			                            <span class="measure-date-value">{{ ns.delivery_date|date_only if ns.delivery_date else (delivery_date_display|date_only if delivery_date_display else "-") }}</span>
+			                          </div>
+		                        </div>
+		                      </div>
+                      <div class="measure-entry-row">
+                        <div class="measure-entry-key">Order Status</div>
+                        <div class="measure-entry-value">
+                          <div class="measure-status-actions">
+                            <label class="inline-select">
+                              {% set m_status = measure.measure_status if measure.measure_status else (latest_order.status if latest_order else "In-Progress") %}
+	                              <select class="measure-order-status" name="measurement_status_{{ measure.id }}" {% if not latest_order or latest_order.status == "Cancelled" %}disabled{% endif %}>
+                                  {% if m_status and m_status not in ["In-Progress", "Completed", "Delivered"] %}
+                                    <option selected>{{ m_status }}</option>
+                                  {% endif %}
+                                  {% for value in ["In-Progress", "Completed", "Delivered"] %}
+                                    <option {% if m_status == value %}selected{% endif %}>{{ value }}</option>
+                                  {% endfor %}
+                              </select>
+                            </label>
+	                            <button class="btn primary btn-compact js-measure-status-save" name="measurement_save_id" value="{{ measure.id }}" type="submit" {% if not latest_order or latest_order.status == "Cancelled" %}disabled{% endif %}>Save</button>
+                          </div>
+                        </div>
+                      </div>
+		                  <div class="measure-entry-row">
+	                    <div class="measure-entry-key">Measurements</div>
+	                    <div class="measure-entry-value">
+	                      {% if ns.measure_lines %}
+	                        <ul class="measure-notes">
+	                          {% for line in ns.measure_lines %}
+	                            <li>{{ line }}</li>
+	                          {% endfor %}
+	                        </ul>
+	                      {% else %}
+	                        -
+	                      {% endif %}
+	                    </div>
+	                  </div>
+		                  <div class="measure-entry-row">
+		                    <div class="measure-entry-key">Notes</div>
+		                    <div class="measure-entry-value">
+		                      {% if ns.note_lines %}
+		                        <div class="measure-note-lines">
+		                          {% for line in ns.note_lines %}
+		                            <div>{{ line }}</div>
+		                          {% endfor %}
+		                        </div>
+		                      {% else %}
+		                        -
+			                      {% endif %}
+			                    </div>
+			                  </div>
+		                  <div class="measure-entry-row">
+		                    <div class="measure-entry-key">Requirements</div>
+		                    <div class="measure-entry-value">
+		                      {% if ns.req_names %}
+		                        <div class="req-display">
+		                          {% set reqns = namespace(found=false) %}
+		                          {% for req in requirement_icons %}
+		                            {% if req.name|lower in ns.req_names %}
+		                              {% set reqns.found = true %}
+		                              <div class="req-item">
+		                                <span class="req-icon">
+		                                  <img src="{{ url_for('static', filename='req_icons/' ~ req.filename) }}" alt="{{ req.name }}"/>
+		                                </span>
+		                                <span>{{ req.name }}</span>
+		                              </div>
+		                            {% endif %}
+		                          {% endfor %}
+		                          {% if not reqns.found %}-{% endif %}
+		                        </div>
+		                      {% else %}
+		                        -
+		                      {% endif %}
+		                    </div>
+		                  </div>
+		                </article>
+		                {% endfor %}
+		              </div>
+	            </div>
+			          {% else %}
+				            <article class="measure-entry">
+				              <div class="measure-entry-title"><strong>No measurements found.</strong></div>
+                    <div class="measure-entry-row">
+                      <div class="measure-entry-key">Dates</div>
+                      <div class="measure-entry-value">
+	                        <div class="measure-date-line">
+	                          <span class="measure-date-label">Complete</span>
+	                          <span class="measure-date-colon">:</span>
+	                          <span class="measure-date-value">{{ completed_date_display|date_only if completed_date_display else "-" }}</span>
+	                        </div>
+	                        <div class="measure-date-line">
+	                          <span class="measure-date-label">Delivery</span>
+	                          <span class="measure-date-colon">:</span>
+	                          <span class="measure-date-value">{{ delivery_date_display|date_only if delivery_date_display else "-" }}</span>
+	                        </div>
+                      </div>
+                    </div>
+                    <div class="measure-entry-row">
+                      <div class="measure-entry-key">Order Status</div>
+                      <div class="measure-entry-value">
+                        <div class="measure-status-actions">
+                          <label class="inline-select">
+	                            <select class="measure-order-status" {% if not latest_order or latest_order.status == "Cancelled" %}disabled{% endif %}>
+                                {% if latest_order and latest_order.status and latest_order.status not in ["In-Progress", "Completed", "Delivered"] %}
+                                  <option selected>{{ latest_order.status }}</option>
+                                {% endif %}
+                                {% for value in ["In-Progress", "Completed", "Delivered"] %}
+                                  <option {% if latest_order and latest_order.status == value %}selected{% endif %}>{{ value }}</option>
+                                {% endfor %}
+                            </select>
+                          </label>
+                          <button class="btn primary btn-compact" type="button" disabled>Save</button>
+                        </div>
+                      </div>
+                    </div>
+			              <div class="measure-entry-row">
+			                <div class="measure-entry-key">Requirements</div>
+			                <div class="measure-entry-value">
+		                  -
+		                </div>
+		              </div>
+		            </article>
+		          {% endif %}
+	        </div>
+		        <div class="reference-photos-panel">
+		          <h4>Reference Photos</h4>
+		          {% if measurements %}
+		            <div class="photo-group-row photo-group-row-compact">
+		              {% for measure in measurements %}
+		                {% set measure_index = loop.index0 %}
+		                {% set map = namespace(
+		                  found=false,
+		                  kind=((measure.kind or '')|lower|replace(' - ', '-')|replace(' ', '')),
+		                  base=((measure.kind or '').split('-', 1)[0].strip()|lower|replace(' ', ''))
+		                ) %}
+		                <div class="photo-group">
+		                  <div class="photo-group-title">{{ (measure.kind or 'Item') }}</div>
+		                  {% if images_by_item %}
+		                    {% for item_type, photos in images_by_item.items() %}
+		                      {% set item_key = (item_type or '')|lower|replace(' - ', '-')|replace(' ', '') %}
+		                      {% set item_base = (item_type or '').split('-', 1)[0].strip()|lower|replace(' ', '') %}
+		                      {% if (not map.found) and (
+		                        item_key == map.kind
+		                        or (map.kind and map.kind in item_key)
+		                        or (item_key and item_key in map.kind)
+		                        or (map.base and item_base == map.base)
+		                      ) %}
+		                        {% set map.found = true %}
+		                        <div class="preview-grid">
+		                          {% for img in photos %}
+		                            <div class="image-box">
+		                              <div class="image-frame">
+		                                <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}" class="preview-click" alt="Order image"/>
+		                              </div>
+		                              {% if img.label %}
+		                                <div class="image-label-view">{{ img.label }}</div>
+		                              {% endif %}
+		                            </div>
+		                          {% endfor %}
+		                        </div>
+		                      {% endif %}
+		                    {% endfor %}
+		                    {% if not map.found %}
+		                      {% for item_type, photos in images_by_item|dictsort %}
+		                        {% if (not map.found) and loop.index0 == measure_index %}
+		                          {% set map.found = true %}
+		                          <div class="preview-grid">
+		                            {% for img in photos %}
+		                              <div class="image-box">
+		                                <div class="image-frame">
+		                                  <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}" class="preview-click" alt="Order image"/>
+		                                </div>
+		                                {% if img.label %}
+		                                  <div class="image-label-view">{{ img.label }}</div>
+		                                {% endif %}
+		                              </div>
+		                            {% endfor %}
+		                          </div>
+		                        {% endif %}
+		                      {% endfor %}
+		                    {% endif %}
+		                    {% if not map.found %}
+		                      <div class="muted">No reference photos for this measurement.</div>
+		                    {% endif %}
+		                  {% else %}
+		                    <div class="muted">No reference photos uploaded.</div>
+		                  {% endif %}
+		                </div>
+		              {% endfor %}
+		            </div>
+		          {% else %}
+		            {% if images_by_item %}
+		              <div class="photo-group-row photo-group-row-compact">
+		                {% for item_type, photos in images_by_item.items() %}
+		                  <div class="photo-group">
+		                    <div class="photo-group-title">{{ item_type }}</div>
+		                    <div class="preview-grid">
+		                      {% for img in photos %}
+		                        <div class="image-box">
+		                          <div class="image-frame">
+		                            <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}" class="preview-click" alt="Order image"/>
+		                          </div>
+		                          {% if img.label %}
+		                            <div class="image-label-view">{{ img.label }}</div>
+		                          {% endif %}
+		                        </div>
+		                      {% endfor %}
+		                    </div>
+		                  </div>
+		                {% endfor %}
+		              </div>
+		            {% else %}
+		              <div class="muted">No reference photos uploaded.</div>
+		            {% endif %}
+		          {% endif %}
+		        </div>
+	      </div>
+	      {% endif %}
+	      <div class="detail-section">
+	        <h4>Payment Summary</h4>
+	        <div class="payment-grid">
+	          <div>
+	            <span>Advance</span>
+	            <strong>&#8377; {{ "%.2f"|format(latest_order.advance_amount or 0) }}</strong>
+	          </div>
+	          <div>
+	            <span>Total</span>
+	            <strong>&#8377; {{ "%.2f"|format(latest_order.total_amount or 0) }}</strong>
+	          </div>
+	          <div>
+	            <span>Balance</span>
+	            <strong>&#8377; {{ "%.2f"|format(due_amount or 0) }}</strong>
+	          </div>
+	          <div>
+	            <span>Paid</span>
+	            <strong>&#8377; {{ "%.2f"|format(latest_order.paid_amount or 0) }}</strong>
+	          </div>
+	        </div>
+		        <div class="payment-actions">
+		          <label class="payment-input">
+		            <span>Pay Amount</span>
+		            <input
+		              type="number"
+	              step="0.01"
+	              min="0"
+	              max="{{ '%.2f'|format(due_amount or 0) }}"
+	              name="paid_amount"
+	              placeholder="Enter amount"
+		              {% if (due_amount or 0) <= 0 %}disabled{% endif %}
+		            />
+		          </label>
+			          <label class="payment-input">
+			            <span>Payment Method</span>
+			            <select name="payment_method">
+			              {% for method in ["Cash", "GPay", "Card"] %}
+			                <option value="{{ method }}" {% if selected_payment_mode == method %}selected{% endif %}>{{ method }}</option>
+			              {% endfor %}
+			            </select>
+			          </label>
+			          <button class="btn primary btn-compact" type="submit" {% if (due_amount or 0) <= 0 %}disabled{% endif %}>
+			            Save Payment
+			          </button>
+				          <div class="payment-help">Remaining Balance: <span class="payment-balance-amount">&#8377; {{ "%.2f"|format(due_amount or 0) }}</span></div>
+			        </div>
+			      </div>
+    </div>
+    {% else %}
+    <p class="muted">No order details available.</p>
+    {% endif %}
+    </form>
+  </section>
+</div>
+
+{% if latest_order %}
+<div class="print-modal hidden" id="print-modal">
+  <div class="print-backdrop"></div>
+  <div class="print-card">
+    <button class="print-close" type="button" id="print-close">x</button>
+    <h3>Print Your Order</h3>
+    <div class="print-grid">
+      <div class="print-tile" data-print-type="tailor">
+        <div class="print-icon"><i class="bi bi-scissors"></i></div>
+        <div>Tailor Slip</div>
+      </div>
+      <div class="print-tile" data-print-type="customer">
+        <div class="print-icon"><i class="bi bi-receipt"></i></div>
+        <div>Customer Copy</div>
+      </div>
+    </div>
+    <button class="btn primary print-action" type="button" id="print-action">Print</button>
+    <button class="btn ghost btn-compact print-all" type="button" id="print-all">Print All</button>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const printOpen = document.getElementById("detail-print-open");
+    const printModal = document.getElementById("print-modal");
+    const printClose = document.getElementById("print-close");
+    const printAction = document.getElementById("print-action");
+    const printAll = document.getElementById("print-all");
+    const printTailorTile = document.querySelector('.print-tile[data-print-type="tailor"]');
+    const printCustomerTile = document.querySelector('.print-tile[data-print-type="customer"]');
+    const printBackdrop = document.querySelector(".print-backdrop");
+
+    let activeOrderId = printOpen ? printOpen.dataset.orderId : null;
+    let activeOrderType = printOpen ? (printOpen.dataset.orderType || "").trim() : "";
+    let activePrintType = "tailor";
+    const directPrintEnabled = "{{ '1' if auto_print_on_click else '0' }}" === "1";
+    const statusHidden = document.getElementById("order-status-hidden");
+    const measureStatusSaveButtons = document.querySelectorAll(".js-measure-status-save");
+    const syncMeasurementPhotoHeights = () => {
+      const layouts = document.querySelectorAll(".measurement-photo-layout");
+      layouts.forEach((layout) => {
+        const measureRows = Array.from(layout.querySelectorAll(".measure-stacked > .measure-entry"));
+        const photoRows = Array.from(layout.querySelectorAll(".reference-photos-panel .photo-group-row-compact > .photo-group"));
+        measureRows.forEach((row) => { row.style.minHeight = ""; });
+        photoRows.forEach((row) => { row.style.minHeight = ""; });
+        if (!measureRows.length || !photoRows.length) return;
+
+        const columns = getComputedStyle(layout).gridTemplateColumns.split(" ").filter(Boolean).length;
+        if (columns < 2) return;
+
+        const count = Math.min(measureRows.length, photoRows.length);
+        for (let idx = 0; idx < count; idx += 1) {
+          const measureHeight = measureRows[idx].offsetHeight || 0;
+          const photoHeight = photoRows[idx].offsetHeight || 0;
+          const target = Math.max(measureHeight, photoHeight);
+          if (target > 0) {
+            measureRows[idx].style.minHeight = `${target}px`;
+            photoRows[idx].style.minHeight = `${target}px`;
+          }
+        }
+      });
+    };
+
+    measureStatusSaveButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const holder = btn.closest(".measure-entry-row")?.querySelector(".measure-order-status");
+        const selected = holder ? (holder.value || "") : "";
+        if (statusHidden && selected) statusHidden.value = selected;
+      });
+    });
+    syncMeasurementPhotoHeights();
+    window.addEventListener("resize", syncMeasurementPhotoHeights);
+
+    function openPrint(url) {
+      if (!url) return;
+      window.open(url, "_blank");
+    }
+
+    async function sendDirectPrint(url) {
+      try {
+        const res = await fetch(url, { method: "POST" });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.message || "Print failed.");
+        }
+      } catch (err) {
+        alert("Print failed.");
+      }
+    }
+
+    function closePrint() {
+      if (printModal) printModal.classList.add("hidden");
+    }
+
+    function resetTiles() {
+      document.querySelectorAll(".print-tile").forEach((tile) => tile.classList.remove("active"));
+      if ((activeOrderType || "").trim().toLowerCase() === "tailoring") {
+        activePrintType = "tailor";
+        if (printTailorTile) printTailorTile.classList.remove("hidden");
+        if (printAll) printAll.classList.remove("hidden");
+        if (printTailorTile) printTailorTile.classList.add("active");
+      } else {
+        activePrintType = "customer";
+        if (printTailorTile) printTailorTile.classList.add("hidden");
+        if (printAll) printAll.classList.add("hidden");
+        if (printCustomerTile) printCustomerTile.classList.add("active");
+      }
+    }
+
+    if (printOpen) {
+      printOpen.addEventListener("click", () => {
+        activeOrderId = printOpen.dataset.orderId || activeOrderId;
+        activeOrderType = (printOpen.dataset.orderType || activeOrderType || "").trim();
+        resetTiles();
+        if (printModal) printModal.classList.remove("hidden");
+      });
+    }
+
+    document.querySelectorAll(".print-tile").forEach((tile) => {
+      tile.addEventListener("click", () => {
+        if (tile.classList.contains("hidden")) return;
+        document.querySelectorAll(".print-tile").forEach((t) => t.classList.remove("active"));
+        tile.classList.add("active");
+        activePrintType = tile.dataset.printType || "tailor";
+      });
+    });
+
+    if (printClose) printClose.addEventListener("click", closePrint);
+    if (printBackdrop) printBackdrop.addEventListener("click", closePrint);
+
+    if (printAction) {
+      printAction.addEventListener("click", () => {
+        if (!activeOrderId) return;
+        const url = activePrintType === "customer"
+          ? `/orders/${activeOrderId}/print/customer`
+          : `/orders/${activeOrderId}/print/thermal`;
+        if (directPrintEnabled) {
+          sendDirectPrint(url);
+        } else {
+          openPrint(url);
+        }
+        closePrint();
+      });
+    }
+
+    if (printAll) {
+      printAll.addEventListener("click", () => {
+        if (!activeOrderId) return;
+        if (directPrintEnabled) {
+          sendDirectPrint(`/orders/${activeOrderId}/print/all/direct`);
+          closePrint();
+          return;
+        }
+        if ((activeOrderType || "").trim().toLowerCase() !== "tailoring") {
+          openPrint(`/orders/${activeOrderId}/print/customer?download=1`);
+          closePrint();
+          return;
+        }
+        openPrint(`/orders/${activeOrderId}/print/thermal?download=1`);
+        openPrint(`/orders/${activeOrderId}/print/customer?download=1`);
+        closePrint();
+      });
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}
+
+
+
+
+
+
+

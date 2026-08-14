@@ -1,0 +1,953 @@
+{% set view_only = view_only|default(false) %}
+{% set current_mode = (vehicle.purchase_mode or 'direct')|lower %}
+{% if current_mode not in ['direct', 'agent', 'finance', 'branch'] %}
+  {% set current_mode = 'direct' %}
+{% endif %}
+{% set gallery_images = vehicle.gallery_images or [] %}
+{% set registration_no_value = vehicle.registration_no or vehicle.chassis_no or '' %}
+{% set purchase_customer_id_value = vehicle.purchase_customer_id or '' %}
+{% set purchase_customer_address_value = vehicle.purchase_customer_address or '' %}
+{% if not purchase_customer_address_value %}
+  {% if current_mode == 'agent' %}
+    {% set purchase_customer_address_value = vehicle.purchase_agent_broker_details or '' %}
+  {% elif current_mode == 'finance' %}
+    {% set purchase_customer_address_value = vehicle.purchase_finance_yard_ref or '' %}
+  {% elif current_mode == 'branch' %}
+    {% set purchase_customer_address_value = vehicle.purchase_branch_handled_by or '' %}
+  {% endif %}
+{% endif %}
+<style>
+  body { background: #f7f1ea; }
+  .veh-shell { display: grid; gap: 12px; }
+  .veh-head-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+  .veh-two-col { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr); gap: 16px; align-items: start; }
+  .veh-two-col.reverse { grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr); }
+  .veh-pane { border: 1px solid #dcbef0; border-radius: 18px; background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%); padding: 14px; min-width: 0; height: 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48); }
+  .veh-pane-title { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .veh-pane-title i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 12px; background: #f2ebff; color: #3d66e0; }
+  .veh-pane-title strong { display: block; color: #3f2265; font-size: 1rem; }
+  .veh-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; align-items: start; }
+  .veh-form-grid.single-col { grid-template-columns: 1fr; }
+  .veh-form-grid .span-2 { grid-column: span 2; }
+  .seller-form-grid { gap: 12px; }
+  .seller-form-grid label { display: flex; align-items: center; gap: 8px; min-height: 50px; width: 100%; box-sizing: border-box; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .seller-form-grid label > span { display: flex; align-items: center; justify-content: flex-start; flex: 0 0 128px; font-size: 1rem; font-weight: 800; color: var(--ink); white-space: nowrap; }
+  .seller-form-grid label > span::after { content: ":"; flex: 0 0 auto; margin-left: auto; padding-left: 8px; }
+  .seller-form-grid label > input, .seller-form-grid label > select, .seller-form-grid label > textarea, .seller-form-grid label > .veh-readonly { border: 1px solid #e0c8ef; outline: 0; box-shadow: none; background: #fffdfd; padding: 0 14px; min-height: 42px; width: min(100%, 320px); min-width: 0; font-size: 1rem; font-weight: 600; color: #392852; border-radius: 10px; display: flex; align-items: center; }
+  .seller-form-grid label > input[readonly], .seller-form-grid label > select:disabled { background: #f7f2fb; color: #392852; opacity: 1; }
+  .vehicle-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0.9rem; gap: 10px 18px; }
+  .vehicle-form-grid:first-of-type { margin-top: 0; }
+  .vehicle-form-grid label { display: flex; align-items: center; gap: 8px; min-height: 46px; width: 100%; box-sizing: border-box; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .vehicle-form-grid label > span { flex: 0 0 155px; font-size: 0.92rem; font-weight: 800; color: var(--ink); white-space: nowrap; display: flex; align-items: center; }
+  .vehicle-form-grid label > span::after { content: ":"; flex: 0 0 auto; margin-left: auto; padding-left: 8px; }
+  .vehicle-form-grid label > span.gst-inline::after { content: none !important; padding-left: 0; margin-left: 0; }
+  .vehicle-form-grid label > input, .vehicle-form-grid label > select, .vehicle-form-grid label > textarea, .vehicle-form-grid label > .veh-readonly { width: min(100%, 320px); min-height: 42px; padding: 0 10px; font-size: 0.92rem; border-radius: 10px; }
+  .vehicle-form-grid label > textarea { min-height: 78px; padding: 10px 10px; resize: vertical; }
+  .vehicle-form-grid label > input[readonly], .vehicle-form-grid label > select:disabled { background: #f7f2fb; color: #392852; opacity: 1; }
+  .pi-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0.35rem; }
+  .pi-tabs .tab-btn { background: #fffaf8; border-color: #dbc7ef; color: #5b4f6f; }
+  .pi-tabs .tab-btn.active { background: #d8e8ff; border-color: #9dc3ff; color: #2457d6; }
+  .pi-tabs .tab-btn:disabled { opacity: 1; cursor: default; }
+  .pi-box { border: 1px solid #d9c0ef; border-radius: 18px; padding: 12px; background: linear-gradient(180deg, #fffdfa 0%, #fbf7ff 100%); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .veh-photo-box { border: 1px dashed #d3b7ea; border-radius: 16px; background: #e8d8fb; padding: 8px 10px; display: grid; gap: 4px; justify-items: center; align-content: center; min-height: 84px; }
+  .veh-photo-box.tight { min-height: 0; justify-content: center; text-align: center; padding: 7px 9px; }
+  .veh-photo-box .veh-photo-icon { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #d8c4ef; display: grid; place-items: center; color: #4d67bf; background: #fdfcff; }
+  .veh-upload-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .veh-upload-btn { display: inline-flex; gap: 0.45rem; align-items: center; justify-content: center; padding: 0.45rem 0.78rem; border-radius: 999px; border: 1px solid #d7c1ee; background: #fffdfd; cursor: pointer; font-size: 0.82rem; font-weight: 700; color: #34224f; white-space: nowrap; line-height: 1; min-width: 112px; }
+  .veh-upload-btn:hover { background: #f4ebfb; }
+  .veh-upload-note { font-size: 0.76rem; color: #73667f; }
+  .veh-add-photo-wrap { display: grid; justify-items: center; gap: 6px; margin-top: 10px; }
+  .veh-add-photo-btn { width: 42px; height: 42px; border-radius: 999px; border: 1px solid rgba(196, 168, 223, 0.7); background: #fff; color: #6f3d91; display: grid; place-items: center; cursor: pointer; box-shadow: 0 8px 20px rgba(63, 34, 101, 0.08); font-size: 1.1rem; }
+  .veh-add-photo-btn:hover { background: #f4ebfb; }
+  .veh-add-photo-text { font-size: 0.72rem; font-weight: 700; color: #6f5b7d; text-align: center; }
+  .veh-photo-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+  .veh-photo-preview-card { border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 14px; background: #fff; overflow: hidden; min-width: 0; }
+  .veh-photo-preview-card img { width: 100%; height: 120px; object-fit: cover; display: block; cursor: pointer; }
+  .veh-photo-preview-name { padding: 8px 10px; font-size: 0.74rem; font-weight: 700; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .veh-carousel { margin-top: 10px; border: 1px solid rgba(148, 163, 184, 0.28); border-radius: 16px; background: #fff; overflow: hidden; }
+  .veh-carousel-stage { position: relative; min-height: 260px; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); display: grid; place-items: center; }
+  .veh-carousel-empty { padding: 24px 18px; text-align: center; color: #64748b; font-weight: 600; }
+  .veh-carousel-media { width: 100%; height: 100%; min-height: 260px; display: none; align-items: center; justify-content: center; padding: 18px; }
+  .veh-carousel-media.open { display: flex; }
+  .veh-carousel-media img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 14px; display: block; background: #fff; }
+  .veh-carousel-nav { position: absolute; z-index: 2; border: 1px solid rgba(148, 163, 184, 0.4); background: rgba(255,255,255,0.94); color: #0f172a; width: 38px; height: 38px; border-radius: 999px; display: grid; place-items: center; cursor: pointer; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12); }
+  .veh-carousel-nav.prev { left: 12px; top: 50%; transform: translateY(-50%); }
+  .veh-carousel-nav.next { right: 12px; top: 50%; transform: translateY(-50%); }
+  .veh-carousel-nav[disabled] { opacity: 0.45; cursor: default; }
+  .veh-carousel-remove { position: absolute; top: 12px; right: 12px; z-index: 3; width: 38px; height: 38px; border: 1px solid rgba(148, 163, 184, 0.4); border-radius: 999px; background: rgba(255,255,255,0.96); color: #b91c1c; display: grid; place-items: center; cursor: pointer; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12); }
+  .veh-carousel-remove[hidden] { display: none; }
+  .veh-carousel-footer { padding: 10px 12px 12px; display: grid; gap: 8px; border-top: 1px solid rgba(148, 163, 184, 0.16); background: #fff; }
+  .veh-carousel-name { font-size: 0.8rem; font-weight: 700; color: #334155; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .veh-carousel-dots { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .veh-carousel-dot { width: 9px; height: 9px; border-radius: 999px; border: 0; background: #cbd5e1; padding: 0; cursor: pointer; }
+  .veh-carousel-dot.active { background: #6f3d91; transform: scale(1.08); }
+  .veh-carousel.compact-edit .veh-carousel-stage { min-height: 220px; }
+  .veh-carousel.compact-edit .veh-carousel-media { min-height: 220px; padding: 14px; }
+  .veh-carousel.compact-edit .veh-carousel-media img { max-height: 250px; border-radius: 12px; }
+  .veh-carousel.compact-edit .veh-carousel-footer { gap: 4px; padding: 8px 10px 10px; }
+  .veh-carousel.compact-edit .veh-carousel-name { display: none; }
+  .veh-proof-card { border: 1px solid #d8c0ef; border-radius: 14px; background: linear-gradient(180deg, #e6d6fb 0%, #e3d2f9 100%); padding: 12px; display: grid; gap: 10px; }
+  .veh-proof-card strong { font-size: 0.88rem; color: #3f2265; }
+  .veh-proof-wrap { display: grid; gap: 12px; }
+  .pi-proof { display: flex; gap: 0.65rem; margin-top: 0.2rem; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .pi-proof .pi-proof-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; flex: 1 1 220px; justify-content: center; }
+  .pi-proof input[type="file"] { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .pi-proof .pi-proof-btn { display: inline-flex; gap: 0.45rem; align-items: center; justify-content: center; padding: 0.45rem 0.7rem; border-radius: 999px; border: 1px solid #d7c1ee; background: #fffdfd; cursor: pointer; font-weight: 700; color: #34224f; white-space: nowrap; line-height: 1; }
+  .pi-proof .pi-proof-preview { display: grid; align-items: stretch; gap: 0.55rem; padding: 0.6rem; border-radius: 18px; border: 1px solid #d9c1ef; background: linear-gradient(180deg, #fcfdff 0%, #f5f7fb 100%); width: min(280px, 100%); max-width: 100%; margin: 0 auto; box-shadow: 0 10px 24px rgba(63, 34, 101, 0.08); }
+  .pi-proof-thumb { width: 100%; height: 160px; border-radius: 14px; border: 1px solid #d9c9ec; object-fit: cover; background: #f8f6fc; cursor: pointer; }
+  .pi-proof-name { font-size: 0.78rem; font-weight: 700; color: var(--ink); max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+  .pi-proof.is-centered { justify-content: center; }
+  .veh-doc-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+  .veh-doc-stack .veh-doc-item:last-child { grid-column: span 2; }
+  .veh-doc-item { display: grid; grid-template-columns: 1fr; gap: 8px; align-items: start; padding: 8px; border: 1px dashed #d2bae8; border-radius: 12px; background: #fffdfd; }
+  .veh-doc-item label { display: grid; gap: 3px; margin: 0; justify-items: start; }
+  .veh-doc-item strong { font-size: 0.72rem; color: #0f172a; }
+  .veh-doc-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .veh-doc-upload { display: inline-flex; gap: 0.4rem; align-items: center; justify-content: center; flex-direction: row; flex-wrap: nowrap; padding: 0.42rem 0.68rem; border-radius: 999px; border: 1px solid #d7c1ee; background: #fffdfd; cursor: pointer; font-size: 0.78rem; font-weight: 700; color: #34224f; white-space: nowrap; min-width: 108px; line-height: 1; }
+  .veh-doc-upload i,
+  .veh-doc-upload span { display: inline-block; white-space: nowrap; line-height: 1; }
+  .veh-doc-upload:hover { background: #f4ebfb; }
+  .veh-doc-preview { display: flex; align-items: flex-start; flex-direction: column; gap: 6px; width: 100%; min-width: 0; padding: 6px; border-radius: 10px; background: linear-gradient(180deg, #ffffff 0%, #f8f4fc 100%); border: 1px solid #e0d0f0; min-height: 78px; }
+  .veh-doc-thumb, .veh-doc-icon { width: 100%; height: 96px; border-radius: 10px; border: 1px solid #ddd0ed; background: #fff; flex: 0 0 auto; }
+  .veh-doc-thumb { object-fit: cover; cursor: pointer; }
+  .veh-doc-icon { display: grid; place-items: center; color: #3d66e0; }
+  .veh-doc-name { min-width: 0; width: 100%; font-size: 0.68rem; font-weight: 700; color: #4a3a61; white-space: normal; overflow-wrap: anywhere; text-align: left; line-height: 1.35; flex: 0 0 auto; }
+  .veh-doc-empty-note { font-size: 0.66rem; font-weight: 700; color: #6f5b7d; text-align: center; width: 100%; }
+  .veh-proof-empty { min-height: 92px; display: grid; place-items: center; text-align: center; }
+  .veh-inline-link { font-size: 0.8rem; font-weight: 700; }
+  .img-modal { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.72); display: none; align-items: center; justify-content: center; padding: 1.2rem; z-index: 9999; }
+  .img-modal.open { display: flex; }
+  .img-modal-card { background: #fff; border-radius: 16px; max-width: min(980px, 96vw); max-height: min(740px, 86vh); width: 100%; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); display: grid; grid-template-rows: auto 1fr; }
+  .img-modal-head { padding: 0.65rem 0.85rem; display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .img-modal-title { font-weight: 800; font-size: 0.95rem; margin: 0; }
+  .img-modal-close { border: 1px solid var(--line); background: #fff; border-radius: 999px; width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer; }
+  .img-modal-body { padding: 0.85rem; display: grid; place-items: center; background: #0b1220; }
+  .img-modal-body img { max-width: 100%; max-height: 100%; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); background: #111827; }
+  .is-hidden { display: none !important; }
+  @media (max-width: 960px) {
+    .veh-two-col, .veh-two-col.reverse, .veh-form-grid, .veh-photo-preview-grid { grid-template-columns: 1fr; }
+    .veh-form-grid .span-2 { grid-column: auto; }
+    .seller-form-grid label { align-items: flex-start; flex-direction: column; gap: 8px; }
+    .seller-form-grid label > span { flex: 0 0 auto; width: 100%; justify-content: flex-start; gap: 8px; }
+    .seller-form-grid label > input, .seller-form-grid label > select, .seller-form-grid label > .veh-readonly { width: 100%; }
+    .vehicle-form-grid label { align-items: flex-start; flex-direction: column; gap: 8px; }
+    .vehicle-form-grid label > span { flex: 0 0 auto; width: 100%; justify-content: flex-start; gap: 8px; }
+    .vehicle-form-grid label > input, .vehicle-form-grid label > select, .vehicle-form-grid label > textarea, .vehicle-form-grid label > .veh-readonly { width: 100%; }
+    .veh-doc-item { grid-template-columns: 1fr; }
+    .veh-doc-preview { min-width: 0; width: 100%; }
+    .pi-proof .pi-proof-preview { margin-left: 0; width: 100%; }
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>{{ page_title }}</h1>
+  </div>
+  <div class="veh-head-actions">
+    <a class="btn ghost js-back-button" href="{{ url_for('inventory', tab='vehicles') }}" data-fallback="{{ url_for('inventory', tab='vehicles') }}">Back</a>
+    {% if view_only %}
+    <a class="btn primary" href="{{ url_for('inventory_vehicle_edit', vehicle_id=vehicle.id, mode='edit') }}"><i class="bi bi-pencil-square"></i> Edit</a>
+    {% endif %}
+    {% if not view_only %}
+    <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-wrench-adjustable"></i> Add Repair</a>
+    <form method="post" action="{{ url_for('inventory_delete', vehicle_id=vehicle.id) }}" onsubmit="return confirm('Do you want to delete this vehicle?');">
+      <button class="btn ghost hover-red-fill" type="submit"><i class="bi bi-trash"></i> Delete</button>
+    </form>
+    <button class="btn primary" type="submit" form="vehicle-edit-form"><i class="bi bi-check2-square"></i> Save Changes</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if not view_only %}
+<form method="post" id="vehicle-edit-form" class="veh-shell" enctype="multipart/form-data">
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+  <input type="hidden" name="pi_direct_customer_name" id="purchase_customer_name_hidden" value="{{ vehicle.purchase_customer_name or '' }}" />
+  <input type="hidden" name="pi_direct_customer_phone" id="purchase_customer_phone_hidden" value="{{ vehicle.purchase_customer_phone or '' }}" />
+  <input type="hidden" name="purchase_mode" id="purchase_mode" value="{{ current_mode }}" />
+  <input type="hidden" name="pi_has_co" id="pi_has_co_hidden" value="{% if vehicle.purchase_co_name or vehicle.purchase_co_phone or vehicle.purchase_co_id or vehicle.purchase_co_address or vehicle.purchase_co_id_proof_filename or vehicle.purchase_co_id_proof_ref %}1{% else %}0{% endif %}" />
+{% else %}
+<div class="veh-shell">
+{% endif %}
+
+  <section class="card">
+    <div class="section-title">
+      <i class="bi bi-person-vcard" aria-hidden="true"></i>
+      <span>Purchase Details</span>
+    </div>
+    <div class="pi-tabs" role="tablist" aria-label="Purchase information tabs">
+      <button type="button" class="tab-btn {% if current_mode == 'direct' %}active{% endif %}" data-tab="purchase_direct" data-purchase-mode="direct" {% if view_only %}disabled{% endif %}>Direct</button>
+      <button type="button" class="tab-btn {% if current_mode == 'agent' %}active{% endif %}" data-tab="purchase_agent" data-purchase-mode="agent" {% if view_only %}disabled{% endif %}>Agent</button>
+      <button type="button" class="tab-btn {% if current_mode == 'finance' %}active{% endif %}" data-tab="purchase_finance" data-purchase-mode="finance" {% if view_only %}disabled{% endif %}>Finance</button>
+      <button type="button" class="tab-btn {% if current_mode == 'branch' %}active{% endif %}" data-tab="purchase_branch" data-purchase-mode="branch" {% if view_only %}disabled{% endif %}>Consultancy</button>
+    </div>
+
+    <div class="pi-box">
+      {% for mode, title, ref_name, reference_name, file_name, customer_name_name, customer_phone_name, customer_id_name, address_name, name_placeholder, address_placeholder in [
+        ('direct', 'Name', 'pi_direct_id_proof_ref', 'pi_direct_reference', 'pi_direct_id_proof_file', 'pi_direct_customer_name', 'pi_direct_customer_phone', 'pi_direct_customer_id', 'pi_direct_customer_address', 'Full name', 'Seller address'),
+        ('agent', 'Agent Name', 'pi_agent_id_proof_ref', 'pi_agent_reference', 'pi_agent_id_proof_file', 'pi_agent_customer_name', 'pi_agent_customer_phone', 'pi_agent_customer_id', 'pi_agent_address', 'Agent name', 'Agent address'),
+        ('finance', 'Name', 'pi_finance_id_proof_ref', 'pi_finance_reference', 'pi_finance_id_proof_file', 'pi_finance_customer_name', 'pi_finance_customer_phone', 'pi_finance_customer_id', 'pi_finance_address', 'Finance name', 'Finance address'),
+        ('branch', 'Name', 'pi_branch_id_proof_ref', 'pi_branch_reference', 'pi_branch_id_proof_file', 'pi_branch_customer_name', 'pi_branch_customer_phone', 'pi_branch_customer_id', 'pi_branch_address', 'Consultancy name', 'Consultancy address')
+      ] %}
+      <div class="tab-panel {% if current_mode == mode %}active{% endif %}" data-panel="purchase_{{ mode }}" role="tabpanel">
+        <div class="veh-two-col">
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-person-lines-fill"></i>
+              <div>
+                <strong>Seller Information</strong>
+              </div>
+            </div>
+            <div class="veh-form-grid single-col seller-form-grid">
+              <label>
+                <span>{{ title }}</span>
+                {% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_customer_name or '-' }}</div>{% else %}<input type="text" value="{{ vehicle.purchase_customer_name or '' }}" placeholder="{{ name_placeholder }}" data-customer-name />{% endif %}
+              </label>
+              <label>
+                <span>Address</span>
+                {% if view_only %}<div class="veh-readonly">{{ purchase_customer_address_value or '-' }}</div>{% else %}<input type="text" name="{{ address_name }}" value="{{ purchase_customer_address_value }}" placeholder="{{ address_placeholder }}" />{% endif %}
+              </label>
+              <label>
+                <span>Mobile</span>
+                {% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_customer_phone or '-' }}</div>{% else %}<input type="text" value="{{ vehicle.purchase_customer_phone or '' }}" placeholder="Mobile number" data-customer-phone />{% endif %}
+              </label>
+              <label>
+                <span>ID</span>
+                {% if view_only %}<div class="veh-readonly">{{ purchase_customer_id_value or '-' }}</div>{% else %}<input type="text" name="{{ customer_id_name }}" value="{{ purchase_customer_id_value }}" placeholder="ID number" />{% endif %}
+              </label>
+              <label>
+                <span>Date</span>
+                {% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_id_proof_ref|date_dmy if vehicle.purchase_id_proof_ref else '-' }}</div>{% else %}<input type="date" name="{{ ref_name }}" value="{{ vehicle.purchase_id_proof_ref|date_only if vehicle.purchase_id_proof_ref else '' }}" />{% endif %}
+              </label>
+              <label>
+                <span>Reference</span>
+                {% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_reference or '-' }}</div>{% else %}<input type="text" name="{{ reference_name }}" value="{{ vehicle.purchase_reference or '' }}" placeholder="Reference" />{% endif %}
+              </label>
+            </div>
+          </div>
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-image"></i>
+              <div>
+                <strong>ID Proof Image</strong>
+              </div>
+            </div>
+            <div class="veh-proof-wrap">
+              <div class="veh-proof-card">
+                {% if vehicle.purchase_id_proof_filename %}
+                <div class="pi-proof is-centered">
+                  <div class="pi-proof-preview">
+                    <img class="pi-proof-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.purchase_id_proof_filename) }}" alt="ID proof preview" data-preview-image />
+                    <span class="pi-proof-name">{{ vehicle.purchase_id_proof_filename }}</span>
+                    <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.purchase_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>
+                  </div>
+                </div>
+                {% elif view_only %}
+                <div class="veh-doc-preview veh-proof-empty">
+                  <span class="veh-doc-icon"><i class="bi bi-image"></i></span>
+                  <span class="veh-doc-empty-note">No ID proof image uploaded</span>
+                </div>
+                {% endif %}
+                {% if not view_only %}
+                <div class="pi-proof">
+                  <div class="pi-proof-row">
+                    <label class="veh-doc-upload" for="{{ file_name }}"><i class="bi bi-image"></i><span>Click to upload ID Proof</span></label>
+                    <input id="{{ file_name }}" type="file" name="{{ file_name }}" accept="image/*" />
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% set has_co = (vehicle.purchase_co_name or vehicle.purchase_co_phone or vehicle.purchase_co_id or vehicle.purchase_co_address or vehicle.purchase_co_id_proof_ref or vehicle.purchase_co_id_proof_filename) %}
+    <div style="margin-top:14px;">
+      {% if view_only %}
+        {% if has_co %}
+        <div class="section-title" style="padding:0; margin:0;">
+          <i class="bi bi-person-plus" aria-hidden="true"></i>
+          <span>Co Details</span>
+        </div>
+        {% endif %}
+      {% else %}
+        <label style="display:flex; align-items:center; gap:10px; font-weight:800; color:#3f2265; margin:0;">
+          <input type="checkbox" id="piCoToggle" {% if has_co %}checked{% endif %}>
+          <span>Add Co-Buyer / Co-Seller</span>
+        </label>
+      {% endif %}
+    </div>
+
+    {% if view_only and not has_co %}
+    {% else %}
+    <div class="veh-two-col {% if not has_co and not view_only %}is-hidden{% endif %}" id="piCoDetails" style="margin-top:10px;">
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-person-lines-fill"></i>
+          <div>
+            <strong>Co Details</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid single-col seller-form-grid">
+          <label><span>Name</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_co_name or '-' }}</div>{% else %}<input type="text" name="pi_co_name" value="{{ vehicle.purchase_co_name or '' }}" placeholder="Full name" />{% endif %}</label>
+          <label><span>Address</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_co_address or '-' }}</div>{% else %}<input type="text" name="pi_co_address" value="{{ vehicle.purchase_co_address or '' }}" placeholder="Address" />{% endif %}</label>
+          <label><span>Mobile</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_co_phone or '-' }}</div>{% else %}<input type="text" name="pi_co_phone" value="{{ vehicle.purchase_co_phone or '' }}" placeholder="Mobile number" />{% endif %}</label>
+          <label><span>ID</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_co_id or '-' }}</div>{% else %}<input type="text" name="pi_co_id" value="{{ vehicle.purchase_co_id or '' }}" placeholder="ID number" />{% endif %}</label>
+          <label><span>Date</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_co_id_proof_ref|date_dmy if vehicle.purchase_co_id_proof_ref else '-' }}</div>{% else %}<input type="date" name="pi_co_id_proof_ref" value="{{ vehicle.purchase_co_id_proof_ref|date_only if vehicle.purchase_co_id_proof_ref else '' }}" />{% endif %}</label>
+        </div>
+      </div>
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-image"></i>
+          <div>
+            <strong>Co ID Proof Image</strong>
+          </div>
+        </div>
+        <div class="veh-proof-wrap">
+          <div class="veh-proof-card">
+            {% if vehicle.purchase_co_id_proof_filename %}
+            <div class="pi-proof is-centered">
+              <div class="pi-proof-preview">
+                <img class="pi-proof-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.purchase_co_id_proof_filename) }}" alt="ID proof preview" data-preview-image />
+                <span class="pi-proof-name">{{ vehicle.purchase_co_id_proof_filename }}</span>
+                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.purchase_co_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>
+              </div>
+            </div>
+            {% elif view_only %}
+            <div class="veh-doc-preview veh-proof-empty">
+              <span class="veh-doc-icon"><i class="bi bi-image"></i></span>
+              <span class="veh-doc-empty-note">No ID proof image uploaded</span>
+            </div>
+            {% endif %}
+            {% if not view_only %}
+            <div class="pi-proof">
+              <div class="pi-proof-row">
+                <label class="veh-doc-upload" for="pi_co_id_proof_file"><i class="bi bi-image"></i><span>Click to upload ID Proof</span></label>
+                <input id="pi_co_id_proof_file" type="file" name="pi_co_id_proof_file" accept="image/*" />
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <i class="bi bi-building-check" aria-hidden="true"></i>
+      <span>Hypothecation</span>
+    </div>
+
+    <div class="veh-two-col reverse">
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-shield-lock"></i>
+          <div>
+            <strong>Hypothecation Details</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid seller-form-grid vehicle-form-grid">
+          {% set hyp_on = (vehicle.hypothecation or '')|trim != '' %}
+          <label class="span-2">
+            <span>Hypothecation</span>
+            {% if view_only %}
+              <div class="veh-readonly">{{ 'Yes' if hyp_on else 'No' }}</div>
+            {% else %}
+              <span class="gst-inline" style="display:flex; align-items:center; gap:0.6rem; font-weight:700; min-height:44px;">
+                <input type="checkbox" id="hypothecationEnabled" name="hypothecation_enabled" value="1" {% if hyp_on %}checked{% endif %}>
+                <span>Yes</span>
+              </span>
+            {% endif %}
+          </label>
+          <label id="hypothecationNameWrap" class="{% if not hyp_on %}is-hidden{% endif %}">
+            <span>Name</span>
+            {% if view_only %}<div class="veh-readonly">{{ vehicle.hypothecation or '-' }}</div>{% else %}<input type="text" name="hypothecation_name" value="{{ vehicle.hypothecation or '' }}" />{% endif %}
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <i class="icon-motorbike" aria-hidden="true"></i>
+      <span>Vehicle Details</span>
+    </div>
+
+    <div class="veh-two-col reverse">
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-card-checklist"></i>
+          <div>
+            <strong>Vehicle Information</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid seller-form-grid vehicle-form-grid">
+          <label><span>Vehicle Brand</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.vehicle_name or '-' }}</div>{% else %}<input type="text" name="vehicle_name" required value="{{ vehicle.vehicle_name or '' }}" />{% endif %}</label>
+          <label><span>Vehicle Number</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.vehicle_number or '-' }}</div>{% else %}<input type="text" name="vehicle_number" required value="{{ vehicle.vehicle_number or '' }}" />{% endif %}</label>
+          <label><span>Model Year</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.model_year or '-' }}</div>{% else %}<input type="number" name="model_year" {% if app_setting('vehicle_add_required_model_year', '1') == '1' %}required{% endif %} value="{{ vehicle.model_year or '' }}" min="1900" max="2100" />{% endif %}</label>
+          <label><span>Chassis No</span>{% if view_only %}<div class="veh-readonly">{{ registration_no_value or '-' }}</div>{% else %}<input type="text" name="registration_no" {% if app_setting('vehicle_add_required_chassis_no', '0') == '1' %}required{% endif %} value="{{ registration_no_value }}" />{% endif %}</label>
+          <label><span>Kilometer</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.kms_driven or '-' }}</div>{% else %}<input type="text" name="kms_driven" {% if app_setting('vehicle_add_required_kilometers', '0') == '1' %}required{% endif %} value="{{ vehicle.kms_driven or '' }}" />{% endif %}</label>
+          <label><span>No. of Owners</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.owners or '-' }}</div>{% else %}<input type="number" name="owners" {% if app_setting('vehicle_add_required_owners', '1') == '1' %}required{% endif %} value="{{ vehicle.owners or '' }}" min="0" />{% endif %}</label>
+          {% set insurance_on = (vehicle.insurance == 'Yes' or vehicle.insurance_date or vehicle.insurance_start_date or vehicle.insurance_end_date or vehicle.insurance_document_filename) %}
+          <label class="span-2" style="max-width: calc(50% - 6px);">
+            <span>Insurance</span>
+            {% if view_only %}
+              <div class="veh-readonly">{{ 'Yes' if insurance_on else 'No' }}</div>
+            {% else %}
+              <span class="gst-inline" style="display:flex; align-items:center; gap:0.6rem; font-weight:700; min-height:44px;">
+                <input type="checkbox" id="insuranceEnabled" name="insurance_enabled" value="1" {% if insurance_on %}checked{% endif %}>
+                <span>Yes</span>
+              </span>
+            {% endif %}
+          </label>
+          <label id="insuranceStartDateWrap" class="{% if not insurance_on %}is-hidden{% endif %}">
+            <span>Insurance Start Date</span>
+            {% if view_only %}
+              <div class="veh-readonly">{{ vehicle.insurance_start_date|date_dmy if vehicle.insurance_start_date else '-' }}</div>
+            {% else %}
+              <input type="date" name="insurance_start_date" value="{{ vehicle.insurance_start_date|date_only if vehicle.insurance_start_date else '' }}" />
+            {% endif %}
+          </label>
+          <label id="insuranceEndDateWrap" class="{% if not insurance_on %}is-hidden{% endif %}">
+            <span>Insurance End Date</span>
+            {% if view_only %}
+              <div class="veh-readonly">{{ vehicle.insurance_end_date|date_dmy if vehicle.insurance_end_date else '-' }}</div>
+            {% else %}
+              <input type="date" name="insurance_end_date" value="{{ vehicle.insurance_end_date|date_only if vehicle.insurance_end_date else '' }}" />
+            {% endif %}
+          </label>
+          <label><span>RC Number</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.rc_number or '-' }}</div>{% else %}<input type="text" name="rc_number" {% if app_setting('vehicle_add_required_rc_number', '1') == '1' %}required{% endif %} value="{{ vehicle.rc_number or '' }}" />{% endif %}</label>
+          <label><span>Status</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.status or '-' }}</div>{% else %}<select name="status"><option value="Available" {% if (vehicle.status_value or (vehicle.status or '')|lower|replace(' ', '_')) == 'available' %}selected{% endif %}>Available</option><option value="Sold" {% if (vehicle.status_value or (vehicle.status or '')|lower|replace(' ', '_')) == 'sold' %}selected{% endif %}>Sold</option><option value="In Progress" {% if (vehicle.status_value or (vehicle.status or '')|lower|replace(' ', '_')) == 'in_progress' %}selected{% endif %}>In Progress</option><option value="In Repair" {% if (vehicle.status_value or (vehicle.status or '')|lower|replace(' ', '_')) == 'in_repair' %}selected{% endif %}>In Repair</option></select>{% endif %}</label>
+          <label><span>Purchase Date</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_date|date_dmy if vehicle.purchase_date else '-' }}</div>{% else %}<input type="date" name="purchase_date" value="{{ vehicle.purchase_date|date_only if vehicle.purchase_date else '' }}" />{% endif %}</label>
+          <label><span>Selling Price</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.selling_price or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="selling_price" value="{{ vehicle.selling_price or 0 }}" />{% endif %}</label>
+          <label class="span-2"><span>Remark if any</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.remarks or '-' }}</div>{% else %}<textarea name="remarks">{{ vehicle.remarks or '' }}</textarea>{% endif %}</label>
+          <label class="span-2"><span>Fine Details</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.fine_details or '-' }}</div>{% else %}<textarea name="fine_details">{{ vehicle.fine_details or '' }}</textarea>{% endif %}</label>
+          <label class="span-2">
+            <span>Sale GST</span>
+            {% if view_only %}
+            <span class="gst-inline" style="display:flex; align-items:center; gap:0.6rem; font-weight:700; min-height:44px;">
+              <input type="checkbox" {% if vehicle.sale_gst_enabled %}checked{% endif %} disabled>
+              <span>Apply GST for this bike</span>
+              <span class="muted" style="font-weight:500;">
+                {% if vehicle.sale_gst_enabled %}
+                  {{ vehicle.sale_gst_value or 0 }}{% if (vehicle.sale_gst_mode or 'percent') == 'amount' %} Rs{% else %}%{% endif %}
+                {% else %}
+                  Not applied
+                {% endif %}
+              </span>
+            </span>
+            {% else %}
+            <span class="gst-inline" style="display:flex; align-items:center; gap:0.6rem; font-weight:700; min-height:44px;">
+              <input type="checkbox" name="sale_gst_enabled" value="1" {% if vehicle.sale_gst_enabled %}checked{% endif %}>
+              <span>Apply GST for this bike</span>
+              <span class="muted" style="font-weight:500;">{% if app_setting('gst_value_mode', 'percent') == 'amount' %}Default Rs {{ app_setting('default_gst_amount', '0') }}{% else %}Default {{ app_setting('default_gst_percent', '0') }}%{% endif %}</span>
+            </span>
+            {% endif %}
+          </label>
+        </div>
+      </div>
+
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-images"></i>
+          <div>
+            <strong>Bike Image And Documents</strong>
+          </div>
+        </div>
+        {% if not view_only %}
+        <input class="veh-upload-input" id="bike_photo_input" type="file" name="photo" accept="image/*" multiple data-bike-photo-input />
+        {% for idx in range(4) %}
+        <input type="hidden" name="remove_photo_{{ idx }}" value="0" data-remove-photo-flag="{{ idx }}" />
+        {% endfor %}
+        {% endif %}
+        <div
+          class="veh-carousel {% if not view_only %}compact-edit{% endif %}"
+          id="bike-photo-carousel"
+          data-gallery='[{% for image_name in gallery_images %}{"src":"{{ url_for('static', filename='uploads/vehicles/' ~ image_name) }}","name":"{{ image_name|replace("\\", "\\\\")|replace("\"", "\\\"") }}","slot":{{ loop.index0 }}}{% if not loop.last %},{% endif %}{% endfor %}]'
+        >
+          <div class="veh-carousel-stage">
+            {% if not view_only %}
+            <button class="veh-carousel-remove" type="button" data-carousel-remove aria-label="Remove image" title="Remove image" hidden>
+              <i class="bi bi-x-lg"></i>
+            </button>
+            {% endif %}
+            <button class="veh-carousel-nav prev" type="button" data-carousel-prev aria-label="Previous image">&lt;</button>
+            <div class="veh-carousel-empty" data-carousel-empty>{% if gallery_images %}No image selected{% else %}No bike photos uploaded{% endif %}</div>
+            <div class="veh-carousel-media" data-carousel-media>
+              <img src="" alt="Bike photo" data-carousel-image data-preview-image />
+            </div>
+            <button class="veh-carousel-nav next" type="button" data-carousel-next aria-label="Next image">&gt;</button>
+          </div>
+          <div class="veh-carousel-footer">
+            <div class="veh-carousel-name" data-carousel-name>{% if gallery_images %}{{ gallery_images[0] }}{% else %}No selected image{% endif %}</div>
+            <div class="veh-carousel-dots" data-carousel-dots></div>
+          </div>
+        </div>
+        {% if not view_only %}
+        <div class="veh-add-photo-wrap">
+          <label class="veh-add-photo-btn" for="bike_photo_input" aria-label="Add bike image" title="Add bike image">
+            <i class="bi bi-plus-lg"></i>
+          </label>
+          <div class="veh-add-photo-text">Add bike image</div>
+        </div>
+        {% endif %}
+
+        <div class="veh-doc-stack">
+          <div class="veh-doc-item">
+            <div>
+              <strong>RC Book</strong>
+              {% if not view_only %}
+              <div style="margin-top:4px;">
+                <label class="veh-doc-upload" for="rc_book_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book</span></label>
+                <input class="veh-doc-input" id="rc_book_file" type="file" name="rc_book" />
+              </div>
+              {% endif %}
+            </div>
+            <div class="veh-doc-preview">
+              {% if vehicle.rc_book_filename %}
+                {% set rc_lower = vehicle.rc_book_filename|lower %}
+                {% set rc_is_image = rc_lower.endswith('.png') or rc_lower.endswith('.jpg') or rc_lower.endswith('.jpeg') or rc_lower.endswith('.webp') or rc_lower.endswith('.gif') %}
+                {% if rc_is_image %}
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" alt="RC Book" data-preview-image />
+                {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+                {% endif %}
+                <span class="veh-doc-name">{{ vehicle.rc_book_filename }}</span>
+                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" target="_blank" rel="noopener">Open file</a>
+              {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+                <span class="veh-doc-empty-note">No RC Book uploaded</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="veh-doc-item" data-insurance-doc>
+            <div>
+              <strong>Insurance</strong>
+              {% if not view_only %}
+              <div style="margin-top:4px;">
+                <label class="veh-doc-upload" for="insurance_document_file"><i class="bi bi-shield-check"></i><span>Click to upload Insurance</span></label>
+                <input class="veh-doc-input" id="insurance_document_file" type="file" name="insurance_document" />
+              </div>
+              {% endif %}
+            </div>
+            <div class="veh-doc-preview">
+              {% if vehicle.insurance_document_filename %}
+                {% set insurance_lower = vehicle.insurance_document_filename|lower %}
+                {% set insurance_is_image = insurance_lower.endswith('.png') or insurance_lower.endswith('.jpg') or insurance_lower.endswith('.jpeg') or insurance_lower.endswith('.webp') or insurance_lower.endswith('.gif') %}
+                {% if insurance_is_image %}
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.insurance_document_filename) }}" alt="Insurance" data-preview-image />
+                {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-shield-check"></i></span>
+                {% endif %}
+                <span class="veh-doc-name">{{ vehicle.insurance_document_filename }}</span>
+                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.insurance_document_filename) }}" target="_blank" rel="noopener">Open file</a>
+              {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-shield-check"></i></span>
+                <span class="veh-doc-empty-note">No Insurance file uploaded</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="veh-doc-item">
+            <div>
+              <strong>PUC Certificate</strong>
+              {% if not view_only %}
+              <div style="margin-top:4px;">
+                <label class="veh-doc-upload" for="puc_certificate_file"><i class="bi bi-patch-check"></i><span>Click to upload PUC</span></label>
+                <input class="veh-doc-input" id="puc_certificate_file" type="file" name="puc_certificate" />
+              </div>
+              {% endif %}
+            </div>
+            <div class="veh-doc-preview">
+              {% if vehicle.puc_certificate_filename %}
+                {% set puc_lower = vehicle.puc_certificate_filename|lower %}
+                {% set puc_is_image = puc_lower.endswith('.png') or puc_lower.endswith('.jpg') or puc_lower.endswith('.jpeg') or puc_lower.endswith('.webp') or puc_lower.endswith('.gif') %}
+                {% if puc_is_image %}
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.puc_certificate_filename) }}" alt="PUC Certificate" data-preview-image />
+                {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-file-earmark-medical"></i></span>
+                {% endif %}
+                <span class="veh-doc-name">{{ vehicle.puc_certificate_filename }}</span>
+                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.puc_certificate_filename) }}" target="_blank" rel="noopener">Open file</a>
+              {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-patch-check"></i></span>
+                <span class="veh-doc-empty-note">No PUC Certificate uploaded</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <i class="bi bi-cash-coin" aria-hidden="true"></i>
+      <span>Settlement Details</span>
+    </div>
+
+    <div class="veh-two-col reverse">
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-receipt"></i>
+          <div>
+            <strong>Payment Information</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid seller-form-grid vehicle-form-grid">
+          <label><span>Purchase Price</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.purchase_price or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="purchase_price" {% if app_setting('vehicle_add_required_purchase_price', '1') == '1' %}required{% endif %} value="{{ vehicle.purchase_price or 0 }}" data-purchase-price />{% endif %}</label>
+          <label><span>Settlement Status</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_settlement_status or '-' }}</div>{% else %}{% set ss = (vehicle.purchase_settlement_status or 'Paid') %}<select name="purchase_settlement_status" required data-purchase-settlement-status><option value="Paid" {% if ss == 'Paid' %}selected{% endif %}>Paid</option><option value="Partial" {% if ss == 'Partial' %}selected{% endif %}>Partial</option><option value="Unpaid" {% if ss == 'Unpaid' %}selected{% endif %}>Unpaid</option></select>{% endif %}</label>
+          <label><span>Paid Amount</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.purchase_paid_amount or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="purchase_paid_amount" required value="{{ vehicle.purchase_paid_amount if vehicle.purchase_paid_amount is not none else (vehicle.purchase_price or 0) }}" data-purchase-paid-amount />{% endif %}</label>
+          <label><span>Paymode</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_payment_mode or '-' }}</div>{% else %}{% set pm = (vehicle.purchase_payment_mode or 'Cash') %}<select name="purchase_payment_mode" required>{% for mode in ['Cash','UPI','Bank','GPay','Card'] %}<option value="{{ mode }}" {% if mode == pm %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>{% endif %}</label>
+          <label class="span-2"><span>Paid Date &amp; Time</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_paid_at|datetime_display if vehicle.purchase_paid_at else '-' }}</div>{% else %}<input type="datetime-local" name="purchase_paid_at" required data-default-now value="{{ (vehicle.purchase_paid_at|datetime_display)|replace(' ', 'T') if vehicle.purchase_paid_at else '' }}" />{% endif %}</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% if view_only %}
+  <section class="card">
+    <div class="section-title">
+      <i class="bi bi-wrench-adjustable" aria-hidden="true"></i>
+      <span>Vehicle Expenses</span>
+    </div>
+
+    <div class="veh-two-col reverse">
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-tools"></i>
+          <div>
+            <strong>Repair Expenses</strong>
+          </div>
+        </div>
+
+        {% set repair_rows = repairs or [] %}
+        {% if repair_rows %}
+        <div class="list-table" style="--list-cols: 0.9fr 1.6fr 0.7fr 0.9fr;">
+          <div class="list-row list-head">
+            <div>Date</div>
+            <div>Expenses For</div>
+            <div style="text-align:right;">Cost</div>
+            <div>Paymode</div>
+          </div>
+          {% set repair_total = 0.0 %}
+          {% for r in repair_rows %}
+          {% set repair_total = repair_total + ((r.cost or 0)|float) %}
+          <div class="list-row">
+            <div>{{ r.repair_date|date_dmy if r.repair_date else (r.created_at|date_dmy if r.created_at else '-') }}</div>
+            <div>{{ r.description or 'Repair' }}</div>
+            <div style="text-align:right;">&#8377; {{ "%.2f"|format(r.cost or 0) }}</div>
+            <div>{{ r.payment_mode or '-' }}</div>
+          </div>
+          {% endfor %}
+          <div class="list-row" style="font-weight:900;">
+            <div></div>
+            <div>Total</div>
+            <div style="text-align:right;">&#8377; {{ "%.2f"|format(repair_total or 0) }}</div>
+            <div></div>
+          </div>
+        </div>
+        {% else %}
+        <p class="muted" style="margin: 0;">No repair expenses found.</p>
+        {% endif %}
+
+        <div class="veh-head-actions" style="margin-top: 12px;">
+          <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-plus-circle"></i> Add Repair</a>
+          <a class="btn primary" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}"><i class="bi bi-bag-check"></i> Sold Out</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+{% if not view_only %}
+</form>
+{% else %}
+</div>
+{% endif %}
+
+<div class="img-modal" id="img-modal" aria-hidden="true">
+  <div class="img-modal-card" role="dialog" aria-modal="true" aria-label="Image preview">
+    <div class="img-modal-head">
+      <p class="img-modal-title" id="img-modal-title">Attachment preview</p>
+      <button class="img-modal-close" type="button" aria-label="Close preview" id="img-modal-close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="img-modal-body">
+      <img id="img-modal-image" alt="Preview" />
+    </div>
+  </div>
+</div>
+
+<script>
+  const tabButtons = document.querySelectorAll("[data-purchase-mode]");
+  const panels = document.querySelectorAll("[data-panel]");
+  const purchaseModeInput = document.getElementById("purchase_mode");
+  function setPurchaseMode(mode) {
+    tabButtons.forEach((btn) => btn.classList.toggle("active", btn.getAttribute("data-purchase-mode") === mode));
+    panels.forEach((panel) => panel.classList.toggle("active", panel.getAttribute("data-panel") === `purchase_${mode}`));
+    if (purchaseModeInput) purchaseModeInput.value = mode;
+  }
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setPurchaseMode(btn.getAttribute("data-purchase-mode") || "direct"));
+  });
+
+  const form = document.getElementById("vehicle-edit-form");
+  if (form) {
+    form.addEventListener("submit", () => {
+      const activePanel = document.querySelector(".tab-panel.active");
+      const nameInput = activePanel?.querySelector("[data-customer-name]");
+      const phoneInput = activePanel?.querySelector("[data-customer-phone]");
+      const hiddenName = document.getElementById("purchase_customer_name_hidden");
+      const hiddenPhone = document.getElementById("purchase_customer_phone_hidden");
+      if (hiddenName && nameInput instanceof HTMLInputElement) hiddenName.value = nameInput.value;
+      if (hiddenPhone && phoneInput instanceof HTMLInputElement) hiddenPhone.value = phoneInput.value;
+    });
+  }
+
+  const coToggle = document.getElementById("piCoToggle");
+  const coDetails = document.getElementById("piCoDetails");
+  const coHidden = document.getElementById("pi_has_co_hidden");
+  function syncCoDetails() {
+    const on = !!(coToggle && coToggle.checked);
+    if (coDetails) coDetails.classList.toggle("is-hidden", !on);
+    if (coHidden) coHidden.value = on ? "1" : "0";
+    if (!on && coDetails) {
+      coDetails.querySelectorAll("input").forEach((input) => {
+        if (input.type === "file") input.value = "";
+      });
+      coDetails.querySelectorAll('input:not([type="file"])').forEach((input) => {
+        input.value = "";
+      });
+    }
+  }
+  if (coToggle) coToggle.addEventListener("change", syncCoDetails);
+  syncCoDetails();
+
+  const insuranceToggle = document.getElementById("insuranceEnabled");
+  const insuranceDoc = document.querySelector("[data-insurance-doc]");
+  const insuranceStartWrap = document.getElementById("insuranceStartDateWrap");
+  const insuranceEndWrap = document.getElementById("insuranceEndDateWrap");
+  function syncInsurance() {
+    const on = !!(insuranceToggle && insuranceToggle.checked);
+    if (insuranceDoc) {
+      insuranceDoc.classList.toggle("is-hidden", !on);
+      if (!on) {
+        const fileInput = insuranceDoc.querySelector('input[type=\"file\"]');
+        if (fileInput) fileInput.value = "";
+      }
+    }
+    [insuranceStartWrap, insuranceEndWrap].forEach((wrap) => {
+      if (!wrap) return;
+      wrap.classList.toggle("is-hidden", !on);
+      const input = wrap.querySelector("input");
+      if (input instanceof HTMLInputElement) {
+        input.required = on;
+        if (!on) input.value = "";
+      }
+    });
+  }
+  if (insuranceToggle) insuranceToggle.addEventListener("change", syncInsurance);
+  syncInsurance();
+
+  if (insuranceStartWrap) {
+    const startInput = insuranceStartWrap.querySelector("input");
+    const endInput = insuranceEndWrap ? insuranceEndWrap.querySelector("input") : null;
+    [startInput, endInput].forEach((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.addEventListener("change", () => {
+          if (input.value && insuranceToggle && !insuranceToggle.checked) {
+            insuranceToggle.checked = true;
+            syncInsurance();
+          }
+        });
+      }
+    });
+  }
+
+  function localNowDatetimeValue(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
+  document.querySelectorAll("[data-default-now]").forEach((input) => {
+    if (!(input instanceof HTMLInputElement)) return;
+    if (!input.value) input.value = localNowDatetimeValue(new Date());
+  });
+
+  const hypToggle = document.getElementById("hypothecationEnabled");
+  const hypNameWrap = document.getElementById("hypothecationNameWrap");
+  function syncHypothecation() {
+    const on = !!(hypToggle && hypToggle.checked);
+    if (hypNameWrap) hypNameWrap.classList.toggle("is-hidden", !on);
+    const nameInput = hypNameWrap ? hypNameWrap.querySelector("input") : null;
+    if (nameInput instanceof HTMLInputElement) {
+      nameInput.required = on;
+      if (!on) nameInput.value = "";
+    }
+  }
+  if (hypToggle) hypToggle.addEventListener("change", syncHypothecation);
+  syncHypothecation();
+
+  const purchasePriceInput = document.querySelector("[data-purchase-price]");
+  const purchaseSettlementStatus = document.querySelector("[data-purchase-settlement-status]");
+  const purchasePaidAmount = document.querySelector("[data-purchase-paid-amount]");
+  function syncPurchaseSettlementAmounts() {
+    if (!(purchaseSettlementStatus instanceof HTMLSelectElement)) return;
+    if (!(purchasePaidAmount instanceof HTMLInputElement)) return;
+    const status = purchaseSettlementStatus.value || "Paid";
+    const price = purchasePriceInput instanceof HTMLInputElement ? parseFloat(purchasePriceInput.value || "0") || 0 : 0;
+    if (status === "Paid") purchasePaidAmount.value = price ? String(price) : purchasePaidAmount.value;
+    if (status === "Unpaid") purchasePaidAmount.value = "0";
+  }
+  if (purchaseSettlementStatus) purchaseSettlementStatus.addEventListener("change", syncPurchaseSettlementAmounts);
+  if (purchasePriceInput) purchasePriceInput.addEventListener("input", syncPurchaseSettlementAmounts);
+
+  const bikePhotoInput = document.querySelector("[data-bike-photo-input]");
+  const bikePhotoCarousel = document.getElementById("bike-photo-carousel");
+
+  function initBikeCarousel() {
+    if (!bikePhotoCarousel) return null;
+    const emptyEl = bikePhotoCarousel.querySelector("[data-carousel-empty]");
+    const mediaEl = bikePhotoCarousel.querySelector("[data-carousel-media]");
+    const imageEl = bikePhotoCarousel.querySelector("[data-carousel-image]");
+    const nameEl = bikePhotoCarousel.querySelector("[data-carousel-name]");
+    const dotsEl = bikePhotoCarousel.querySelector("[data-carousel-dots]");
+    const prevBtn = bikePhotoCarousel.querySelector("[data-carousel-prev]");
+    const nextBtn = bikePhotoCarousel.querySelector("[data-carousel-next]");
+    const removeBtn = bikePhotoCarousel.querySelector("[data-carousel-remove]");
+    let items = [];
+    let index = 0;
+
+    try {
+      items = JSON.parse(bikePhotoCarousel.getAttribute("data-gallery") || "[]");
+    } catch {
+      items = [];
+    }
+
+    function renderDots() {
+      if (!dotsEl) return;
+      dotsEl.innerHTML = "";
+      items.forEach((_, dotIndex) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = `veh-carousel-dot${dotIndex === index ? " active" : ""}`;
+        dot.setAttribute("aria-label", `Show image ${dotIndex + 1}`);
+        dot.addEventListener("click", () => {
+          index = dotIndex;
+          render();
+        });
+        dotsEl.appendChild(dot);
+      });
+    }
+
+    function render() {
+      const hasItems = items.length > 0;
+      if (emptyEl) emptyEl.style.display = hasItems ? "none" : "";
+      if (mediaEl) mediaEl.classList.toggle("open", hasItems);
+      if (imageEl && hasItems) {
+        imageEl.src = items[index].src || "";
+        imageEl.alt = items[index].name || `Bike photo ${index + 1}`;
+      }
+      if (nameEl) nameEl.textContent = hasItems ? (items[index].name || `Bike photo ${index + 1}`) : "No selected image";
+      if (prevBtn) prevBtn.disabled = !hasItems || items.length < 2;
+      if (nextBtn) nextBtn.disabled = !hasItems || items.length < 2;
+      if (removeBtn) removeBtn.hidden = !hasItems;
+      renderDots();
+    }
+
+    if (prevBtn) prevBtn.addEventListener("click", () => {
+      if (!items.length) return;
+      index = (index - 1 + items.length) % items.length;
+      render();
+    });
+    if (nextBtn) nextBtn.addEventListener("click", () => {
+      if (!items.length) return;
+      index = (index + 1) % items.length;
+      render();
+    });
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => {
+        if (!items.length) return;
+        const currentItem = items[index];
+        if (currentItem && Number.isInteger(currentItem.slot)) {
+          const removeFlag = document.querySelector(`[data-remove-photo-flag="${currentItem.slot}"]`);
+          if (removeFlag instanceof HTMLInputElement) removeFlag.value = "1";
+        }
+        items.splice(index, 1);
+        if (index >= items.length) index = Math.max(items.length - 1, 0);
+        render();
+      });
+    }
+
+    render();
+
+    return {
+      setItems(nextItems) {
+        items = nextItems;
+        index = 0;
+        bikePhotoCarousel.setAttribute("data-gallery", JSON.stringify(nextItems));
+        render();
+      }
+    };
+  }
+
+  const bikeCarousel = initBikeCarousel();
+  if (bikePhotoInput instanceof HTMLInputElement && bikeCarousel) {
+    bikePhotoInput.addEventListener("change", () => {
+      const files = Array.from(bikePhotoInput.files || []).filter((file) => file.type.startsWith("image/"));
+      bikeCarousel.setItems(files.map((file) => ({
+        src: URL.createObjectURL(file),
+        name: file.name || "Bike photo",
+        slot: null
+      })));
+      document.querySelectorAll("[data-remove-photo-flag]").forEach((input) => {
+        if (input instanceof HTMLInputElement) input.value = "0";
+      });
+    });
+  }
+
+  const imgModal = document.getElementById("img-modal");
+  const imgModalImage = document.getElementById("img-modal-image");
+  const imgModalClose = document.getElementById("img-modal-close");
+  function openImageModal(src, title) {
+    if (!imgModal || !imgModalImage) return;
+    imgModalImage.src = src || "";
+    const titleEl = document.getElementById("img-modal-title");
+    if (titleEl) titleEl.textContent = title || "Attachment preview";
+    imgModal.classList.add("open");
+    imgModal.setAttribute("aria-hidden", "false");
+  }
+  function closeImageModal() {
+    if (!imgModal || !imgModalImage) return;
+    imgModal.classList.remove("open");
+    imgModal.setAttribute("aria-hidden", "true");
+    imgModalImage.src = "";
+  }
+  document.querySelectorAll("[data-preview-image]").forEach((img) => {
+    img.addEventListener("click", () => openImageModal(img.getAttribute("src"), img.getAttribute("alt") || "Preview"));
+  });
+  if (imgModalClose) imgModalClose.addEventListener("click", closeImageModal);
+  if (imgModal) {
+    imgModal.addEventListener("click", (e) => {
+      if (e.target === imgModal) closeImageModal();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeImageModal();
+  });
+</script>

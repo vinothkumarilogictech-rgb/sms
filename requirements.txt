@@ -1,0 +1,8 @@
+Flask==3.0.2
+reportlab
+cryptography
+dotenv
+pyodbc
+pywin32
+pywebview
+pyinstaller

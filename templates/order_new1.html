@@ -1,0 +1,1252 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="order-number order-number-prominent">Invoice ID: <strong>{{ next_invoice_id or "INV001" }}</strong></div>
+  </div>
+  <div class="order-type-tabs">
+    <a class="btn ghost btn-compact active"
+      href="{{ url_for('order_new', customer_id=prefill_customer_id) }}">
+      Tailoring Order
+    </a>
+
+    <a class="btn ghost btn-compact"
+      href="{{ url_for('order_new_alteration', customer_id=prefill_customer_id) }}">
+      Alteration Order
+    </a>
+
+    <a class="btn ghost btn-compact"
+      href="{{ url_for('order_new_material', customer_id=prefill_customer_id) }}">
+      Material Purchase
+    </a>
+  </div>
+</div>
+
+<form class="stack" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="invoice_id" value="{{ next_invoice_id or 'INV001' }}" />
+  <div class="order-layout">
+    <div class="order-main">
+
+
+      <section class="card customer-card">
+        <input type="hidden" name="customer_id" id="customer-id-hidden" value="{{ prefill_customer_id or '' }}">
+        <div class="customer-two-col">
+          <div class="customer-left-column">
+            <label>
+              Customer ID
+              <input
+                type="text"
+                id="customer-id-display"
+                data-next-id="{{ display_customer_id }}"
+                value="{{ (prefill_customer_id or display_customer_id)|fmt_id }}"
+                readonly
+              />
+            </label>
+            <label>
+              Customer Name
+              <input
+                type="text"
+                name="name"
+                value="{{ prefill_name or '' }}"
+                {% if prefill_customer_id %}readonly{% endif %}
+                required
+              />
+            </label>
+            <label>
+              Phone Number
+              <input
+                type="text"
+                name="phone"
+                value="{{ prefill_phone or '' }}"
+                inputmode="tel"
+                maxlength="16"
+                pattern="^\+?[0-9]{1,15}$"
+                oninput="this.value=this.value.replace(/[^0-9+]/g,'').replace(/(?!^)\+/g,'');const d=this.value.replace(/\D/g,'').slice(0,15);this.value=(this.value.startsWith('+')?'+':'')+d;"
+                {% if prefill_customer_id %}readonly{% endif %}
+                required
+              />
+            </label>
+          </div>
+          <div class="customer-right-column">
+            <div class="customer-photo-tools">
+              <div class="customer-photo-actions">
+                <button type="button" class="btn ghost btn-compact" id="take-customer-photo-btn">Take Photo</button>
+                <button type="button" class="btn ghost btn-compact" id="upload-customer-photo-btn">Upload Photo</button>
+              </div>
+              <input type="file" id="customer-photo-input" name="customer_images" accept="image/*" multiple hidden />
+              <div id="customer-photo-camera-wrap" class="customer-camera-wrap hidden">
+                <video id="customer-photo-video" class="customer-camera-video" autoplay playsinline muted></video>
+                <div class="customer-camera-controls">
+                  <button type="button" class="btn primary btn-compact" id="capture-customer-photo-btn">Capture</button>
+                  <button type="button" class="btn ghost btn-compact" id="close-customer-camera-btn">Close</button>
+                </div>
+              </div>
+              <canvas id="customer-photo-canvas" hidden></canvas>
+              <div id="customer-photo-preview" class="preview-grid image-previews"></div>
+            </div>
+          </div>
+        </div>
+        <input type="hidden" name="worker_delivery_date" id="worker-delivery-date-hidden" value="{{ worker_default or '' }}" />
+        <input type="hidden" name="due_date" id="due-date-hidden" value="{{ delivery_default or '' }}" />
+      </section>
+
+      <section class="card measurement-card">
+        <div class="card-header">
+          <h3>Measurement</h3>
+          {% if categories %}
+          <button type="button" class="btn ghost btn-compact add-measure hover-blue-outline" data-target="measurement-list">+ Add category</button>
+          {% endif %}
+        </div>
+        {% if categories %}
+        <div class="measurement-list" id="measurement-list">
+          <div class="measurement-block">
+            <div class="measure-order-head">
+              <div class="measure-order-dates">
+                <label>
+                  Order No
+                  <input type="text" class="measure-order-no-input" value="" readonly />
+                </label>
+                <label>
+                  Order Date
+                  <input type="text" class="measure-order-date-display" value="{{ today_date }}" readonly />
+                </label>
+                <label>
+                  Completed Date
+                  <input type="date" name="measure_completed_date" class="measure-worker-date-input" value="{{ worker_default or '' }}" />
+                </label>
+                <label>
+                  Delivery Date
+                  <input type="date" name="measure_delivery_date" class="measure-due-date-input" value="{{ delivery_default or '' }}" />
+                </label>
+              </div>
+            </div>
+            <div class="measurement-top">
+              <label>
+                Category
+                <select name="measure_category_id" class="category-select">
+                  <option value="">Select category</option>
+                  {% for category in categories %}
+                  <option value="{{ category.id }}">{{ category.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                Sub category
+                <select name="measure_subcategory_id" class="subcategory-select">
+                  <option value="">Select sub category</option>
+                  {% for sub in subcategories %}
+                  <option value="{{ sub.id }}" data-category-id="{{ sub.category_id }}">{{ sub.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                Assign Tailor
+                <select name="measure_assigned_tailor">
+                  <option value="">Select tailor</option>
+                  {% for tailor in tailors %}
+                  <option value="{{ tailor.name }}">{{ tailor.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                Quantity
+                <div class="qty-control compact">
+                  <button type="button" class="qty-btn" data-step="-1">-</button>
+                  <input type="number" name="measure_qty" value="1" min="1" />
+                  <button type="button" class="qty-btn" data-step="1">+</button>
+                </div>
+              </label>
+              <button type="button" class="btn ghost btn-compact add-image-btn">Add Image</button>
+              <button type="button" class="icon-btn measure-delete" aria-label="Remove category">🗑</button>
+            </div>
+            <div class="measurement-body">
+              <div class="measurement-left">
+                <div class="measurement-title-row">
+                  <h4>Measurement</h4>
+                  <div class="measure-ratio-box" role="group" aria-label="Measurement ratio">
+                    <input type="hidden" name="measure_ratio" value="" />
+                    <button type="button" class="ratio-btn" data-ratio="1/4">1/4</button>
+                    <button type="button" class="ratio-btn" data-ratio="1/2">1/2</button>
+                    <button type="button" class="ratio-btn" data-ratio="3/4">3/4</button>
+                  </div>
+                </div>
+                <div class="measurement-fields"></div>
+                <p class="muted measurement-empty">Select a sub category to load fields.</p>
+                {% if requirement_icons %}
+                <div class="req-inline">
+                  <div class="req-inline-title">Requirements</div>
+                  <input type="hidden" name="measure_requirements" class="measure-requirements-input" value="" />
+                  <div class="req-grid">
+                    {% for req in requirement_icons %}
+                    <div class="req-toggle">
+                      <input id="req-{{ req.id }}-block" type="checkbox" value="{{ req.name }}" />
+                      <label for="req-{{ req.id }}-block">
+                        <span class="req-icon">
+                          <img src="{{ url_for('static', filename='req_icons/' ~ req.filename) }}" alt="{{ req.name }}" />
+                        </span>
+                        <span>{{ req.name }}</span>
+                      </label>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+                <label>
+                  Notes
+                  <textarea name="measure_notes" rows="2" placeholder="Enter notes here"></textarea>
+                </label>
+                <input
+                  type="file"
+                  name="order_images"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  class="order-images-input"
+                />
+              </div>
+              <div class="measurement-right">
+                <div class="preview-grid image-previews"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="muted">No categories yet. Add them in Categories.</p>
+        {% endif %}
+      </section>
+
+      <!-- Order items removed -->
+
+      <section class="card material-source-card">
+        <div class="card-header">
+          <h3>Material Source</h3>
+          <div class="radio-group">
+            <label>
+              <input type="radio" name="material_source" value="customer" checked>
+              Customer Material
+            </label>
+            <label>
+              <input type="radio" name="material_source" value="inventory">
+              Shop Material
+            </label>
+          </div>
+        </div>
+        <div class="material-section hidden" id="tailoring-material-section">
+          <div class="card-header">
+            <h4 class="section-title">Shop Materials</h4>
+            <button class="btn ghost btn-compact hover-blue-outline" type="button" id="add-material-row">+ Add item</button>
+          </div>
+        <div class="material-table material-sales" id="material-table">
+          <div class="material-row material-head">
+            <div>Item Code</div>
+            <div>Material Name</div>
+            <div>Available Stock</div>
+            <div>Quantity</div>
+            <div>Unit Price</div>
+            <div>Total Amount</div>
+            <div></div>
+          </div>
+          <div class="material-row" data-base-stock="0">
+            <div>
+              <input type="text" name="material_code" class="material-code-input" list="inventory-code-list" placeholder="Code" />
+              <input type="hidden" name="material_item_id" class="material-item-id" />
+            </div>
+            <div><input type="text" class="material-name" readonly /></div>
+            <div><input type="number" class="material-stock" readonly value="0" /></div>
+            <div><input type="number" step="0.01" name="material_qty" value="0" min="0" /></div>
+            <div><input type="number" step="0.01" name="material_unit_price" value="0" min="0" /></div>
+            <div><input type="number" step="0.01" name="material_price" class="material-line-total" readonly value="0" /></div>
+            <div><button type="button" class="btn ghost material-remove">x</button></div>
+          </div>
+        </div>
+        <datalist id="inventory-code-list">
+          {% for item in inventory %}
+            {% if item.inventory_code %}
+              <option
+                value="{{ item.inventory_code }}"
+                data-id="{{ item.id }}"
+                data-name="{{ item.name }}"
+                data-qty="{{ item.qty or 0 }}"
+                data-price="{{ item.selling_price or 0 }}"
+              ></option>
+            {% endif %}
+          {% endfor %}
+        </datalist>
+      </div>
+      </section>
+
+      <section class="card cost-card payment-simple payment-with-method">
+    <div class="cost-top">
+      <div class="cost-box">
+        <label>Total Cost</label>
+        <div class="cost-input">
+          <span>₹</span>
+          <input type="number" step="0.01" name="wage_cost" placeholder="00" data-cost="wage" min="0.01" required />
+        </div>
+      </div>
+      <div class="cost-summary">
+        <span>Subtotal</span>
+        <strong id="subtotal-value">₹ 0</strong>
+      </div>
+    </div>
+
+
+        <div class="cost-rows">
+          <div class="cost-row">
+            <div class="cost-label">Discount</div>
+            <div class="cost-input compact discount-toggle discount-box">
+              <input type="hidden" name="discount_type" value="percent" />
+              <input type="number" step="0.01" name="discount" placeholder="00" data-cost="discount" />
+              <div class="discount-switch">
+                <button type="button" class="disc-btn active" data-mode="percent">%</button>
+                <button type="button" class="disc-btn" data-mode="amount">₹</button>
+              </div>
+            </div>
+            <div class="cost-value" id="discount-value">₹ 0</div>
+          </div>
+          <div class="cost-row">
+            <div class="cost-label">Material Cost</div>
+            <div></div>
+            <div class="cost-value" id="material-cost-display">₹ 0</div>
+          </div>
+          <div class="cost-row" data-gst-row="main">
+            <div class="cost-label" id="gst-label">GST (0.00%)</div>
+            <div></div>
+            <div class="cost-value" id="gst-value">₹ 0</div>
+          </div>
+          <div class="cost-row" data-gst-row="cgst">
+            <div class="cost-label" id="cgst-label">CGST</div>
+            <div></div>
+            <div class="cost-value" id="cgst-value">₹ 0</div>
+          </div>
+          <div class="cost-row" data-gst-row="sgst">
+            <div class="cost-label" id="sgst-label">SGST</div>
+            <div></div>
+            <div class="cost-value" id="sgst-value">₹ 0</div>
+          </div>
+          <div class="cost-row total">
+            <div class="cost-label">Total</div>
+            <div></div>
+            <div class="cost-value" id="total-value">₹ 0</div>
+          </div>
+          <div class="cost-row">
+            <div class="cost-label">Advance</div>
+            <div class="advance-payment-group">
+              <div class="cost-input wide">
+                <span>₹</span>
+                <input type="number" step="0.01" name="advance_amount" placeholder="00" data-cost="advance" />
+              </div>
+              <div class="cost-input payment-method-top-input">
+                <select name="payment_method" aria-label="Payment method">
+                  <option value="Cash" selected>Cash</option>
+                  <option value="GPay">GPay</option>
+                  <option value="Card">Card</option>
+                </select>
+              </div>
+            </div>
+            <div class="cost-value" id="advance-value">₹ 0</div>
+          </div>
+          <div class="cost-row total">
+            <div class="cost-label">Balance Amount</div>
+            <div></div>
+            <div class="cost-value" id="due-value">₹ 0</div>
+          </div>
+        </div>
+        <input type="hidden" name="total_amount" id="total-amount-input" value="0" />
+        <input type="hidden" name="gst_type" id="gst-type-input" value="percent" />
+        <input type="hidden" id="gst-input" value="{{ app_setting('default_gst_percent', '0') }}" />
+        <input type="hidden" name="taxable_amount" id="taxable-amount-input" value="0" />
+        <input type="hidden" name="gst_percent" id="gst-percent-input" value="0" />
+        <input type="hidden" name="gst_amount" id="gst-amount-input" value="0" />
+        <input type="hidden" name="cgst_percent" id="cgst-percent-input" value="0" />
+        <input type="hidden" name="cgst_amount" id="cgst-amount-input" value="0" />
+        <input type="hidden" name="sgst_percent" id="sgst-percent-input" value="0" />
+        <input type="hidden" name="sgst_amount" id="sgst-amount-input" value="0" />
+        <input type="hidden" id="gst-enabled-input" value="{{ '1' if app_setting('gst_enabled', '1') == '1' else '0' }}" />
+        <input type="hidden" name="status" value="In-Progress" />
+      </section>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Save order</button>
+        <a class="btn ghost" href="{{ url_for('orders') }}">Cancel</a>
+      </div>
+    </div>
+
+    <aside class="order-side"></aside>
+  </div>
+</form>
+
+<template id="measure-template">
+  <div class="measurement-block">
+    <div class="measure-order-head">
+      <div class="measure-order-dates">
+        <label>
+          Order No
+          <input type="text" class="measure-order-no-input" value="" readonly />
+        </label>
+        <label>
+          Order Date
+          <input type="text" class="measure-order-date-display" value="{{ today_date }}" readonly />
+        </label>
+        <label>
+          Completed Date
+          <input type="date" name="measure_completed_date" class="measure-worker-date-input" value="{{ worker_default or '' }}" />
+        </label>
+        <label>
+          Delivery Date
+          <input type="date" name="measure_delivery_date" class="measure-due-date-input" value="{{ delivery_default or '' }}" />
+        </label>
+      </div>
+    </div>
+    <div class="measurement-top">
+      <label>
+        Category
+        <select name="measure_category_id" class="category-select">
+          <option value="">Select category</option>
+          {% for category in categories %}
+          <option value="{{ category.id }}">{{ category.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Sub category
+        <select name="measure_subcategory_id" class="subcategory-select">
+          <option value="">Select sub category</option>
+          {% for sub in subcategories %}
+          <option value="{{ sub.id }}" data-category-id="{{ sub.category_id }}">{{ sub.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Assign Tailor
+        <select name="measure_assigned_tailor">
+          <option value="">Select tailor</option>
+          {% for tailor in tailors %}
+          <option value="{{ tailor.name }}">{{ tailor.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Quantity
+        <div class="qty-control compact">
+          <button type="button" class="qty-btn" data-step="-1">-</button>
+          <input type="number" name="measure_qty" value="1" min="1" />
+          <button type="button" class="qty-btn" data-step="1">+</button>
+        </div>
+      </label>
+      <button type="button" class="btn ghost btn-compact add-image-btn">Add Image</button>
+      <button type="button" class="icon-btn measure-delete" aria-label="Remove category">🗑</button>
+    </div>
+    <div class="measurement-body">
+      <div class="measurement-left">
+        <div class="measurement-title-row">
+          <h4>Measurement</h4>
+          <div class="measure-ratio-box" role="group" aria-label="Measurement ratio">
+            <input type="hidden" name="measure_ratio" value="" />
+            <button type="button" class="ratio-btn" data-ratio="1/4">1/4</button>
+            <button type="button" class="ratio-btn" data-ratio="1/2">1/2</button>
+            <button type="button" class="ratio-btn" data-ratio="3/4">3/4</button>
+          </div>
+        </div>
+        <div class="measurement-fields"></div>
+        <p class="muted measurement-empty">Select a sub category to load fields.</p>
+        {% if requirement_icons %}
+        <div class="req-inline">
+          <div class="req-inline-title">Requirements</div>
+          <input type="hidden" name="measure_requirements" class="measure-requirements-input" value="" />
+          <div class="req-grid">
+            {% for req in requirement_icons %}
+            <div class="req-toggle">
+              <input id="req-{{ req.id }}-template" type="checkbox" value="{{ req.name }}" />
+              <label for="req-{{ req.id }}-template">
+                <span class="req-icon">
+                  <img src="{{ url_for('static', filename='req_icons/' ~ req.filename) }}" alt="{{ req.name }}" />
+                </span>
+                <span>{{ req.name }}</span>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        <label>
+          Notes
+          <textarea name="measure_notes" rows="2" placeholder="Enter notes here"></textarea>
+        </label>
+        <input
+          type="file"
+          name="order_images"
+          accept="image/*"
+          multiple
+          hidden
+          class="order-images-input"
+        />
+      </div>
+      <div class="measurement-right">
+        <div class="preview-grid image-previews"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+.customer-photo-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+}
+.customer-two-col {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(220px, 260px);
+  gap: 14px;
+  align-items: start;
+}
+.customer-left-column {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.customer-left-column > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.customer-left-column > label input {
+  width: 100%;
+}
+.customer-right-column {
+  display: flex;
+  justify-self: end;
+  width: min(100%, 260px);
+}
+.customer-photo-actions {
+  display: flex;
+  gap: 8px;
+}
+.customer-photo-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.customer-camera-wrap {
+  border: 1px solid #d7dce3;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  background: #f8fafc;
+}
+.customer-camera-video {
+  width: 100%;
+  max-height: 240px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #000;
+}
+.customer-camera-controls {
+  display: flex;
+  gap: 8px;
+}
+#customer-photo-preview {
+  width: 100%;
+  min-height: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+#customer-photo-preview:empty {
+  display: none;
+}
+#customer-photo-preview .image-box {
+  width: 100%;
+}
+#customer-photo-preview .image-frame {
+  aspect-ratio: 4 / 3;
+}
+#customer-photo-preview .image-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@media (max-width: 980px) {
+  .customer-two-col {
+    grid-template-columns: 1fr;
+  }
+  .customer-left-column {
+    grid-template-columns: 1fr;
+  }
+  .customer-right-column {
+    justify-self: stretch;
+    width: 100%;
+  }
+  #customer-photo-preview {
+    min-height: 0;
+    max-height: 220px;
+  }
+}
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  window.measurementFieldMap = {{ measurement_field_map | tojson }};
+  window.wireImagePickers = function (scope) {
+    const blocks = scope.querySelectorAll(".measurement-block");
+    blocks.forEach((block) => {
+      const input = block.querySelector(".order-images-input");
+      const button = block.querySelector(".add-image-btn");
+      const preview = block.querySelector(".image-previews");
+      const categorySelect = block.querySelector(".category-select");
+      const subcategorySelect = block.querySelector(".subcategory-select");
+      if (!input || !button || !preview || input.dataset.wired === "1") {
+        return;
+      }
+      input.dataset.wired = "1";
+      let storedFiles = [];
+
+      button.addEventListener("click", () => {
+        input.click();
+      });
+
+      input.addEventListener("change", function () {
+        storedFiles = storedFiles.concat(Array.from(input.files));
+        rebuildInputFiles();
+        renderPreviews();
+      });
+
+      function rebuildInputFiles() {
+        const dt = new DataTransfer();
+        storedFiles.forEach((file) => dt.items.add(file));
+        input.files = dt.files;
+      }
+
+      function getItemType() {
+        const subOption = subcategorySelect?.selectedOptions?.[0];
+        const catOption = categorySelect?.selectedOptions?.[0];
+        const subText = subOption && subOption.value ? subOption.textContent.trim() : "";
+        const catText = catOption && catOption.value ? catOption.textContent.trim() : "";
+        if (catText && subText) {
+          return `${catText} - ${subText}`;
+        }
+        return catText || subText || "Uncategorized";
+      }
+
+      function getCategoryName() {
+        const catOption = categorySelect?.selectedOptions?.[0];
+        const catText = catOption && catOption.value ? catOption.textContent.trim() : "";
+        return catText || "Item";
+      }
+
+      function updateItemTypeInputs() {
+        const type = getItemType();
+        preview.querySelectorAll('input[name="image_item_types"]').forEach((field) => {
+          field.value = type;
+        });
+        const catName = getCategoryName();
+        preview.querySelectorAll('input[name="image_labels"]').forEach((field) => {
+          if (!field.value) field.value = catName;
+        });
+      }
+
+      function renderPreviews() {
+        preview.innerHTML = "";
+
+        storedFiles.forEach((file, index) => {
+          const reader = new FileReader();
+
+          reader.onload = function (e) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "image-box";
+
+            wrapper.innerHTML = `
+              <div class="image-frame">
+                <img src="${e.target.result}" />
+                <button type="button" class="delete-btn">x</button>
+              </div>
+              <input
+                type="text"
+                name="image_labels"
+                placeholder="Image name"
+                class="image-label"
+                value="${getCategoryName()}"
+              />
+              <input type="hidden" name="image_item_types" value="${getItemType()}" />
+            `;
+
+            const deleteBtn = wrapper.querySelector(".delete-btn");
+            deleteBtn.addEventListener("click", function () {
+              storedFiles.splice(index, 1);
+              rebuildInputFiles();
+              renderPreviews();
+            });
+
+            preview.appendChild(wrapper);
+          };
+
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (categorySelect) {
+        categorySelect.addEventListener("change", updateItemTypeInputs);
+      }
+      if (subcategorySelect) {
+        subcategorySelect.addEventListener("change", updateItemTypeInputs);
+      }
+    });
+  };
+
+  window.wireImagePickers(document);
+
+  (function () {
+    const takeBtn = document.getElementById("take-customer-photo-btn");
+    const uploadBtn = document.getElementById("upload-customer-photo-btn");
+    const fileInput = document.getElementById("customer-photo-input");
+    const preview = document.getElementById("customer-photo-preview");
+    const cameraWrap = document.getElementById("customer-photo-camera-wrap");
+    const video = document.getElementById("customer-photo-video");
+    const captureBtn = document.getElementById("capture-customer-photo-btn");
+    const closeBtn = document.getElementById("close-customer-camera-btn");
+    const canvas = document.getElementById("customer-photo-canvas");
+    if (!takeBtn || !uploadBtn || !fileInput || !preview || !cameraWrap || !video || !captureBtn || !closeBtn || !canvas) {
+      return;
+    }
+
+    let customerFiles = [];
+    let stream = null;
+
+    function rebuildInputFiles() {
+      const dt = new DataTransfer();
+      customerFiles.forEach((file) => dt.items.add(file));
+      fileInput.files = dt.files;
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      stream = null;
+      video.srcObject = null;
+      cameraWrap.classList.add("hidden");
+    }
+
+    function renderPreview() {
+      preview.innerHTML = "";
+      customerFiles.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          const box = document.createElement("div");
+          box.className = "image-box";
+          box.innerHTML = `
+            <div class="image-frame">
+              <img src="${event.target.result}" alt="Customer photo" />
+              <button type="button" class="delete-btn">x</button>
+            </div>
+          `;
+          box.querySelector(".delete-btn")?.addEventListener("click", function () {
+            customerFiles.splice(index, 1);
+            rebuildInputFiles();
+            renderPreview();
+          });
+          preview.appendChild(box);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    uploadBtn.addEventListener("click", function () {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", function () {
+      const picked = Array.from(fileInput.files || []);
+      if (!picked.length) return;
+      customerFiles = customerFiles.concat(picked);
+      rebuildInputFiles();
+      renderPreview();
+    });
+
+    takeBtn.addEventListener("click", async function () {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+        video.srcObject = stream;
+        cameraWrap.classList.remove("hidden");
+      } catch (_error) {
+        alert("Unable to open camera. Check camera permission and try again.");
+      }
+    });
+
+    captureBtn.addEventListener("click", function () {
+      if (!video.videoWidth || !video.videoHeight) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const capturedFile = new File(
+          [blob],
+          `customer_${Date.now()}.jpg`,
+          { type: "image/jpeg" }
+        );
+        customerFiles.push(capturedFile);
+        rebuildInputFiles();
+        renderPreview();
+        stopCamera();
+      }, "image/jpeg", 0.92);
+    });
+
+    closeBtn.addEventListener("click", stopCamera);
+    window.addEventListener("beforeunload", stopCamera);
+  })();
+
+  (function () {
+    const phoneInput = document.querySelector('input[name="phone"]');
+    const hiddenInput = document.getElementById("customer-id-hidden");
+    const displayInput = document.getElementById("customer-id-display");
+    if (!phoneInput || !hiddenInput || !displayInput) return;
+
+    const nextIdRaw = parseInt(displayInput.getAttribute("data-next-id") || "0", 10);
+    const nextDisplay = Number.isFinite(nextIdRaw) && nextIdRaw > 0
+      ? String(nextIdRaw).padStart(4, "0")
+      : "-";
+    let timer = null;
+
+    function setDisplayFromId(idValue) {
+      const numeric = parseInt(String(idValue || "").trim(), 10);
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        displayInput.value = nextDisplay;
+        if (window.refreshMeasurementTitles) window.refreshMeasurementTitles(document);
+        return;
+      }
+      displayInput.value = String(numeric).padStart(4, "0");
+      if (window.refreshMeasurementTitles) window.refreshMeasurementTitles(document);
+    }
+
+    function lookupCustomerByPhone() {
+      const phone = String(phoneInput.value || "").trim();
+      if (!phone) {
+        hiddenInput.value = "";
+        displayInput.value = nextDisplay;
+        return;
+      }
+      fetch(`/customers/lookup?phone=${encodeURIComponent(phone)}`)
+        .then((res) => (res.ok ? res.json() : { found: false }))
+        .then((data) => {
+          if (data && data.found && data.id) {
+            hiddenInput.value = String(data.id);
+            setDisplayFromId(data.id);
+          } else {
+            hiddenInput.value = "";
+            displayInput.value = nextDisplay;
+            if (window.refreshMeasurementTitles) window.refreshMeasurementTitles(document);
+          }
+        })
+        .catch(() => {
+          hiddenInput.value = "";
+          displayInput.value = nextDisplay;
+          if (window.refreshMeasurementTitles) window.refreshMeasurementTitles(document);
+        });
+    }
+
+    phoneInput.addEventListener("input", function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(lookupCustomerByPhone, 250);
+    });
+    phoneInput.addEventListener("blur", lookupCustomerByPhone);
+  })();
+
+  let lastFocusedMeasureInput = null;
+  document.addEventListener("focusin", (event) => {
+    const input = event.target.closest(".measurement-fields .measure-input");
+    if (!input) return;
+    lastFocusedMeasureInput = input;
+  });
+
+  document.addEventListener("click", (event) => {
+    const btn = event.target.closest(".ratio-btn");
+    if (!btn) return;
+    const box = btn.closest(".measure-ratio-box");
+    if (!box) return;
+    const hidden = box.querySelector('input[name="measure_ratio"]');
+    const selected = btn.dataset.ratio || "";
+    box.querySelectorAll(".ratio-btn").forEach((node) => {
+      node.classList.toggle("active", node === btn);
+    });
+    if (hidden) hidden.value = selected;
+
+    const block = btn.closest(".measurement-block");
+    if (!block) return;
+    const measureInputs = Array.from(block.querySelectorAll(".measurement-fields .measure-input"));
+    if (!measureInputs.length) return;
+
+    let targetInput = null;
+    if (lastFocusedMeasureInput && block.contains(lastFocusedMeasureInput)) {
+      targetInput = lastFocusedMeasureInput;
+    } else {
+      targetInput = measureInputs[0];
+    }
+    if (!targetInput) return;
+
+    const current = String(targetInput.value || "").trim();
+    if (!current) {
+      targetInput.value = selected;
+    } else {
+      const wholeMatch = current.match(/^(\d+(?:\.\d+)?)(?:\s+\d+\/\d+)?$/);
+      if (wholeMatch) {
+        targetInput.value = `${wholeMatch[1]} ${selected}`;
+      } else if (!current.includes(selected)) {
+        targetInput.value = `${current} ${selected}`.trim();
+      }
+    }
+
+    targetInput.focus();
+    const end = targetInput.value.length;
+    targetInput.setSelectionRange(end, end);
+    targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  function parseNumber(value) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function formatMoney(value) {
+    return `₹ ${value.toFixed(2)}`;
+  }
+
+  function getDiscountMode() {
+    const hidden = document.querySelector('input[name="discount_type"]');
+    return hidden ? hidden.value : "percent";
+  }
+
+  function getGstMode() {
+    const hidden = document.getElementById("gst-type-input");
+    return hidden && hidden.value === "amount" ? "amount" : "percent";
+  }
+
+  function getTaxableForGstConversion() {
+    const wage = parseNumber(document.querySelector('[data-cost="wage"]')?.value);
+    const materialTotal = getMaterialTotal();
+    const subtotal = wage + materialTotal;
+    const discount = parseNumber(document.querySelector('[data-cost="discount"]')?.value);
+    const discountMode = getDiscountMode();
+    const rawDiscountValue = discountMode === "amount" ? discount : subtotal * (discount / 100);
+    const discountValue = Math.max(0, Math.min(rawDiscountValue, subtotal));
+    return Math.max(0, subtotal - discountValue);
+  }
+
+  function recalcCosts() {
+    const wage = parseNumber(document.querySelector('[data-cost="wage"]')?.value);
+    const discount = parseNumber(document.querySelector('[data-cost="discount"]')?.value);
+    const advance = parseNumber(document.querySelector('[data-cost="advance"]')?.value);
+    const materialTotal = getMaterialTotal();
+    const subtotal = wage + materialTotal;
+    const mode = getDiscountMode();
+    const rawDiscountValue = mode === "amount" ? discount : subtotal * (discount / 100);
+    const discountValue = Math.max(0, Math.min(rawDiscountValue, subtotal));
+    const taxable = Math.max(0, subtotal - discountValue);
+    const gstEnabled = document.getElementById("gst-enabled-input")?.value === "1";
+    const gstMode = getGstMode();
+    const gstInputValue = parseNumber(document.getElementById("gst-input")?.value);
+    const gstAmount = gstEnabled ? (gstMode === "amount" ? Math.max(0, gstInputValue) : Math.max(0, taxable * (gstInputValue / 100))) : 0;
+    const gstPercent = gstEnabled ? (gstMode === "amount" ? (taxable > 0 ? (gstAmount * 100) / taxable : 0) : Math.max(0, gstInputValue)) : 0;
+    const cgstPercent = gstPercent / 2;
+    const sgstPercent = gstPercent / 2;
+    const cgstAmount = gstAmount / 2;
+    const sgstAmount = gstAmount / 2;
+    const total = taxable + gstAmount;
+    const due = total - advance;
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = formatMoney(Math.max(0, value));
+    };
+
+    setText("subtotal-value", subtotal);
+    setText("discount-value", discountValue);
+    setText("gst-value", gstAmount);
+    setText("cgst-value", cgstAmount);
+    setText("sgst-value", sgstAmount);
+    setText("total-value", total);
+    setText("advance-value", advance);
+    setText("due-value", due);
+
+    const cgstLabel = document.getElementById("cgst-label");
+    const sgstLabel = document.getElementById("sgst-label");
+    const gstLabel = document.getElementById("gst-label");
+    if (gstLabel) gstLabel.textContent = `GST (${gstPercent.toFixed(2)}%)`;
+    if (cgstLabel) cgstLabel.textContent = `CGST (${cgstPercent.toFixed(2)}%)`;
+    if (sgstLabel) sgstLabel.textContent = `SGST (${sgstPercent.toFixed(2)}%)`;
+
+    const totalInput = document.getElementById("total-amount-input");
+    if (totalInput) {
+      totalInput.value = String(Math.max(0, total));
+    }
+    const taxableInput = document.getElementById("taxable-amount-input");
+    if (taxableInput) taxableInput.value = String(Math.max(0, taxable));
+    const gstPercentInput = document.getElementById("gst-percent-input");
+    if (gstPercentInput) gstPercentInput.value = String(Math.max(0, gstPercent));
+    const gstAmountInput = document.getElementById("gst-amount-input");
+    if (gstAmountInput) gstAmountInput.value = String(Math.max(0, gstAmount));
+    const cgstPercentInput = document.getElementById("cgst-percent-input");
+    if (cgstPercentInput) cgstPercentInput.value = String(Math.max(0, cgstPercent));
+    const cgstAmountInput = document.getElementById("cgst-amount-input");
+    if (cgstAmountInput) cgstAmountInput.value = String(Math.max(0, cgstAmount));
+    const sgstPercentInput = document.getElementById("sgst-percent-input");
+    if (sgstPercentInput) sgstPercentInput.value = String(Math.max(0, sgstPercent));
+    const sgstAmountInput = document.getElementById("sgst-amount-input");
+    if (sgstAmountInput) sgstAmountInput.value = String(Math.max(0, sgstAmount));
+  }
+
+  const form = document.querySelector("form");
+  if (form) {
+    form.addEventListener("submit", (event) => {
+      const blocks = Array.from(document.querySelectorAll(".measurement-list .measurement-block"));
+      for (let idx = 0; idx < blocks.length; idx += 1) {
+        const block = blocks[idx];
+        const category = block.querySelector('select[name="measure_category_id"]')?.value?.trim() || "";
+        const subcategory = block.querySelector('select[name="measure_subcategory_id"]')?.value?.trim() || "";
+        const qty = block.querySelector('input[name="measure_qty"]')?.value?.trim() || "";
+        const notes = block.querySelector('textarea[name="measure_notes"]')?.value?.trim() || "";
+        const reqs = block.querySelector('input[name="measure_requirements"]')?.value?.trim() || "";
+        const tailor = block.querySelector('select[name="measure_assigned_tailor"]')?.value?.trim() || "";
+        const hasFieldValue = Array.from(block.querySelectorAll(".measurement-fields .measure-input"))
+          .some((input) => String(input.value || "").trim() !== "");
+        const hasAnyInput = Boolean(
+          category ||
+          subcategory ||
+          notes ||
+          reqs ||
+          tailor ||
+          hasFieldValue ||
+          (qty && qty !== "1")
+        );
+        if (!hasAnyInput) {
+          continue;
+        }
+        if (!category || !subcategory) {
+          event.preventDefault();
+          alert(`Measurement row ${idx + 1} is incomplete. Select both Category and Sub category.`);
+          return;
+        }
+      }
+
+      const totalInput = document.getElementById("total-amount-input");
+      const totalValue = totalInput ? parseNumber(totalInput.value) : 0;
+      if (totalValue <= 0) {
+        event.preventDefault();
+        alert("Total cost must be greater than 0.");
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-cost]").forEach((input) => {
+    input.addEventListener("input", recalcCosts);
+  });
+  document.querySelectorAll(".discount-switch .disc-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.closest("#gst-switch")) return;
+      const mode = btn.dataset.mode;
+      const hidden = document.querySelector('input[name="discount_type"]');
+      if (hidden) hidden.value = mode;
+      btn.parentElement.querySelectorAll(".disc-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      recalcCosts();
+    });
+  });
+  document.querySelectorAll("#gst-switch .disc-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode;
+      const currentMode = getGstMode();
+      if (mode !== currentMode) {
+        const gstInputEl = document.getElementById("gst-input");
+        const currentValue = parseNumber(gstInputEl?.value);
+        const taxable = getTaxableForGstConversion();
+        if (gstInputEl) {
+          if (currentMode === "percent" && mode === "amount") {
+            gstInputEl.value = String(Math.max(0, taxable * (currentValue / 100)));
+          } else if (currentMode === "amount" && mode === "percent") {
+            const percent = taxable > 0 ? (currentValue * 100) / taxable : 0;
+            gstInputEl.value = String(Math.max(0, percent));
+          }
+        }
+      }
+      const hidden = document.getElementById("gst-type-input");
+      if (hidden) hidden.value = mode;
+      btn.parentElement.querySelectorAll(".disc-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      recalcCosts();
+    });
+  });
+  const gstInput = document.getElementById("gst-input");
+  const gstEnabled = document.getElementById("gst-enabled-input")?.value === "1";
+  if (!gstEnabled) {
+    document.querySelectorAll('[data-gst-row]').forEach((row) => {
+      row.style.display = "none";
+    });
+    if (gstInput) gstInput.value = "0";
+    const gstTypeInput = document.getElementById("gst-type-input");
+    if (gstTypeInput) gstTypeInput.value = "percent";
+  }
+  if (gstInput) {
+    gstInput.addEventListener("input", recalcCosts);
+    gstInput.addEventListener("change", recalcCosts);
+  }
+  recalcCosts();
+
+  const materialSection = document.getElementById("tailoring-material-section");
+  const materialAddBtn = document.getElementById("add-material-row");
+  const materialTable = document.getElementById("material-table");
+  const wageInput = document.querySelector('[data-cost="wage"]');
+  const materialCostDisplay = document.getElementById("material-cost-display");
+
+  function getMaterialTotal() {
+    const isInventory =
+      document.querySelector('input[name="material_source"]:checked')?.value === "inventory";
+    if (!isInventory || !materialTable) return 0;
+    let total = 0;
+    materialTable.querySelectorAll(".material-row").forEach((row) => {
+      if (row.classList.contains("material-head")) return;
+      const priceInput = row.querySelector('input[name="material_price"]');
+      total += parseNumber(priceInput?.value);
+    });
+    return total;
+  }
+
+  const materialTemplate = document.createElement("template");
+  materialTemplate.innerHTML = `
+    <div class="material-row" data-base-stock="0">
+      <div>
+        <input type="text" name="material_code" class="material-code-input" list="inventory-code-list" placeholder="Code" />
+        <input type="hidden" name="material_item_id" class="material-item-id" />
+      </div>
+      <div><input type="text" class="material-name" readonly /></div>
+      <div><input type="number" class="material-stock" readonly value="0" /></div>
+      <div><input type="number" step="0.01" name="material_qty" value="0" min="0" /></div>
+      <div><input type="number" step="0.01" name="material_unit_price" value="0" min="0" /></div>
+      <div><input type="number" step="0.01" name="material_price" class="material-line-total" readonly value="0" /></div>
+      <div><button type="button" class="btn ghost material-remove">x</button></div>
+    </div>
+  `;
+
+  function parseNumber(value) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function updateMaterialRow(row) {
+    const codeInput = row.querySelector(".material-code-input");
+    const hiddenId = row.querySelector(".material-item-id");
+    const nameInput = row.querySelector(".material-name");
+    const qtyInput = row.querySelector('input[name="material_qty"]');
+    const priceInput = row.querySelector('input[name="material_unit_price"]');
+    const stockInput = row.querySelector(".material-stock");
+    const lineTotalInput = row.querySelector(".material-line-total");
+
+    if (codeInput) {
+      const code = codeInput.value.trim();
+      const option = document.querySelector(`#inventory-code-list option[value="${code}"]`);
+      if (option) {
+        const itemId = option.dataset.id || "";
+        const itemName = option.dataset.name || "";
+        const qty = parseNumber(option.dataset.qty);
+        const price = parseNumber(option.dataset.price);
+        if (hiddenId) hiddenId.value = itemId;
+        if (nameInput) nameInput.value = itemName;
+        row.dataset.baseStock = String(qty);
+        if (stockInput) stockInput.value = qty;
+        if (priceInput && parseNumber(priceInput.value) === 0) {
+          priceInput.value = price.toFixed(2);
+        }
+      }
+    }
+
+    const baseStock = parseNumber(row.dataset.baseStock || "0");
+    const qtyVal = parseNumber(qtyInput?.value);
+    const priceVal = parseNumber(priceInput?.value);
+    const remaining = Math.max(baseStock - qtyVal, 0);
+    if (stockInput) stockInput.value = remaining;
+    const lineTotal = qtyVal * priceVal;
+    if (lineTotalInput) lineTotalInput.value = lineTotal.toFixed(2);
+  }
+
+  function recalcMaterialTotals() {
+    if (!materialTable) return;
+    let total = 0;
+    materialTable.querySelectorAll(".material-row").forEach((row) => {
+      if (row.classList.contains("material-head")) return;
+      updateMaterialRow(row);
+      const lineInput = row.querySelector('input[name="material_price"]');
+      total += parseNumber(lineInput?.value);
+    });
+    if (materialCostDisplay) {
+      materialCostDisplay.textContent = `₹ ${total.toFixed(2)}`;
+    }
+    recalcCosts();
+  }
+
+  function wireMaterialRow(row) {
+    row.querySelectorAll("select, input").forEach((el) => {
+      el.addEventListener("input", recalcMaterialTotals);
+      el.addEventListener("change", recalcMaterialTotals);
+    });
+    const codeInput = row.querySelector(".material-code-input");
+    if (codeInput) {
+      codeInput.addEventListener("input", () => {
+        recalcMaterialTotals();
+      });
+    }
+    const remove = row.querySelector(".material-remove");
+    if (remove) {
+      remove.addEventListener("click", () => {
+        row.remove();
+        recalcMaterialTotals();
+      });
+    }
+  }
+
+  if (materialTable) {
+    materialTable.querySelectorAll(".material-row").forEach((row) => {
+      if (!row.classList.contains("material-head")) wireMaterialRow(row);
+    });
+  }
+
+  if (materialAddBtn && materialTable) {
+    materialAddBtn.addEventListener("click", () => {
+      const clone = materialTemplate.content.cloneNode(true);
+      const row = clone.querySelector(".material-row");
+      if (row) {
+        materialTable.appendChild(row);
+        wireMaterialRow(row);
+        recalcMaterialTotals();
+      }
+    });
+  }
+
+  document.querySelectorAll('input[name="material_source"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const isInventory = radio.value === "inventory" && radio.checked;
+      if (materialSection) {
+        materialSection.classList.toggle("hidden", !isInventory);
+      }
+      if (wageInput) {
+        if (!isInventory) {
+          wageInput.value = "";
+          recalcCosts();
+        } else {
+          recalcMaterialTotals();
+        }
+      }
+    });
+  });
+});
+</script>
+
+{% endblock %}

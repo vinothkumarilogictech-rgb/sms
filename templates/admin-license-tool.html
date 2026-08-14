@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>License Admin Tool</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #dde1e6;
+    --text: #1a1d21;
+    --muted: #62676e;
+    --primary: #2f5fda;
+    --primary-hover: #244bb3;
+    --danger: #c53030;
+    --success: #1c7c3c;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 16px;
+  }
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0 0 24px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 14px;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 4px;
+    margin-top: 12px;
+  }
+  label:first-of-type { margin-top: 0; }
+  input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+  button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    background: var(--primary);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--primary-hover); }
+  button.danger { background: var(--danger); }
+  button.danger:hover { background: #9c2727; }
+  button:disabled { background: #a9b3c4; cursor: not-allowed; }
+  .result {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result.ok { background: #eafaf0; color: var(--success); border: 1px solid #bfe8cf; }
+  .result.err { background: #fdecec; color: var(--danger); border: 1px solid #f5c2c2; }
+  .server-row {
+    display: flex;
+    gap: 8px;
+  }
+  .server-row input { flex: 1; }
+  small.hint {
+    display: block;
+    color: var(--muted);
+    font-size: 11.5px;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>License Admin Tool</h1>
+  <p class="sub">Set license expiry dates and reset device bindings for client accounts.</p>
+
+  <div class="card">
+    <h2>Server &amp; login</h2>
+    <label>Server base URL</label>
+    <input id="baseUrl" type="text" placeholder="http://your-server:8000" />
+    <label>Admin username</label>
+    <input id="adminUser" type="text" placeholder="admin" />
+    <label>Admin password</label>
+    <input id="adminPass" type="password" placeholder="••••••••" />
+    <label>Branch code (if applicable)</label>
+    <input id="branchCode" type="text" placeholder="main" />
+    <button id="loginBtn" onclick="doLogin()">Get admin token</button>
+    <div id="loginResult" class="result"></div>
+  </div>
+
+  <div class="card">
+    <h2>Set / renew license expiry</h2>
+    <label>Client username</label>
+    <input id="expUsername" type="text" placeholder="client_ramesh" />
+    <label>Expiry date (leave blank = unlimited)</label>
+    <input id="expDate" type="date" />
+    <button onclick="setExpiry()">Set expiry</button>
+    <div id="expResult" class="result"></div>
+    <small class="hint">Leaving the date blank removes the expiry (account works forever).</small>
+  </div>
+
+  <div class="card">
+    <h2>Reset device binding</h2>
+    <label>Client username</label>
+    <input id="resetUsername" type="text" placeholder="client_ramesh" />
+    <label>Which device?</label>
+    <select id="resetPlatform" style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; font-family:inherit;">
+      <option value="both">Both (mobile + desktop)</option>
+      <option value="mobile">Mobile only</option>
+      <option value="desktop">Desktop (Windows EXE) only</option>
+    </select>
+    <button class="danger" onclick="resetDevice()">Reset device</button>
+    <div id="resetResult" class="result"></div>
+    <small class="hint">Use this when a client gets a new phone or reformats/replaces their PC. One account can hold one phone AND one PC at the same time -- resetting one doesn't affect the other.</small>
+  </div>
+</div>
+
+<script>
+let token = "";
+
+function showResult(elId, ok, message) {
+  const el = document.getElementById(elId);
+  el.textContent = message;
+  el.className = "result show " + (ok ? "ok" : "err");
+}
+
+function getBaseUrl() {
+  return document.getElementById("baseUrl").value.trim().replace(/\/$/, "");
+}
+
+async function doLogin() {
+  const base = getBaseUrl();
+  const username = document.getElementById("adminUser").value.trim();
+  const password = document.getElementById("adminPass").value;
+  const branch_code = document.getElementById("branchCode").value.trim();
+
+  if (!base || !username || !password) {
+    showResult("loginResult", false, "Fill in server URL, username and password.");
+    return;
+  }
+
+  try {
+    const res = await fetch(base + "/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username, password, branch_code,
+        device_id: "admin-tool-" + Date.now(),
+        device_platform: "admin_web_tool"
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      token = data.access_token;
+      showResult("loginResult", true, "Logged in as " + data.user.username + " (" + data.user.role + ").");
+    } else {
+      showResult("loginResult", false, data.message || "Login failed.");
+    }
+  } catch (e) {
+    showResult("loginResult", false, "Connection error: " + e.message);
+  }
+}
+
+async function setExpiry() {
+  if (!token) { showResult("expResult", false, "Get an admin token first."); return; }
+  const base = getBaseUrl();
+  const username = document.getElementById("expUsername").value.trim();
+  const dateVal = document.getElementById("expDate").value; // YYYY-MM-DD or ""
+
+  if (!username) { showResult("expResult", false, "Enter a client username."); return; }
+
+  try {
+    const res = await fetch(base + "/api/admin/set-license-expiry", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({ username, expiry_date: dateVal || null })
+    });
+    const data = await res.json();
+    showResult("expResult", !!data.success, data.message || "Unknown response.");
+  } catch (e) {
+    showResult("expResult", false, "Connection error: " + e.message);
+  }
+}
+
+async function resetDevice() {
+  if (!token) { showResult("resetResult", false, "Get an admin token first."); return; }
+  const base = getBaseUrl();
+  const username = document.getElementById("resetUsername").value.trim();
+  const platform = document.getElementById("resetPlatform").value;
+
+  if (!username) { showResult("resetResult", false, "Enter a client username."); return; }
+
+  try {
+    const res = await fetch(base + "/api/admin/reset-device", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + token
+      },
+      body: JSON.stringify({ username, platform })
+    });
+    const data = await res.json();
+    showResult("resetResult", !!data.success, data.message || "Unknown response.");
+  } catch (e) {
+    showResult("resetResult", false, "Connection error: " + e.message);
+  }
+}
+</script>
+</body>
+</html>

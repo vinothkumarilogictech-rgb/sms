@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .mobile-gallery-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface);
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 0.7rem;
+  }
+
+  .mobile-gallery-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+  }
+
+  .mobile-gallery-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .mobile-gallery-sub {
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+
+  .mobile-gallery-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    margin-top: 0.6rem;
+  }
+
+  .mobile-gallery-head .btn.ghost {
+    border-color: #d9cbbb;
+    background: rgba(255, 253, 250, 0.92);
+    color: #3f2b25;
+  }
+
+  .mobile-gallery-head .btn.ghost:hover,
+  .mobile-gallery-head .btn.ghost:active,
+  .mobile-gallery-head .btn.ghost:focus-visible {
+    background: #f3ebe3;
+    border-color: #cdb8d7;
+    color: #4a2370;
+  }
+
+  .mobile-gallery-head .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .mobile-gallery-head .btn.primary:hover,
+  .mobile-gallery-head .btn.primary:active,
+  .mobile-gallery-head .btn.primary:focus-visible {
+    background: #3d1d5d;
+    border-color: #3d1d5d;
+    color: #fff;
+  }
+
+  .mobile-gallery-head .btn:focus-visible,
+  .lightbox-close:focus-visible,
+  .lightbox-nav:focus-visible {
+    outline: 2px solid rgba(74, 35, 112, 0.22);
+    outline-offset: 2px;
+  }
+
+  .select-count {
+    color: var(--muted);
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+
+  .mobile-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    align-content: start;
+  }
+
+  .mobile-gallery-tile {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .mobile-gallery-photo {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    display: block;
+  }
+
+  .mobile-gallery-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .mobile-gallery-check {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+
+  .mobile-gallery-tile.selected {
+    box-shadow: 0 0 0 2px var(--accent) inset;
+  }
+
+  .mobile-gallery-tile.selected .mobile-gallery-check {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .mobile-gallery-check input {
+    margin: 0;
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+  }
+
+  .empty-state {
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 1rem;
+    color: #666;
+    background: #fff;
+  }
+
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 12, 9, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    padding: 24px;
+  }
+
+  .lightbox.open {
+    display: flex;
+  }
+
+  .lightbox-inner {
+    position: relative;
+    max-width: min(1100px, 92vw);
+    max-height: 88vh;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    justify-items: center;
+  }
+
+  .lightbox-img {
+    max-width: 100%;
+    max-height: 88vh;
+    border-radius: 14px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    background: #fff;
+  }
+
+  .lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    border: 1px solid #d9cbbb;
+    background: rgba(255, 253, 250, 0.96);
+    color: #3f2b25;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+    display: grid;
+    place-items: center;
+    font-size: 0;
+  }
+
+  .lightbox-close:hover,
+  .lightbox-close:active {
+    background: #f3ebe3;
+    border-color: #cdb8d7;
+    color: #4a2370;
+  }
+
+  .lightbox-close::before,
+  .lightbox-close::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 2.2px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .lightbox-close::before {
+    transform: rotate(45deg);
+  }
+
+  .lightbox-close::after {
+    transform: rotate(-45deg);
+  }
+
+  .lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 1px solid #d9cbbb;
+    background: rgba(255, 253, 250, 0.95);
+    color: #3f2b25;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+    display: grid;
+    place-items: center;
+    font-size: 0;
+  }
+
+  .lightbox-nav:hover,
+  .lightbox-nav:active {
+    background: #f3ebe3;
+    border-color: #cdb8d7;
+    color: #4a2370;
+  }
+
+  .lightbox-nav::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    display: block;
+    border-top: 2.4px solid currentColor;
+    border-right: 2.4px solid currentColor;
+  }
+
+  .lightbox-prev { left: 12px; }
+  .lightbox-next { right: 12px; }
+  .lightbox-prev::before { transform: rotate(-135deg); margin-left: 4px; }
+  .lightbox-next::before { transform: rotate(45deg); margin-right: 4px; }
+
+  .lightbox-caption {
+    margin-top: 10px;
+    color: #f7efe9;
+    font-size: 0.95rem;
+    text-align: center;
+  }
+
+  @media (min-width: 900px) {
+    .mobile-gallery-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .lightbox {
+      padding: 12px;
+    }
+
+    .lightbox-inner {
+      max-width: 100%;
+    }
+
+    .lightbox-close {
+      top: 8px;
+      right: 8px;
+      width: 36px;
+      height: 36px;
+    }
+
+    .lightbox-nav {
+      width: 40px;
+      height: 40px;
+    }
+
+    .lightbox-prev { left: 8px; }
+    .lightbox-next { right: 8px; }
+  }
+</style>
+
+<div class="mobile-gallery-head">
+  <div class="mobile-gallery-top">
+    <div>
+      <div class="mobile-gallery-title">{{ category.name }}</div>
+      <div class="mobile-gallery-sub">{{ items|length if items else 0 }} photos</div>
+    </div>
+    <a class="btn ghost btn-compact js-back-button" href="{{ url_for('gallery') }}" data-fallback="{{ url_for('gallery') }}">Back</a>
+  </div>
+
+  {% if items %}
+  <div class="mobile-gallery-actions">
+    <button class="btn ghost btn-compact" type="submit" form="bulkForm" formaction="{{ url_for('gallery_download') }}" id="download-selected" disabled>
+      Download
+    </button>
+    <button class="btn primary btn-compact" type="submit" form="bulkForm" formaction="{{ url_for('gallery_delete') }}" id="delete-selected" disabled onclick="return confirm('Delete selected images?')">
+      Delete
+    </button>
+    <span class="select-count" id="select-count">0 selected</span>
+  </div>
+  {% endif %}
+</div>
+
+{% if items %}
+  <form id="bulkForm" method="post">
+    <input type="hidden" name="category_id" value="{{ category.id }}">
+  </form>
+
+  <section class="mobile-gallery-grid" id="mobile-gallery-grid">
+    {% for item in items %}
+      <article class="mobile-gallery-tile"
+               data-index="{{ loop.index0 }}"
+               data-src="{{ url_for('static', filename='uploads/gallery/' ~ item.image_filename) }}"
+               data-caption="{{ category.name }} {{ loop.index }}">
+        <button type="button" class="mobile-gallery-photo">
+          <img src="{{ url_for('static', filename='uploads/gallery/' ~ item.image_filename) }}"
+               alt="{{ category.name }} image {{ loop.index }}">
+        </button>
+        <label class="mobile-gallery-check">
+          <input type="checkbox" name="image_ids" value="{{ item.id }}" class="mobile-gallery-checkbox" form="bulkForm">
+        </label>
+      </article>
+    {% endfor %}
+  </section>
+
+{% else %}
+  <section class="empty-state">No items yet for this category.</section>
+{% endif %}
+
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <div class="lightbox-inner">
+    <button class="lightbox-close" type="button" aria-label="Close">x</button>
+    <button class="lightbox-nav lightbox-prev" type="button" aria-label="Previous">‹</button>
+    <img class="lightbox-img" src="" alt="">
+    <button class="lightbox-nav lightbox-next" type="button" aria-label="Next">›</button>
+    <div class="lightbox-caption"></div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const tiles = Array.from(document.querySelectorAll(".mobile-gallery-tile"));
+    const checkboxes = Array.from(document.querySelectorAll(".mobile-gallery-checkbox"));
+    const deleteSelected = document.getElementById("delete-selected");
+    const downloadSelected = document.getElementById("download-selected");
+    const selectCount = document.getElementById("select-count");
+    const lightbox = document.getElementById("lightbox");
+    if (!tiles.length) return;
+
+    let index = 0;
+
+    function selectedCount() {
+      return checkboxes.filter((cb) => cb.checked).length;
+    }
+
+    function syncSelectionUI() {
+      const count = selectedCount();
+      if (selectCount) selectCount.textContent = `${count} selected`;
+      if (deleteSelected) deleteSelected.disabled = count === 0;
+      if (downloadSelected) downloadSelected.disabled = count === 0;
+      tiles.forEach((tile) => {
+        const cb = tile.querySelector(".mobile-gallery-checkbox");
+        tile.classList.toggle("selected", !!cb?.checked);
+      });
+    }
+
+    checkboxes.forEach((cb) => cb.addEventListener("change", syncSelectionUI));
+
+    const img = lightbox?.querySelector(".lightbox-img");
+    const caption = lightbox?.querySelector(".lightbox-caption");
+    const btnClose = lightbox?.querySelector(".lightbox-close");
+    const btnPrev = lightbox?.querySelector(".lightbox-prev");
+    const btnNext = lightbox?.querySelector(".lightbox-next");
+
+    function openAt(i) {
+      if (!lightbox || !img || !caption) return;
+      index = (i + tiles.length) % tiles.length;
+      const tile = tiles[index];
+      img.src = tile.getAttribute("data-src");
+      img.alt = tile.getAttribute("data-caption");
+      caption.textContent = tile.getAttribute("data-caption");
+      lightbox.classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
+
+    function close() {
+      if (!lightbox) return;
+      lightbox.classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    function move(dir) {
+      openAt(index + dir);
+    }
+
+    tiles.forEach((tile, i) => {
+      const photoBtn = tile.querySelector(".mobile-gallery-photo");
+
+      photoBtn?.addEventListener("click", () => {
+        openAt(i);
+      });
+    });
+
+    btnClose?.addEventListener("click", close);
+    btnPrev?.addEventListener("click", () => move(-1));
+    btnNext?.addEventListener("click", () => move(1));
+
+    document.addEventListener("keydown", (event) => {
+      if (!lightbox || !lightbox.classList.contains("open")) return;
+      if (event.key === "Escape") close();
+      if (event.key === "ArrowLeft") move(-1);
+      if (event.key === "ArrowRight") move(1);
+    });
+
+    syncSelectionUI();
+
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("open") === "1") {
+      const start = Number.parseInt(query.get("index") || "0", 10);
+      const startIndex = Number.isFinite(start) ? start : 0;
+      openAt(startIndex);
+    }
+  })();
+</script>
+
+{% endblock %}

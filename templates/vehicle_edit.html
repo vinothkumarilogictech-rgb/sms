@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+{% set page_title = "View Vehicle" if view_only else "Edit Vehicle" %}
+{% include "_vehicle_form_view.html" %}
+{% endblock %}

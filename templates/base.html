@@ -1,0 +1,151 @@
+<!doctype html>
+  <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      {% set brand_name = app_setting('brand_company_name', app_setting('company_name', '')) %}
+      {% set app_title = title or (brand_name or 'Bike Management') %}
+      {% set favicon_filename = app_setting('app_favicon_path', app_setting('print_logo_path', '')) %}
+      {% set favicon_path = favicon_filename if favicon_filename else 'bell.png' %}
+      <title>{{ app_title }}</title>
+      <link rel="icon" type="image/png" href="{{ url_for('static', filename=favicon_path) }}" />
+      <link rel="shortcut icon" href="{{ url_for('static', filename=favicon_path) }}" />
+      <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+      />
+      <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+        rel="stylesheet"
+      />
+      <link rel="preload" as="image" href="{{ url_for('static', filename=favicon_path) }}" />
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet" />
+      <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    </head>
+    <body>
+      <div class="app-shell{% if not current_user %} no-sidebar{% endif %}" id="app-shell">
+        {% set brand_logo_filename = app_setting('brand_logo_filename', '') %}
+        {% set sidebar_logo_path = 'width_550.webp' %}
+        {% set brand_logo_path = ('uploads/branding/' ~ brand_logo_filename) if brand_logo_filename else sidebar_logo_path %}
+
+        {% if current_user %}
+        <aside class="sidebar" aria-label="Sidebar navigation">
+          <div class="sidebar-brand">
+            <a class="sidebar-toggle" href="{{ url_for('dashboard') }}" aria-label="Go to dashboard">
+              <img src="{{ url_for('static', filename=sidebar_logo_path) }}" alt="iLogic Tech" />
+            </a>
+          </div>
+
+          <nav class="sidebar-nav" aria-label="Primary navigation">
+            {% for item in sidebar_menu_items %}
+            <a href="{{ item.href }}" class="nav-item {% if item.is_active %}active{% endif %}">
+              <span class="nav-icon"><i class="{{ item.icon }}" aria-hidden="true"></i></span>
+              <span class="nav-label">{{ item.label }}</span>
+            </a>
+            {% endfor %}
+
+            <a href="{{ url_for('logout') }}" class="nav-item">
+              <span class="nav-icon"><i class="bi bi-box-arrow-right" aria-hidden="true"></i></span>
+              <span class="nav-label">Logout</span>
+            </a>
+          </nav>
+        </aside>
+        <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+        {% endif %}
+
+        {% set dashboard_watermark = app_setting('dashboard_watermark_path', app_setting('print_logo_path', '')) %}
+        <div class="main-content" {% if dashboard_watermark %}style="--app-watermark: url('{{ url_for('static', filename=dashboard_watermark) }}');"{% endif %}>
+          <header class="topbar">
+            <div class="topbar-left">
+              {% if current_user %}
+              <button class="mobile-menu-toggle" type="button" id="mobile-menu-toggle" aria-label="Open menu" aria-controls="app-shell" aria-expanded="false">
+                <span></span>
+                <span></span>
+                <span></span>
+              </button>
+              {% endif %}
+            </div>
+            <div class="topbar-center">
+              <a class="topbar-brand-logo" href="{{ url_for('dashboard') }}" aria-label="Go to dashboard">
+                <img src="{{ url_for('static', filename=brand_logo_path) }}" alt="Company logo" />
+              </a>
+              <span class="shop-name">{{ brand_name or "Bike Management" }}</span>
+            </div>
+            <div class="topbar-right">
+              {% if current_user %}
+              <div class="topbar-user-meta">
+                <strong>{{ current_user.display_name }}</strong>
+                <span>{{ current_user.role_label }}</span>
+              </div>
+              {% endif %}
+            </div>
+          </header>
+
+          <main class="container">
+            {% if error %}
+            <div class="alert">{{ error }}</div>
+            {% endif %}
+            {% block content %}{% endblock %}
+          </main>
+          <footer class="footer">
+            iLogicTech Motorbike Reselling Management v1.0
+          </footer>
+        </div>
+      </div>
+      {% if request.endpoint == 'dashboard' %}
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      {% endif %}
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+      <script src="{{ url_for('static', filename='app.js') }}"></script>
+      {% block scripts %}{% endblock %}
+      <script>
+        document.addEventListener("DOMContentLoaded", function () {
+          document.querySelectorAll(".js-back-button").forEach(function (button) {
+            button.addEventListener("click", function (event) {
+              const fallback = button.getAttribute("data-fallback") || button.getAttribute("href") || "";
+              if (window.history.length > 1) {
+                event.preventDefault();
+                window.history.back();
+                return;
+              }
+              if (fallback) {
+                event.preventDefault();
+                window.location.href = fallback;
+              }
+            });
+          });
+
+          const appShell = document.getElementById("app-shell");
+          const toggle = document.getElementById("mobile-menu-toggle");
+          const backdrop = document.getElementById("sidebar-backdrop");
+          function closeMobileSidebar() {
+            if (!appShell) return;
+            appShell.classList.remove("mobile-sidebar-open");
+            if (toggle) toggle.setAttribute("aria-expanded", "false");
+          }
+          function openMobileSidebar() {
+            if (!appShell) return;
+            appShell.classList.add("mobile-sidebar-open");
+            if (toggle) toggle.setAttribute("aria-expanded", "true");
+          }
+          if (toggle && appShell) {
+            toggle.addEventListener("click", function () {
+              if (appShell.classList.contains("mobile-sidebar-open")) {
+                closeMobileSidebar();
+              } else {
+                openMobileSidebar();
+              }
+            });
+          }
+          if (backdrop) {
+            backdrop.addEventListener("click", closeMobileSidebar);
+          }
+          document.querySelectorAll(".sidebar .nav-item").forEach(function (link) {
+            link.addEventListener("click", closeMobileSidebar);
+          });
+        });
+      </script>
+    </body>
+  </html>

@@ -1,0 +1,1041 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .inventory-vehicle-table .list-row > div {
+    text-align: left;
+  }
+
+  .inventory-vehicle-table .list-row > div:nth-child(4),
+  .inventory-vehicle-table .list-row > div:nth-child(5) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .inventory-vehicle-table .list-row > div:nth-child(6) {
+    text-align: center;
+  }
+
+  .inventory-vehicle-table .list-row > div:nth-child(2) strong,
+  .inventory-vehicle-table .list-row > div:nth-child(2) .muted {
+    display: block;
+  }
+
+  .inventory-banner {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: #f8fafc;
+    color: #0f172a;
+  }
+
+  .inventory-banner.error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+  }
+
+  .inv-action-boxes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .inv-action-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    min-height: 36px;
+  }
+
+  .inv-action-box:hover {
+    background: #f8fafc;
+  }
+
+  .inv-action-box.danger {
+    border-color: #fecaca;
+    color: #991b1b;
+  }
+
+  .inv-action-boxes form {
+    margin: 0;
+  }
+
+  .transfer-dialog {
+    width: min(420px, calc(100vw - 32px));
+    border: 0;
+    border-radius: 20px;
+    padding: 0;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+  }
+
+  .transfer-dialog::backdrop {
+    background: rgba(15, 23, 42, 0.42);
+  }
+
+  .transfer-dialog-card {
+    padding: 20px;
+  }
+
+  .transfer-dialog-card h3 {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+  }
+
+  .transfer-dialog-card p {
+    margin: 0 0 16px;
+    color: var(--muted);
+  }
+
+  .transfer-dialog-card label {
+    display: block;
+    margin-bottom: 14px;
+    text-align: left;
+  }
+
+  .transfer-dialog-card select {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .transfer-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .inv-card-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .inv-card {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    padding: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 12px;
+    align-items: stretch;
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.06);
+  }
+
+  .inv-card-main {
+    min-width: 0;
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .inv-card-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .inv-card-title strong {
+    font-size: 1.05rem;
+  }
+
+  .inv-status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: rgba(227, 239, 255, 0.75);
+  }
+
+  .inv-card-kv {
+    display: grid;
+    gap: 6px;
+  }
+
+  .inv-card-kv .inv-kv-row {
+    display: grid;
+    grid-template-columns: 128px 14px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+  }
+
+  .inv-kv-row .k {
+    font-weight: 900;
+    color: #0f172a;
+    white-space: nowrap;
+  }
+
+  .inv-kv-row .sep {
+    text-align: center;
+    color: var(--muted);
+    font-weight: 900;
+  }
+
+  .inv-kv-row .v {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inv-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .inv-card-media {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fffdfd;
+    display: grid;
+    place-items: center;
+    min-height: 140px;
+    width: 100%;
+    max-width: 240px;          /* Fixed: Locks container boundary horizontally */
+    box-sizing: border-box;   /* Fixed: includes borders and padding inside width */
+  }
+
+  .inv-card-media .placeholder {
+    color: #475569;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    font-size: 0.85rem;
+  }
+
+  /* ── MINI CAROUSEL inside inventory card ── */
+  .inv-mini-carousel {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 140px;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .inv-mini-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  .inv-mini-slide.active { opacity: 1; z-index: 1; }
+  .inv-mini-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;       /* Fixed: Stops bike from clipping outside the boundaries */
+    display: block;
+    background: #fffdfd;
+    padding: 4px;
+    box-sizing: border-box;
+  }
+  .inv-mini-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.88);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    color: #2f1a46;
+    padding: 0;
+    transition: background 0.2s;
+  }
+  .inv-mini-arrow:hover { background: #fff; }
+  .inv-mini-arrow.prev { left: 7px; }
+  .inv-mini-arrow.next { right: 7px; }
+  .inv-mini-arrow svg { width: 14px; height: 14px; }
+  .inv-mini-dots {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    gap: 5px;
+  }
+  .inv-mini-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.2);
+    border: 1.5px solid rgba(255,255,255,0.9);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .inv-mini-dot.active {
+    background: #3f2265;
+    width: 16px;
+    border-radius: 3px;
+  }
+
+  @media (max-width: 900px) {
+    .inv-card {
+      grid-template-columns: 1fr;
+    }
+    .inv-card-media {
+      order: -1;
+      min-height: 160px;
+      max-width: 100% !important;
+    }
+    .inv-kv-row {
+      grid-template-columns: 120px 14px minmax(0, 1fr);
+    }
+  }
+
+  /* ── Inventory Pagination ── */
+  .inv-pagination {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 16px 0 4px;
+  }
+  .inv-pagination .pg-info {
+    width: 100%;
+    text-align: center;
+    font-size: 0.87rem;
+    color: #64748b;
+    margin-bottom: 2px;
+  }
+  .inv-pagination .pg-info strong { color: #32005d; }
+  .inv-pg-btn {
+    min-width: 38px;
+    height: 38px;
+    padding: 0 6px;
+    border-radius: 10px;
+    border: 1.5px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .inv-pg-btn:hover { border-color: #32005d; color: #32005d; }
+  .inv-pg-btn.active {
+    background: #32005d;
+    color: #fff;
+    border-color: #32005d;
+    font-weight: 800;
+  }
+</style>
+
+
+<div class="page-head">
+  <div>
+    <h1>Inventory</h1>
+  </div>
+  {% if (active_tab or 'vehicles') == 'vehicles' and current_user and (current_user.is_super_admin or 'vehicle_add' in current_user.permissions) %}
+  <a class="btn primary" href="{{ url_for('inventory_add') }}">+ Add Vehicle</a>
+  {% elif (active_tab or 'vehicles') == 'purchases' %}
+  <a class="btn primary" href="{{ url_for('vendors_add_purchase') }}">+ Add purchase</a>
+  {% endif %}
+</div>
+
+<div class="tabs-bar" role="tablist" aria-label="Inventory tabs">
+  {% if current_user and (current_user.is_super_admin or 'inventory' in current_user.permissions) %}
+  <a class="tab-chip {% if (active_tab or 'vehicles') == 'vehicles' %}active{% endif %}"
+     href="{{ url_for('inventory', tab='vehicles') }}">Vehicles</a>
+  {% endif %}
+  {% if current_user and (current_user.is_super_admin or 'sold_vehicle' in current_user.permissions) %}
+  <a class="tab-chip {% if (active_tab or 'vehicles') == 'sold' %}active{% endif %}"
+     href="{{ url_for('inventory', tab='sold') }}">Sold Out</a>
+  {% endif %}
+</div>
+
+<section class="card">
+  {% if (active_tab or 'vehicles') == 'vehicles' %}
+    {% if transfer_message %}
+    <div class="inventory-banner">{{ transfer_message }}</div>
+    {% endif %}
+    {% if transfer_error %}
+    <div class="inventory-banner error">{{ transfer_error }}</div>
+    {% endif %}
+    <div class="table-toolbar" data-filter-scope="vehicles">
+      <div class="filter-group">
+        <input id="vehicleSearchInput" class="filter-input" type="text" placeholder="Search vehicle or number" />
+        <select id="vehicleStatusInput" class="filter-input" aria-label="Vehicle status">
+          <option value="">All status</option>
+          <option value="available">Available</option>
+          <option value="sold">Sold</option>
+          <option value="in_progress">In Progress</option>
+          <option value="in_repair">In Repair</option>
+        </select>
+        <input id="vehicleFromDateInput" class="filter-input" type="date" />
+        <input id="vehicleToDateInput" class="filter-input" type="date" />
+      </div>
+      <div class="filter-chips">
+        <button class="filter-chip" type="button" data-range="today">Today</button>
+        <button class="filter-chip" type="button" data-range="week">Week</button>
+        <button class="filter-chip" type="button" data-range="month">Month</button>
+        <button class="filter-chip" type="button" data-range="year">Year</button>
+      </div>
+    </div>
+
+    {% if vehicles %}
+    <div class="inv-card-grid">
+      {% for v in vehicles %}
+      <article class="inv-card js-vehicle-row"
+               data-search="{{ (v.search_blob or ((v.vehicle_name or '') ~ ' ' ~ (v.vehicle_number or '') ~ ' ' ~ (v.purchase_customer_name or '')))|lower }}"
+               data-status="{{ v.status_value or ((v.status or '')|lower|replace(' ', '_')) }}"
+               data-updated="{{ v.updated_at or v.created_at or '' }}">
+        <div class="inv-card-main">
+          <div class="inv-card-title">
+            <strong>{{ v.vehicle_name or 'Vehicle' }}</strong>
+            <span class="inv-status-pill">{{ v.status or 'Available' }}</span>
+          </div>
+          <div class="inv-card-kv">
+            <div class="inv-kv-row"><span class="k">Reg No</span><span class="sep">:</span><span class="v">{{ v.vehicle_number or '-' }}</span></div>
+            <div class="inv-kv-row"><span class="k">Model</span><span class="sep">:</span><span class="v">{{ v.model_year or '-' }}</span></div>
+            <div class="inv-kv-row"><span class="k">Cost</span><span class="sep">:</span><span class="v">&#8377; {{ '%.2f'|format(v.purchase_price or 0) }}</span></div>
+            <div class="inv-kv-row"><span class="k">Expense</span><span class="sep">:</span><span class="v">&#8377; {{ '%.2f'|format(v.repair_cost or 0) }}</span></div>
+          </div>
+          <div class="inv-card-actions">
+            <a class="btn ghost" href="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">View</a>
+            <a class="btn ghost" href="{{ url_for('order_new', vehicle_id=v.id) }}">Sell</a>
+            <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=v.id) }}">Add Repair</a>
+            <button class="btn ghost" type="button" data-share-url="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Share</button>
+          </div>
+        </div>
+        <div class="inv-card-media" aria-hidden="true">
+          {% if v.gallery_images and v.gallery_images|length > 0 %}
+          <div class="inv-mini-carousel" data-carousel="vc-{{ v.id }}">
+            {% for img in v.gallery_images %}
+            <div class="inv-mini-slide {% if loop.first %}active{% endif %}">
+              <img src="{{ url_for('static', filename='uploads/vehicles/' ~ img) }}" alt="" loading="lazy" />
+            </div>
+            {% endfor %}
+            {% if v.gallery_images|length > 1 %}
+            <button class="inv-mini-arrow prev" onclick="invCarouselMove('vc-{{ v.id }}', -1, event)" aria-label="Previous">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <button class="inv-mini-arrow next" onclick="invCarouselMove('vc-{{ v.id }}', 1, event)" aria-label="Next">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <div class="inv-mini-dots">
+              {% for img in v.gallery_images %}
+              <div class="inv-mini-dot {% if loop.first %}active{% endif %}" onclick="invCarouselGoto('vc-{{ v.id }}', {{ loop.index0 }}, event)"></div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="placeholder">BIKE IMG</div>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div id="inv-pg-vehicles" class="inv-pagination"></div>
+
+    <details style="margin-top: 14px;">
+      <summary class="muted" style="cursor:pointer; font-weight:800;">Table view</summary>
+      <div class="list-table inventory-vehicle-table" style="--list-cols: 1.05fr 1.1fr 1.05fr 0.9fr 0.95fr 1.35fr; margin-top: 10px;">
+      <div class="list-row list-head">
+        <div>Vehicle number</div>
+        <div>Vehicle name</div>
+        <div>Purchased from</div>
+        <div>Purchase amount</div>
+        <div>Expense (repair amount)</div>
+        <div>Actions</div>
+      </div>
+      {% for v in vehicles %}
+      <div class="list-row js-vehicle-table-row"
+           data-search="{{ (v.search_blob or ((v.vehicle_name or '') ~ ' ' ~ (v.vehicle_number or '') ~ ' ' ~ (v.purchase_customer_name or '')))|lower }}"
+           data-status="{{ v.status_value or ((v.status or '')|lower|replace(' ', '_')) }}"
+           data-updated="{{ v.updated_at or v.created_at or '' }}">
+        <div><strong>{{ v.vehicle_number }}</strong></div>
+        <div>
+          <strong>{{ v.vehicle_name }}</strong>
+          {% if v.model_year %}<div class="muted" style="font-size: 0.85rem;">{{ v.model_year }}</div>{% endif %}
+        </div>
+        <div>{{ v.purchase_customer_name or '-' }}</div>
+        <div>&#8377; {{ '%.2f'|format(v.purchase_price or 0) }}</div>
+        <div>&#8377; {{ '%.2f'|format(v.repair_cost or 0) }}</div>
+        <div class="inv-action-boxes">
+          <a class="inv-action-box" href="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">View</a>
+          <a class="inv-action-box" href="{{ url_for('order_new', vehicle_id=v.id) }}">Sell</a>
+          <a class="inv-action-box" href="{{ url_for('expense_repair_add', vehicle_id=v.id) }}">Add Repair</a>
+          <button class="inv-action-box" type="button" data-share-url="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Share</button>
+        </div>
+      </div>
+      {% endfor %}
+      </div>
+    </details>
+    {% else %}
+    <p class="muted">No vehicles yet.</p>
+    {% endif %}
+
+  {% elif (active_tab or 'vehicles') == 'sold' %}
+    <div class="table-toolbar" data-filter-scope="vehicles">
+      <div class="filter-group">
+        <input id="vehicleSearchInput" class="filter-input" type="text" placeholder="Search vehicle or number" />
+        <input id="vehicleFromDateInput" class="filter-input" type="date" />
+        <input id="vehicleToDateInput" class="filter-input" type="date" />
+      </div>
+      <div class="filter-chips">
+        <button class="filter-chip" type="button" data-range="today">Today</button>
+        <button class="filter-chip" type="button" data-range="week">Week</button>
+        <button class="filter-chip" type="button" data-range="month">Month</button>
+        <button class="filter-chip" type="button" data-range="year">Year</button>
+      </div>
+    </div>
+
+    {% if vehicles %}
+    <div class="inv-card-grid">
+      {% for v in vehicles %}
+      <article class="inv-card js-vehicle-row"
+               data-search="{{ (v.search_blob or ((v.vehicle_name or '') ~ ' ' ~ (v.vehicle_number or '') ))|lower }}"
+               data-status="sold"
+               data-updated="{{ v.updated_at or v.created_at or '' }}">
+        <div class="inv-card-main">
+          <div class="inv-card-title">
+            <strong>{{ v.vehicle_name or 'Vehicle' }}</strong>
+            <span class="inv-status-pill">Sold</span>
+          </div>
+          <div class="inv-card-kv">
+            <div class="inv-kv-row"><span class="k">Reg No</span><span class="sep">:</span><span class="v">{{ v.vehicle_number or '-' }}</span></div>
+            <div class="inv-kv-row"><span class="k">Model</span><span class="sep">:</span><span class="v">{{ v.model_year or '-' }}</span></div>
+            <div class="inv-kv-row"><span class="k">Cost</span><span class="sep">:</span><span class="v">&#8377; {{ '%.2f'|format(v.purchase_price or 0) }}</span></div>
+            <div class="inv-kv-row"><span class="k">Expense</span><span class="sep">:</span><span class="v">&#8377; {{ '%.2f'|format(v.repair_cost or 0) }}</span></div>
+          </div>
+          <div class="inv-card-actions">
+            {% if v.sale_order_id %}
+            <a class="btn ghost" href="{{ url_for('order_detail', order_id=v.sale_order_id, sale_id=v.sale_id or '', source='orders') }} ">View Sale</a>
+            {% endif %}
+            <a class="btn ghost" href="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">View Vehicle</a>
+            <button class="btn ghost" type="button" data-share-url="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Share</button>
+          </div>
+        </div>
+        <div class="inv-card-media" aria-hidden="true">
+          {% if v.gallery_images and v.gallery_images|length > 0 %}
+          <div class="inv-mini-carousel" data-carousel="vs-{{ v.id }}">
+            {% for img in v.gallery_images %}
+            <div class="inv-mini-slide {% if loop.first %}active{% endif %}">
+              <img src="{{ url_for('static', filename='uploads/vehicles/' ~ img) }}" alt="" loading="lazy" />
+            </div>
+            {% endfor %}
+            {% if v.gallery_images|length > 1 %}
+            <button class="inv-mini-arrow prev" onclick="invCarouselMove('vs-{{ v.id }}', -1, event)" aria-label="Previous">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <button class="inv-mini-arrow next" onclick="invCarouselMove('vs-{{ v.id }}', 1, event)" aria-label="Next">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <div class="inv-mini-dots">
+              {% for img in v.gallery_images %}
+              <div class="inv-mini-dot {% if loop.first %}active{% endif %}" onclick="invCarouselGoto('vs-{{ v.id }}', {{ loop.index0 }}, event)"></div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="placeholder">BIKE IMG</div>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    <div id="inv-pg-sold" class="inv-pagination"></div>
+    {% else %}
+    <p class="muted">No sold vehicles yet.</p>
+    {% endif %}
+
+  {% elif (active_tab or 'vehicles') == 'purchases' %}
+    <div class="table-toolbar" data-filter-scope="purchases">
+      <div class="filter-group">
+        <input id="purchaseSearchInput" class="filter-input" type="text" placeholder="Search vendor" />
+        <input id="purchaseDateInput" class="filter-input" type="date" />
+      </div>
+      <div class="filter-chips">
+        <button class="filter-chip" type="button" data-range="today">Today</button>
+        <button class="filter-chip" type="button" data-range="week">Week</button>
+        <button class="filter-chip" type="button" data-range="month">Month</button>
+        <button class="filter-chip" type="button" data-range="year">Year</button>
+      </div>
+    </div>
+
+    {% if purchases %}
+    <div class="list-table" style="--list-cols: 1.4fr 0.9fr 0.9fr 0.9fr 0.9fr 1fr 1.2fr;">
+      <div class="list-row list-head">
+        <div>Vendor</div>
+        <div>Total</div>
+        <div>Paid</div>
+        <div>Balance</div>
+        <div>Status</div>
+        <div>Purchased At</div>
+        <div>Actions</div>
+      </div>
+      {% for p in purchases %}
+      <div class="list-row js-purchase-row"
+           data-search="{{ ((p.vendor_code or '') ~ ' ' ~ (p.vendor_name or ''))|lower }}"
+           data-purchased="{{ p.purchased_at or '' }}">
+        <div>{{ p.vendor_code }} - {{ p.vendor_name }}</div>
+        <div>₹ {{ '%.2f'|format(p.total_amount or 0) }}</div>
+        <div>₹ {{ '%.2f'|format(p.paid_amount or 0) }}</div>
+        <div>₹ {{ '%.2f'|format((p.total_amount or 0) - (p.paid_amount or 0)) }}</div>
+        <div>{{ p.status }}</div>
+        <div>{{ p.purchased_at|datetime_display if p.purchased_at else "-" }}</div>
+        <div class="inv-action-boxes">
+          <a class="inv-action-box" href="{{ url_for('vendors_purchase_detail', purchase_id=p.id) }}">View</a>
+          
+          <form method="post" action="{{ url_for('vendors_purchase_delete', purchase_id=p.id) }}" onsubmit="return confirm('Delete this purchase?');">
+            <button class="inv-action-box danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No purchases recorded yet.</p>
+    {% endif %}
+
+  {% else %}
+    {% if customer_sell_requests %}
+    <div class="list-table" style="--list-cols: 1.2fr 1fr 1fr 0.9fr 0.9fr 1fr 1... ">
+      <!-- Content remains same -->
+    </div>
+    {% endif %}
+  {% endif %}
+</section>
+
+{% if transfer_branches %}
+<dialog id="transferDialog" class="transfer-dialog">
+  <form method="post" id="transferForm" class="transfer-dialog-card">
+    <h3>Transfer Vehicle</h3>
+    <p id="transferDialogText">Choose the branch to receive this vehicle.</p>
+    <label>
+      <span>Target Branch</span>
+      <select name="target_branch_code" required>
+        <option value="">Select branch</option>
+        {% for branch in transfer_branches %}
+        <option value="{{ branch.code }}">{{ branch.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="transfer-dialog-actions">
+      <button class="btn ghost" type="button" data-transfer-close>Close</button>
+      <button class="btn primary" type="submit">Transfer</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const filterScope = document.querySelector(".table-toolbar")?.dataset.filterScope || "";
+  const transferDialog = document.getElementById("transferDialog");
+  const transferForm = document.getElementById("transferForm");
+  const transferDialogText = document.getElementById("transferDialogText");
+
+  function closeAllActionMenus() {
+    document.querySelectorAll(".menu-pop.open").forEach((menu) => {
+      menu.classList.remove("open");
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllActionMenus();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-menu-cancel]")) {
+      closeAllActionMenus();
+      return;
+    }
+
+    if (event.target.closest("[data-transfer-close]")) {
+      transferDialog?.close();
+      return;
+    }
+
+    if (event.target.closest(".menu-pop")) {
+      return;
+    }
+
+    const menuBtn = event.target.closest(".menu-btn");
+    if (menuBtn) {
+      const wrap = menuBtn.closest(".action-menu-wrap");
+      const menu = wrap?.querySelector(".menu-pop");
+      if (!menu) return;
+
+      const isOpen = menu.classList.contains("open");
+      closeAllActionMenus();
+      if (!isOpen) menu.classList.add("open");
+      return;
+    }
+
+    closeAllActionMenus();
+  });
+
+  document.addEventListener("click", (event) => {
+    const transferTrigger = event.target.closest("[data-transfer-open]");
+    if (!transferTrigger || !transferDialog || !transferForm) return;
+
+    const vehicleId = transferTrigger.dataset.transferId || "";
+    const vehicleName = transferTrigger.dataset.transferName || "Vehicle";
+    const vehicleNumber = transferTrigger.dataset.transferNumber || "";
+    transferForm.setAttribute("action", `/inventory/${vehicleId}/transfer`);
+    if (transferDialogText) {
+      transferDialogText.textContent = `Transfer ${vehicleName}${vehicleNumber ? ` (${vehicleNumber})` : ""} to another branch.`;
+    }
+    closeAllActionMenus();
+    transferDialog.showModal();
+  });
+
+  function formatInputDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function getRangeBounds(range) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (range === "today") return { from: today, to: today };
+    if (range === "week") {
+      const from = new Date(today);
+      const day = (from.getDay() + 6) % 7;
+      from.setDate(from.getDate() - day);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 6);
+      return { from, to };
+    }
+    if (range === "month") {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { from, to };
+    }
+    if (range === "year") {
+      const from = new Date(today.getFullYear(), 0, 1);
+      const to = new Date(today.getFullYear(), 11, 31);
+      return { from, to };
+    }
+    return null;
+  }
+
+  function toDateOnly(value) {
+    if (!value) return null;
+    const str = String(value).trim().slice(0, 10);
+    const parts = str.split("-");
+    if (parts.length !== 3) return null;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const d = Number(parts[2]);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return new Date(y, m - 1, d);
+  }
+
+  function inRange(dateObj, range) {
+    if (!range) return true;
+    if (!dateObj) return false;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const date = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+
+    if (range === "today") return date.getTime() === today.getTime();
+    if (range === "month") return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
+    if (range === "year") return date.getFullYear() === today.getFullYear();
+    if (range === "week") {
+      const start = new Date(today);
+      const day = (start.getDay() + 6) % 7;
+      start.setDate(start.getDate() - day);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return date >= start && date <= end;
+    }
+    return true;
+  }
+
+  const rangeChips = document.querySelectorAll(".filter-chip[data-range]");
+  let activeRange = "";
+
+  function setRange(range) {
+    activeRange = range || "";
+    rangeChips.forEach((btn) => {
+      btn.classList.toggle("active", (btn.dataset.range || "") === activeRange && !!activeRange);
+    });
+  }
+
+  // ── Pagination state ──
+  const PER_PAGE = 3;
+  let pgCurrentVehicles = 1;
+  let pgCurrentSold = 1;
+
+  function buildPagination(pgEl, visibleCount, currentPage, onPageClick) {
+    if (!pgEl) return;
+    const totalPages = Math.ceil(visibleCount / PER_PAGE);
+    pgEl.innerHTML = "";
+    if (totalPages <= 1) { pgEl.style.display = "none"; return; }
+    pgEl.style.display = "flex";
+    const info = document.createElement("div");
+    info.className = "pg-info";
+    info.innerHTML = `Showing Page <strong>${currentPage}</strong> of <strong>${totalPages}</strong>`;
+    pgEl.appendChild(info);
+    for (let p = 1; p <= totalPages; p++) {
+      const btn = document.createElement("button");
+      btn.className = "inv-pg-btn" + (p === currentPage ? " active" : "");
+      btn.textContent = p;
+      btn.type = "button";
+      const pg = p;
+      btn.addEventListener("click", () => onPageClick(pg));
+      pgEl.appendChild(btn);
+    }
+  }
+
+  function applyVehicleFilters() {
+    const cardRows = Array.from(document.querySelectorAll(".js-vehicle-row"));
+    const tableRows = Array.from(document.querySelectorAll(".js-vehicle-table-row"));
+    const searchInput = document.getElementById("vehicleSearchInput");
+    const statusInput = document.getElementById("vehicleStatusInput");
+    const fromDateInput = document.getElementById("vehicleFromDateInput");
+    const toDateInput = document.getElementById("vehicleToDateInput");
+
+    const text = (searchInput?.value || "").trim().toLowerCase();
+    const status = (statusInput?.value || "").trim().toLowerCase();
+    const fromObj = toDateOnly(fromDateInput?.value || "");
+    const toObj = toDateOnly(toDateInput?.value || "");
+
+    function rowPasses(row) {
+      const hay = (row.dataset.search || "").toLowerCase();
+      const rowStatus = (row.dataset.status || "").toLowerCase();
+      const updated = toDateOnly((row.dataset.updated || "").slice(0, 10));
+      const okText = !text || hay.includes(text);
+      const okStatus = !status || rowStatus === status;
+      const okFrom = !fromObj || (updated && updated >= fromObj);
+      const okTo = !toObj || (updated && updated <= toObj);
+      const okRange = inRange(updated, activeRange);
+      return okText && okStatus && okFrom && okTo && okRange;
+    }
+
+    tableRows.forEach((row) => {
+      row.style.display = rowPasses(row) ? "" : "none";
+    });
+
+    cardRows.forEach((row) => {
+      row._filterPass = rowPasses(row);
+      row.style.display = "none";
+    });
+
+    const pgVehicles = document.getElementById("inv-pg-vehicles");
+    if (pgVehicles) {
+      const passing = cardRows.filter(r => r._filterPass);
+      const total = passing.length;
+      if (pgCurrentVehicles > Math.max(1, Math.ceil(total / PER_PAGE))) pgCurrentVehicles = 1;
+      passing.forEach((row, i) => {
+        const inPage = i >= (pgCurrentVehicles - 1) * PER_PAGE && i < pgCurrentVehicles * PER_PAGE;
+        row.style.display = inPage ? "" : "none";
+      });
+      buildPagination(pgVehicles, total, pgCurrentVehicles, (pg) => {
+        pgCurrentVehicles = pg;
+        applyVehicleFilters();
+      });
+    } else {
+      const pgSold = document.getElementById("inv-pg-sold");
+      const passing = cardRows.filter(r => r._filterPass);
+      const total = passing.length;
+      if (pgCurrentSold > Math.max(1, Math.ceil(total / PER_PAGE))) pgCurrentSold = 1;
+      passing.forEach((row, i) => {
+        const inPage = i >= (pgCurrentSold - 1) * PER_PAGE && i < pgCurrentSold * PER_PAGE;
+        row.style.display = inPage ? "" : "none";
+      });
+      buildPagination(pgSold, total, pgCurrentSold, (pg) => {
+        pgCurrentSold = pg;
+        applyVehicleFilters();
+      });
+    }
+  }
+
+  function applyPurchaseFilters() {
+    const rows = Array.from(document.querySelectorAll(".js-purchase-row"));
+    const searchInput = document.getElementById("purchaseSearchInput");
+    const dateInput = document.getElementById("purchaseDateInput");
+
+    const text = (searchInput?.value || "").trim().toLowerCase();
+    const dateObj = toDateOnly(dateInput?.value || "");
+
+    rows.forEach((row) => {
+      const hay = (row.dataset.search || "").toLowerCase();
+      const purchased = toDateOnly((row.dataset.purchased || "").slice(0, 10));
+      const okText = !text || hay.includes(text);
+      const okDate = !dateObj || (purchased && purchased.getTime() === dateObj.getTime());
+      const okRange = inRange(purchased, activeRange);
+      row.style.display = okText && okDate && okRange ? "" : "none";
+    });
+  }
+
+  function applyAll() {
+    if (filterScope === "vehicles") return applyVehicleFilters();
+    if (filterScope === "purchases") return applyPurchaseFilters();
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function shareLink(url) {
+    if (navigator.share) {
+      try {
+        await navigator.share({ url });
+        return { ok: true, mode: "share" };
+      } catch (e) {}
+    }
+    const ok = await copyText(url);
+    return { ok, mode: "copy" };
+  }
+
+  document.addEventListener("click", async (event) => {
+    const shareBtn = event.target.closest("[data-share-url]");
+    if (!shareBtn) return;
+    const raw = shareBtn.getAttribute("data-share-url") || "";
+    const url = raw ? new URL(raw, window.location.origin).toString() : window.location.href;
+    const result = await shareLink(url);
+    if (!result.ok) return;
+    if (result.mode === "copy") {
+      shareBtn.textContent = "Copied";
+      window.setTimeout(() => {
+        shareBtn.textContent = "Share";
+      }, 900);
+    }
+  });
+
+  rangeChips.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setRange(btn.dataset.range || "");
+      pgCurrentVehicles = 1;
+      pgCurrentSold = 1;
+      const bounds = getRangeBounds(activeRange);
+      if (filterScope === "vehicles") {
+        if (bounds) {
+          const from = document.getElementById("vehicleFromDateInput");
+          const to = document.getElementById("vehicleToDateInput");
+          if (from) from.value = formatInputDate(bounds.from);
+          if (to) to.value = formatInputDate(bounds.to);
+        }
+      }
+      applyAll();
+    });
+  });
+
+  ["vehicleSearchInput", "vehicleStatusInput", "vehicleFromDateInput", "vehicleToDateInput",
+   "purchaseSearchInput", "purchaseDateInput"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener(el.tagName === "INPUT" && el.type === "date" ? "change" : "input", () => {
+      setRange("");
+      pgCurrentVehicles = 1;
+      pgCurrentSold = 1;
+      applyAll();
+    });
+  });
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlStatus = (urlParams.get("status") || "").trim().toLowerCase();
+  if (urlStatus) {
+    const statusInput = document.getElementById("vehicleStatusInput");
+    if (statusInput) {
+      const hasOption = Array.from(statusInput.options).some((opt) => opt.value === urlStatus);
+      if (hasOption) statusInput.value = urlStatus;
+    }
+  }
+
+  setRange("");
+  applyAll();
+});
+
+// ── MINI CAROUSEL for inventory cards ──
+(function () {
+  const state = {};
+
+  function getCarousel(key) {
+    if (!state[key]) {
+      const el = document.querySelector(`[data-carousel="${key}"]`);
+      if (!el) return null;
+      const slides = el.querySelectorAll('.inv-mini-slide');
+      const dots   = el.querySelectorAll('.inv-mini-dot');
+      state[key]   = { el, slides, dots, current: 0, total: slides.length };
+    }
+    return state[key];
+  }
+
+  function goto(key, n) {
+    const c = getCarousel(key);
+    if (!c || !c.total) return;
+    c.slides[c.current].classList.remove('active');
+    c.dots[c.current]?.classList.remove('active');
+    c.current = (n + c.total) % c.total;
+    c.slides[c.current].classList.add('active');
+    c.dots[c.current]?.classList.add('active');
+  }
+
+  window.invCarouselMove = function(key, dir, e) {
+    e && e.stopPropagation();
+    const c = getCarousel(key);
+    if (c) goto(key, c.current + dir);
+  };
+
+  window.invCarouselGoto = function(key, n, e) {
+    e && e.stopPropagation();
+    goto(key, n);
+  };
+})();
+</script>
+
+{% endblock %}

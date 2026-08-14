@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ tailor.name }}</h1>
+    <p>Assigned works for this staff member.</p>
+  </div>
+  <a class="btn ghost js-back-button" href="{{ url_for('tailors') }}" data-fallback="{{ url_for('tailors') }}">Back</a>
+</div>
+
+<div class="customer-detail-grid clean-detail">
+  <section class="card customer-info-card">
+    <h3>Staff Information</h3>
+    <div class="info-list">
+      <div><span>Name</span><strong>{{ tailor.name }}</strong></div>
+      <div><span>Phone</span><strong>{{ tailor.phone }}</strong></div>
+      <div><span>Role</span><strong>{{ tailor.role or "-" }}</strong></div>
+      <div><span>Status</span><strong>{{ tailor.status }}</strong></div>
+      <div><span>Salary</span><strong>&#8377; {{ '%.2f'|format(salary_total or 0) }}</strong></div>
+    </div>
+  </section>
+
+  <section class="card customer-order-card">
+    <div class="detail-header">
+      <div>
+        <h3>Assigned Works</h3>
+      </div>
+    </div>
+
+    {% if repair_works %}
+    <div class="order-list staff-order-list" style="margin-bottom:18px;">
+      <div class="order-list-row order-list-head staff-order-head">
+        <div>No</div>
+        <div>Vehicle</div>
+        <div>Description</div>
+        <div>Status</div>
+        <div>Date</div>
+        <div>Action</div>
+      </div>
+      {% for work in repair_works %}
+      <div class="order-list-row">
+        <div>{{ loop.index }}</div>
+        <div>{{ work.vehicle_name }}<div class="muted">{{ work.vehicle_number }}</div></div>
+        <div>{{ work.description or "-" }}</div>
+        <div>{{ work.repair_status or "-" }}</div>
+        <div>{{ (work.repair_date or work.created_at)|date_only }}</div>
+        <div class="order-actions">
+          <a class="link" href="{{ url_for('expense_repair_detail', repair_id=work.id, mode='view') }}">Open</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if orders %}
+    <div class="order-list staff-order-list">
+      <div class="order-list-row order-list-head staff-order-head">
+        <div>No</div>
+        <div>Order</div>
+        <div>Customer</div>
+        <div>Status</div>
+        <div>Due</div>
+        <div>Action</div>
+      </div>
+
+      {% for order in orders %}
+      <div class="order-list-row">
+        <div>{{ loop.index }}</div>
+        <div>{{ order.id|fmt_order_id(order.order_type) }}</div>
+        <div>{{ order.customer_name }}</div>
+        <div>{{ order.status }}</div>
+        <div>{{ order.due_date|date_only if order.due_date else "-" }}</div>
+        <div class="order-actions">
+          <a class="link" href="{{ url_for('order_detail', order_id=order.id) }}">Open</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% elif not repair_works %}
+    <p class="muted">No assigned works yet.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

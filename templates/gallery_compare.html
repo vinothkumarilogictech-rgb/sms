@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .compare-shell {
+    display: grid;
+    gap: 16px;
+  }
+
+  .compare-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .compare-head h1 {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1;
+  }
+
+  .compare-head p {
+    margin: 6px 0 0;
+    color: #6b7280;
+    font-size: 14px;
+  }
+
+  .compare-hero {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+
+  .compare-bike-card,
+  .compare-table-card {
+    border: 1px solid #ead7cf;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(122, 60, 42, 0.06);
+  }
+
+  .compare-bike-card {
+    overflow: hidden;
+  }
+
+  .compare-bike-media {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: linear-gradient(180deg, #f7f3f1 0%, #fff 100%);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .compare-bike-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .compare-bike-placeholder {
+    color: #c8b7b0;
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+  }
+
+  .compare-bike-placeholder i {
+    font-size: 40px;
+  }
+
+  .compare-bike-status {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.94);
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #15803d;
+  }
+
+  .compare-bike-status.hold { color: #92400e; }
+  .compare-bike-status.sold { color: #b91c1c; }
+
+  .compare-bike-body {
+    padding: 14px;
+  }
+
+  .compare-bike-body h2 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    line-height: 1.15;
+  }
+
+  .compare-bike-body p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .compare-bike-price {
+    margin-top: 10px;
+    color: #b3261e;
+    font-size: 24px;
+    font-weight: 900;
+  }
+
+  .compare-table-card {
+    overflow: hidden;
+  }
+
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .compare-table th,
+  .compare-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0dfd9;
+    vertical-align: top;
+  }
+
+  .compare-table thead th {
+    background: #fff7f3;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8b6b60;
+  }
+
+  .compare-table thead th:first-child {
+    width: 220px;
+  }
+
+  .compare-table tbody th {
+    background: #fffaf8;
+    text-align: left;
+    font-size: 13px;
+    color: #7c2d12;
+  }
+
+  .compare-table td {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 860px) {
+    .compare-table,
+    .compare-table thead,
+    .compare-table tbody,
+    .compare-table tr,
+    .compare-table th,
+    .compare-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .compare-table thead {
+      display: none;
+    }
+
+    .compare-table tbody tr {
+      border-bottom: 1px solid #ead7cf;
+      padding: 8px 0;
+    }
+
+    .compare-table tbody th {
+      border-bottom: 0;
+      padding-bottom: 6px;
+    }
+
+    .compare-table td {
+      padding-top: 6px;
+      padding-bottom: 10px;
+    }
+  }
+</style>
+
+<section class="compare-shell">
+  <div class="compare-head">
+    <div>
+      <h1>Compare Bikes</h1>
+      <p>Side-by-side details for the bikes selected from the Gallery page.</p>
+    </div>
+    <a class="btn ghost js-back-button" href="{{ url_for('gallery') }}" data-fallback="{{ url_for('gallery') }}">Back to View Vehicle</a>
+  </div>
+
+  <section class="compare-hero">
+    {% for vehicle in vehicles %}
+    <article class="compare-bike-card">
+      <div class="compare-bike-media">
+        <span class="compare-bike-status {{ vehicle.status_value }}">{{ vehicle.status or "Available" }}</span>
+        {% if vehicle.photo_filename %}
+        <img src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.photo_filename) }}" alt="{{ vehicle.vehicle_name }}" />
+        {% else %}
+        <div class="compare-bike-placeholder">
+          <i class="icon-motorbike"></i>
+          <span>No Image</span>
+        </div>
+        {% endif %}
+      </div>
+      <div class="compare-bike-body">
+        <h2>{{ vehicle.vehicle_name }}</h2>
+        <p>{{ vehicle.brand }} | {{ vehicle.vehicle_number or "-" }}</p>
+        <div class="compare-bike-price">
+          {% if vehicle.selling_price %}
+          &#8377;{{ "{:,.0f}".format(vehicle.selling_price) }}
+          {% else %}
+          --
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+
+  <section class="compare-table-card">
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Specification</th>
+          {% for vehicle in vehicles %}
+          <th>{{ vehicle.vehicle_name }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for label, getter in comparison_rows %}
+        <tr>
+          <th>{{ label }}</th>
+          {% for vehicle in vehicles %}
+          <td>{{ getter(vehicle) }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</section>
+{% endblock %}

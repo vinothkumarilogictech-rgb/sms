@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Customers List</h1>
+    <p>Manage customer information and order history.</p>
+  </div>
+  <div class="customer-actions">
+    <form class="search" method="get">
+      <input type="text" name="q" value="{{ q }}" placeholder="Search by name or phone" />
+      <button class="btn ghost" type="submit">Search</button>
+    </form>
+    <a class="btn primary" href="{{ url_for('order_new') }}">+ Add Customer</a>
+  </div>
+</div>
+
+<section class="card">
+  {% if customers %}
+  <div class="customer-table">
+    <div class="customer-row customer-head">
+      <div>
+        <a class="sort-link" href="{{ url_for('customers', q=q, sort='name', dir='desc' if sort == 'name' and direction == 'asc' else 'asc') }}">Name</a>
+      </div>
+      <div>
+        <a class="sort-link" href="{{ url_for('customers', q=q, sort='phone', dir='desc' if sort == 'phone' and direction == 'asc' else 'asc') }}">Mobile</a>
+      </div>
+      <div>
+        <a class="sort-link" href="{{ url_for('customers', q=q, sort='last_ordered', dir='desc' if sort == 'last_ordered' and direction == 'asc' else 'asc') }}">Last Ordered</a>
+      </div>
+      <div>Action</div>
+      <div></div>
+    </div>
+    {% for customer in customers %}
+    <div class="customer-row">
+      <div>{{ customer.name }}</div>
+      <div>{{ customer.phone }}</div>
+      <div>{{ customer.last_ordered or "-" }}</div>
+      <div class="customer-actions-cell">
+        <a class="btn primary" href="{{ url_for('order_new', name=customer.name, phone=customer.phone) }}">+ Create Order</a>
+        <a class="btn ghost" href="{{ url_for('customer_detail', customer_id=customer.id) }}">Order History</a>
+      </div>
+      <div class="customer-menu"></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No customers found.</p>
+  {% endif %}
+</section>
+
+<div class="modal-overlay" id="customer-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>Edit Customer</h3>
+      <button type="button" class="modal-close" id="customer-modal-close">×</button>
+    </div>
+    <form class="stack" id="customer-modal-form" method="post">
+      <label>
+        Customer Name
+        <input type="text" name="name" id="modal-name" required />
+      </label>
+      <label>
+        Phone Number
+        <input type="text" name="phone" id="modal-phone" inputmode="tel" pattern="^\+?[0-9]+$" oninput="this.value=this.value.replace(/[^0-9+]/g,'').replace(/(?!^)\+/g,'');" required />
+      </label>
+      <!-- <label>
+        Address
+        <input type="text" name="notes" id="modal-notes" />
+      </label> -->
+      <button class="btn primary full-btn" type="submit">Save</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  const modal = document.getElementById("customer-modal");
+  const closeBtn = document.getElementById("customer-modal-close");
+  const form = document.getElementById("customer-modal-form");
+  const nameInput = document.getElementById("modal-name");
+  const phoneInput = document.getElementById("modal-phone");
+  const notesInput = document.getElementById("modal-notes");
+
+  document.querySelectorAll(".edit-customer-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest(".customer-row");
+      const cells = row ? row.querySelectorAll(":scope > div") : [];
+      if (cells.length >= 3) {
+        nameInput.value = cells[0].textContent.trim();
+        phoneInput.value = cells[1].textContent.trim();
+        notesInput.value = "";
+      }
+      const id = btn.dataset.customerId;
+      form.action = `/customers/${id}`;
+      modal.classList.add("open");
+    });
+  });
+
+  closeBtn.addEventListener("click", () => modal.classList.remove("open"));
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      modal.classList.remove("open");
+    }
+  });
+</script>
+{% endblock %}

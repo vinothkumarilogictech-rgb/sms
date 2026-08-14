@@ -1,0 +1,1106 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .gallery-shell {
+    display: grid;
+    gap: 16px;
+  }
+
+  .gallery-filter-panel {
+    border-radius: 22px;
+    border: 1px solid #ecd8d0;
+    background: #fff;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(140, 68, 45, 0.06);
+  }
+
+  .gallery-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .gallery-filter-tabs {
+    display: inline-flex;
+    gap: 8px;
+    padding: 4px;
+    border-radius: 999px;
+    background: #f8efeb;
+  }
+
+  .gallery-quick-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .gallery-filter-tab {
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #7c2d12;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .gallery-filter-tab.active {
+    background: #b3261e;
+    color: #fff;
+  }
+
+  .gallery-filter-body {
+    display: none;
+  }
+
+  .gallery-filter-body.active {
+    display: block;
+  }
+
+  .gallery-search-row,
+  .gallery-select-row {
+    display: grid;
+    gap: 12px;
+  }
+
+  .gallery-search-row {
+    grid-template-columns: minmax(0, 1.3fr) minmax(180px, 0.8fr) auto;
+    align-items: center;
+  }
+
+  .gallery-select-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 12px;
+  }
+
+  .gallery-search-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #e6d8d1;
+    border-radius: 16px;
+    padding: 0 14px;
+    background: #fffaf8;
+    height: 52px;
+  }
+
+  .gallery-search-box i {
+    color: #7c2d12;
+    font-size: 18px;
+  }
+
+  .gallery-search-box input {
+    border: 0;
+    outline: none;
+    width: 100%;
+    background: transparent;
+    font-size: 15px;
+  }
+
+  .gallery-filter-panel select {
+    width: 100%;
+    height: 52px;
+    border: 1px solid #e6d8d1;
+    border-radius: 16px;
+    background: #fff;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  .gallery-filter-btn {
+    height: 52px;
+    border: 0;
+    border-radius: 16px;
+    background: #d12f22;
+    color: #fff;
+    padding: 0 24px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(209, 47, 34, 0.2);
+  }
+
+  .gallery-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .gallery-chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .gallery-chip {
+    border: 1px solid #ead7cf;
+    border-radius: 999px;
+    background: #fff;
+    color: #7c2d12;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .gallery-chip.active {
+    border-color: #b3261e;
+    background: #b3261e;
+    color: #fff;
+  }
+
+  .gallery-compare-trigger {
+    border: 1px solid #ead7cf;
+    border-radius: 999px;
+    background: #fff;
+    color: #7c2d12;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .gallery-sell-trigger {
+    border: 0;
+    border-radius: 16px;
+    background: #b3261e;
+    color: #fff;
+    min-height: 46px;
+    padding: 0 18px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 10px 22px rgba(179, 38, 30, 0.18);
+  }
+
+  .gallery-compare-trigger.active {
+    border-color: #b3261e;
+    background: #b3261e;
+    color: #fff;
+  }
+
+  .gallery-sell-card {
+    display: none;
+    border: 1px solid #ead7cf;
+    border-radius: 20px;
+    background: #fffaf8;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .gallery-sell-card.open {
+    display: grid;
+    gap: 14px;
+  }
+
+  .gallery-sell-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: start;
+  }
+
+  .gallery-sell-head h3 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.1;
+  }
+
+  .gallery-sell-head p {
+    margin: 6px 0 0;
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .gallery-form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .gallery-form-field {
+    display: grid;
+    gap: 7px;
+  }
+
+  .gallery-form-field label {
+    color: #7c2d12;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .gallery-form-field input,
+  .gallery-form-field select {
+    width: 100%;
+    height: 48px;
+    border: 1px solid #e6d8d1;
+    border-radius: 14px;
+    background: #fff;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  .gallery-form-field.full {
+    grid-column: 1 / -1;
+  }
+
+  .gallery-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .gallery-form-note {
+    color: #8b6b60;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .gallery-alert {
+    border-radius: 16px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .gallery-alert.success {
+    border: 1px solid #cfe8d5;
+    background: #effaf2;
+    color: #166534;
+  }
+
+  .gallery-alert.error {
+    border: 1px solid #efcaca;
+    background: #fff1f1;
+    color: #991b1b;
+  }
+
+  .gallery-results-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .gallery-results-title {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .gallery-results-meta {
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .vehicle-card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .vehicle-card {
+    position: relative;
+    display: grid;
+    border: 1px solid #edd9d2;
+    border-radius: 22px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(122, 60, 42, 0.06);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+
+  .vehicle-card:hover {
+    transform: translateY(-3px);
+    border-color: #d9b8ae;
+    box-shadow: 0 18px 34px rgba(122, 60, 42, 0.12);
+  }
+
+  .vehicle-media {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    background: linear-gradient(180deg, #f7f3f1 0%, #fff 100%);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .vehicle-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .vehicle-photo-placeholder {
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+    color: #c8b7b0;
+    font-size: 14px;
+  }
+
+  .vehicle-photo-placeholder i {
+    font-size: 36px;
+  }
+
+  .vehicle-status,
+  .vehicle-brand-chip {
+    position: absolute;
+    left: 12px;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .vehicle-status {
+    top: 12px;
+    background: rgba(255, 255, 255, 0.94);
+    color: #15803d;
+  }
+
+  .vehicle-status.hold {
+    color: #92400e;
+  }
+
+  .vehicle-status.sold {
+    color: #b91c1c;
+  }
+
+  .vehicle-brand-chip {
+    bottom: 12px;
+    background: rgba(21, 23, 27, 0.76);
+    color: #fff;
+  }
+
+  .vehicle-compare-toggle {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #7c2d12;
+    cursor: pointer;
+    border: 1px solid #edd9d2;
+  }
+
+  .gallery-compare-mode .vehicle-compare-toggle {
+    display: inline-flex;
+  }
+
+  .vehicle-compare-toggle input {
+    margin: 0;
+  }
+
+  .vehicle-card-body {
+    padding: 14px 14px 16px;
+  }
+
+  .vehicle-card-title-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .vehicle-name {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.15;
+    font-weight: 800;
+  }
+
+  .vehicle-year {
+    margin-top: 4px;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .vehicle-price {
+    color: #b3261e;
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .vehicle-card-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .vehicle-meta-box {
+    border: 1px solid #f0dfd9;
+    border-radius: 14px;
+    background: #fffaf8;
+    padding: 10px 11px;
+  }
+
+  .vehicle-meta-box span {
+    display: block;
+    color: #8b6b60;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .vehicle-meta-box strong {
+    display: block;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .vehicle-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .vehicle-price-bucket {
+    color: #8b6b60;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .vehicle-open-link {
+    color: #b3261e;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .empty-state {
+    border: 1px dashed #ddc2b8;
+    border-radius: 20px;
+    background: #fff;
+    text-align: center;
+    padding: 34px 18px;
+  }
+
+  .empty-state h3 {
+    margin: 0 0 8px;
+    font-size: 22px;
+  }
+
+  .empty-state p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 14px;
+  }
+
+  .gallery-hidden {
+    display: none !important;
+  }
+
+  .compare-bar {
+    position: sticky;
+    bottom: 14px;
+    z-index: 30;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid #ead7cf;
+    border-radius: 20px;
+    background: rgba(255, 250, 248, 0.98);
+    box-shadow: 0 14px 28px rgba(122, 60, 42, 0.12);
+    backdrop-filter: blur(8px);
+  }
+
+  .compare-bar.visible {
+    display: flex;
+  }
+
+  .compare-bar-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .compare-badge {
+    border-radius: 999px;
+    background: #b3261e;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .compare-selected-list {
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .compare-bar-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 1180px) {
+    .gallery-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 900px) {
+    .gallery-search-row,
+    .gallery-select-row,
+    .gallery-grid,
+    .gallery-form-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .gallery-search-row,
+    .gallery-select-row,
+    .gallery-grid,
+    .gallery-form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .gallery-filter-panel {
+      padding: 18px;
+    }
+  }
+</style>
+
+<section class="gallery-shell">
+  <section class="gallery-filter-panel">
+    <div class="gallery-panel-head">
+      <div class="gallery-filter-tabs" role="tablist" aria-label="Gallery filter modes">
+        <button class="gallery-filter-tab active" type="button" data-filter-mode="brand">By Brand</button>
+        <button class="gallery-filter-tab" type="button" data-filter-mode="price">By Price</button>
+      </div>
+      <div class="gallery-quick-actions">
+        <button class="gallery-sell-trigger" type="button" id="gallerySellTrigger">Add Sell</button>
+      </div>
+    </div>
+    {% set gallery_status = request.args.get('status', '').strip() %}
+    {% if gallery_status == 'sell_submitted' %}
+    <div class="gallery-alert success">Customer sell request submitted successfully.</div>
+    {% elif gallery_status == 'sell_error' %}
+    <div class="gallery-alert error">Please fill the bike, location, and customer contact details.</div>
+    {% endif %}
+
+    <form
+      class="gallery-sell-card {% if gallery_status in ['sell_submitted', 'sell_error'] %}open{% endif %}"
+      id="gallerySellForm"
+      method="post"
+      action="{{ url_for('customer_sell_submit') }}"
+      enctype="multipart/form-data"
+    >
+      <div class="gallery-sell-head">
+        <div>
+          <h3>Sell your bike</h3>
+          <p>Enter the bike and customer details once. The request will appear in the dashboard as a sale notification.</p>
+        </div>
+      </div>
+      <div class="gallery-form-grid">
+        <div class="gallery-form-field">
+          <label for="sellBikeName">Bike Name</label>
+          <input id="sellBikeName" name="bike_name" type="text" placeholder="Select bike name" required />
+        </div>
+        <div class="gallery-form-field">
+          <label for="sellKmsDriven">KMs Driven</label>
+          <input id="sellKmsDriven" name="kms_driven" type="text" placeholder="Enter kilometres" required />
+        </div>
+        <div class="gallery-form-field">
+          <label for="sellOwnership">Ownership</label>
+          <input id="sellOwnership" name="ownership_text" type="text" placeholder="1st owner / 2nd owner" required />
+        </div>
+        <div class="gallery-form-field">
+          <label for="sellCity">City</label>
+          <input id="sellCity" name="city" type="text" placeholder="Enter city" required />
+        </div>
+        <div class="gallery-form-field">
+          <label for="sellExpectedPrice">Expected Price</label>
+          <input id="sellExpectedPrice" name="expected_price" type="number" min="0" step="0.01" placeholder="Expected price" />
+        </div>
+        <div class="gallery-form-field">
+          <label for="sellCustomerName">Customer Name</label>
+          <input id="sellCustomerName" name="customer_name" type="text" placeholder="Enter customer name" required />
+        </div>
+        <div class="gallery-form-field">
+          <label for="sellCustomerPhone">Phone Number</label>
+          <input id="sellCustomerPhone" name="customer_phone" type="tel" placeholder="Enter phone number" required />
+        </div>
+        <div class="gallery-form-field full">
+          <label for="sellPhotos">Upload Photos</label>
+          <input id="sellPhotos" name="sell_photos" type="file" accept="image/*" multiple />
+          <div class="gallery-form-note">Contact details are captured in the request, and uploaded images will be visible from the dashboard notification.</div>
+        </div>
+      </div>
+      <div class="gallery-form-actions">
+        <button class="gallery-filter-btn" type="submit">Continue</button>
+      </div>
+    </form>
+
+    <div class="gallery-filter-body active" data-filter-body="brand">
+      <div class="gallery-search-row">
+        <label class="gallery-search-box">
+          <i class="bi bi-search"></i>
+          <input id="gallerySearchInput" type="text" placeholder="Search bikes or brands" />
+        </label>
+        <select id="galleryBrandInput">
+          <option value="">Select Brand</option>
+          {% for brand in brands %}
+          <option value="{{ brand|lower }}">{{ brand }}</option>
+          {% endfor %}
+        </select>
+        <button class="gallery-filter-btn" type="button" data-gallery-search>Search</button>
+      </div>
+      <div class="gallery-select-row">
+        <select id="galleryModeInput">
+          <option value="">All Purchase Types</option>
+          <option value="direct">Direct</option>
+          <option value="finance">Finance</option>
+          <option value="agent">Agent</option>
+          <option value="branch">Branch</option>
+        </select>
+        <select id="gallerySortInput">
+          <option value="recent">Latest First</option>
+          <option value="price_low">Price: Low to High</option>
+          <option value="price_high">Price: High to Low</option>
+          <option value="year_high">Year: Newest</option>
+        </select>
+        <div></div>
+      </div>
+    </div>
+
+    <div class="gallery-filter-body" data-filter-body="price">
+      <div class="gallery-search-row">
+        <label class="gallery-search-box">
+          <i class="bi bi-search"></i>
+          <input id="galleryPriceSearchInput" type="text" placeholder="Search by bike, number, or registration" />
+        </label>
+        <select id="galleryPriceBucketInput">
+          <option value="">Select Budget</option>
+          {% for bucket in price_buckets %}
+          <option value="{{ bucket|lower }}">{{ bucket }}</option>
+          {% endfor %}
+        </select>
+        <button class="gallery-filter-btn" type="button" data-gallery-search>Search</button>
+      </div>
+      <div class="gallery-select-row">
+        <select id="galleryPriceBrandInput">
+          <option value="">All Brands</option>
+          {% for brand in brands %}
+          <option value="{{ brand|lower }}">{{ brand }}</option>
+          {% endfor %}
+        </select>
+        <select id="galleryPriceSortInput">
+          <option value="recent">Latest First</option>
+          <option value="price_low">Price: Low to High</option>
+          <option value="price_high">Price: High to Low</option>
+          <option value="year_high">Year: Newest</option>
+        </select>
+        <div></div>
+      </div>
+    </div>
+
+    <div class="gallery-chip-row">
+      <div class="gallery-chip-group">
+        <button class="gallery-chip active" type="button" data-status-chip="">All</button>
+        {% for status in statuses %}
+        <button class="gallery-chip" type="button" data-status-chip="{{ status }}">{{ status|capitalize }}</button>
+        {% endfor %}
+      </div>
+      <button class="gallery-compare-trigger" type="button" id="galleryCompareTrigger">Compare</button>
+    </div>
+  </section>
+
+  <section class="gallery-results-head">
+    <div>
+      <h2 class="gallery-results-title">Inventory Showcase</h2>
+      <div class="gallery-results-meta">Click any item to open its detailed page.</div>
+    </div>
+    <div class="gallery-results-meta"><span id="galleryVisibleCount">{{ vehicles|length }}</span> items shown</div>
+  </section>
+
+  {% if vehicles %}
+  <section class="gallery-grid" id="galleryGrid">
+    {% for v in vehicles %}
+    <a
+      class="vehicle-card-link"
+      href="{{ url_for('vehicle_detail', vehicle_id=v['id']) }}"
+      data-gallery-card
+      data-name="{{ (v.vehicle_name or '')|lower }}"
+      data-brand="{{ (v.brand or '')|lower }}"
+      data-status="{{ (v.status_value or '')|lower }}"
+      data-mode="{{ (v.purchase_mode or '')|lower }}"
+      data-bucket="{{ (v.price_bucket or '')|lower }}"
+      data-search="{{ v.search_blob }}"
+      data-price="{{ v.selling_price or 0 }}"
+      data-year="{{ v.model_year or 0 }}"
+      data-order="{{ loop.index0 }}"
+    >
+      <article class="vehicle-card">
+        <div class="vehicle-media">
+          <span class="vehicle-status {{ v.status_value }}">{{ v.status or "Available" }}</span>
+          <span class="vehicle-brand-chip">{{ v.brand }}</span>
+          <label class="vehicle-compare-toggle" data-compare-toggle>
+            <input type="checkbox" value="{{ v.id }}" data-compare-checkbox />
+            <span>Select</span>
+          </label>
+          {% if v.photo_filename %}
+          <img
+            class="vehicle-photo"
+            src="{{ url_for('static', filename='uploads/vehicles/' ~ v.photo_filename) }}"
+            alt="{{ v.vehicle_name }}"
+            loading="lazy"
+          />
+          {% else %}
+          <div class="vehicle-photo-placeholder">
+            <i class="icon-motorbike"></i>
+            <span>No Image</span>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="vehicle-card-body">
+          <div class="vehicle-card-title-row">
+            <div>
+              <h3 class="vehicle-name">{{ v.vehicle_name }}</h3>
+              <div class="vehicle-year">Model {{ v.model_year or "-" }}</div>
+            </div>
+            <div class="vehicle-price">
+              {% if v.selling_price %}
+              &#8377;{{ "{:,.0f}".format(v.selling_price) }}
+              {% else %}
+              --
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="vehicle-card-meta">
+            <div class="vehicle-meta-box">
+              <span>Number</span>
+              <strong>{{ v.vehicle_number or "-" }}</strong>
+            </div>
+            <div class="vehicle-meta-box">
+              <span>Purchase</span>
+              <strong>{{ (v.purchase_mode or "-")|capitalize }}</strong>
+            </div>
+            <div class="vehicle-meta-box">
+              <span>Registration</span>
+              <strong>{{ v.registration_no or "-" }}</strong>
+            </div>
+            <div class="vehicle-meta-box">
+              <span>Owners</span>
+              <strong>{{ v.owners or "-" }}</strong>
+            </div>
+          </div>
+
+          <div class="vehicle-card-footer">
+            <div class="vehicle-price-bucket">{{ v.price_bucket }}</div>
+            <div class="vehicle-open-link">Open Details</div>
+          </div>
+        </div>
+      </article>
+    </a>
+    {% endfor %}
+  </section>
+  {% else %}
+  <section class="empty-state">
+    <h3>No inventory items yet</h3>
+    <p>Add a vehicle in Inventory and it will automatically appear here.</p>
+  </section>
+  {% endif %}
+
+  <section class="empty-state gallery-hidden" id="galleryEmptyState">
+    <h3>No matching vehicles</h3>
+    <p>Try changing the brand, budget, or search text.</p>
+  </section>
+
+  <section class="compare-bar" id="compareBar">
+    <div class="compare-bar-meta">
+      <span class="compare-badge"><span id="compareCount">0</span> selected</span>
+      <span class="compare-selected-list" id="compareSelectedList">Select at least two bikes to compare.</span>
+    </div>
+    <div class="compare-bar-actions">
+      <button class="btn ghost" type="button" id="clearCompareBtn">Clear</button>
+      <a class="btn primary" href="#" id="openCompareBtn">Compare Details</a>
+    </div>
+  </section>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const modeTabs = Array.from(document.querySelectorAll("[data-filter-mode]"));
+  const modeBodies = Array.from(document.querySelectorAll("[data-filter-body]"));
+  const statusChips = Array.from(document.querySelectorAll("[data-status-chip]"));
+  const cards = Array.from(document.querySelectorAll("[data-gallery-card]"));
+  const visibleCount = document.getElementById("galleryVisibleCount");
+  const emptyState = document.getElementById("galleryEmptyState");
+  const compareBar = document.getElementById("compareBar");
+  const compareCount = document.getElementById("compareCount");
+  const compareSelectedList = document.getElementById("compareSelectedList");
+  const openCompareBtn = document.getElementById("openCompareBtn");
+  const clearCompareBtn = document.getElementById("clearCompareBtn");
+  const compareCheckboxes = Array.from(document.querySelectorAll("[data-compare-checkbox]"));
+  const compareTrigger = document.getElementById("galleryCompareTrigger");
+  const galleryShell = document.querySelector(".gallery-shell");
+  const sellTrigger = document.getElementById("gallerySellTrigger");
+  const sellForm = document.getElementById("gallerySellForm");
+
+  let currentMode = "brand";
+  let chipStatus = "";
+  const selectedIds = new Set();
+  let compareMode = false;
+  let sellMode = sellForm ? sellForm.classList.contains("open") : false;
+
+  function setSellMode(enabled) {
+    sellMode = Boolean(enabled);
+    if (sellForm) {
+      sellForm.classList.toggle("open", sellMode);
+    }
+    if (sellTrigger) {
+      sellTrigger.textContent = sellMode ? "Close Sell" : "Add Sell";
+    }
+  }
+
+  function setCompareMode(enabled) {
+    compareMode = Boolean(enabled);
+    if (galleryShell) {
+      galleryShell.classList.toggle("gallery-compare-mode", compareMode);
+    }
+    if (compareTrigger) {
+      compareTrigger.classList.toggle("active", compareMode);
+      compareTrigger.textContent = compareMode ? "Close Compare" : "Compare";
+    }
+    if (!compareMode) {
+      compareCheckboxes.forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+      selectedIds.clear();
+      if (compareBar) compareBar.classList.remove("visible");
+      if (compareCount) compareCount.textContent = "0";
+      if (compareSelectedList) compareSelectedList.textContent = "Select at least two bikes to compare.";
+      if (openCompareBtn) {
+        openCompareBtn.classList.toggle("disabled", true);
+        openCompareBtn.setAttribute("aria-disabled", "true");
+        openCompareBtn.href = "#";
+      }
+    } else {
+      syncCompareBar();
+    }
+  }
+
+  function syncCompareBar() {
+    if (!compareMode) {
+      if (compareBar) compareBar.classList.remove("visible");
+      return;
+    }
+    const selectedCards = cards.filter((card) => {
+      const checkbox = card.querySelector("[data-compare-checkbox]");
+      return checkbox && checkbox.checked;
+    });
+    selectedIds.clear();
+    selectedCards.forEach((card) => {
+      const checkbox = card.querySelector("[data-compare-checkbox]");
+      if (checkbox) selectedIds.add(checkbox.value);
+    });
+    const count = selectedIds.size;
+    if (compareCount) compareCount.textContent = String(count);
+    if (compareSelectedList) {
+      const names = selectedCards
+        .map((card) => card.querySelector(".vehicle-name")?.textContent?.trim())
+        .filter(Boolean);
+      compareSelectedList.textContent = count >= 2
+        ? names.join(", ")
+        : "Select at least two bikes to compare.";
+    }
+    if (compareBar) compareBar.classList.toggle("visible", count > 0);
+    if (openCompareBtn) {
+      openCompareBtn.classList.toggle("disabled", count < 2);
+      openCompareBtn.setAttribute("aria-disabled", count < 2 ? "true" : "false");
+      openCompareBtn.href = count >= 2 ? `/gallery/compare?ids=${Array.from(selectedIds).join(",")}` : "#";
+    }
+  }
+
+  function setMode(mode) {
+    currentMode = mode === "price" ? "price" : "brand";
+    modeTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.filterMode === currentMode));
+    modeBodies.forEach((body) => body.classList.toggle("active", body.dataset.filterBody === currentMode));
+    applyFilters();
+  }
+
+  function getValue(id) {
+    const el = document.getElementById(id);
+    return el ? (el.value || "").trim().toLowerCase() : "";
+  }
+
+  function applyFilters() {
+    const textQuery = currentMode === "brand" ? getValue("gallerySearchInput") : getValue("galleryPriceSearchInput");
+    const brand = currentMode === "brand" ? getValue("galleryBrandInput") : getValue("galleryPriceBrandInput");
+    const status = chipStatus;
+    const mode = currentMode === "brand" ? getValue("galleryModeInput") : "";
+    const bucket = currentMode === "price" ? getValue("galleryPriceBucketInput") : "";
+    const sortValue = currentMode === "brand" ? getValue("gallerySortInput") : getValue("galleryPriceSortInput");
+
+    let shown = 0;
+    cards.forEach((card) => {
+      const matchesText = !textQuery || (card.dataset.search || "").includes(textQuery);
+      const matchesBrand = !brand || card.dataset.brand === brand;
+      const matchesStatus = !status || card.dataset.status === status;
+      const matchesMode = !mode || card.dataset.mode === mode;
+      const matchesBucket = !bucket || card.dataset.bucket === bucket;
+      const visible = matchesText && matchesBrand && matchesStatus && matchesMode && matchesBucket;
+      card.classList.toggle("gallery-hidden", !visible);
+      if (visible) shown += 1;
+    });
+
+    const sortedCards = cards
+      .slice()
+      .sort((a, b) => {
+        const priceA = parseFloat(a.dataset.price || "0");
+        const priceB = parseFloat(b.dataset.price || "0");
+        const yearA = parseInt(a.dataset.year || "0", 10);
+        const yearB = parseInt(b.dataset.year || "0", 10);
+        const orderA = parseInt(a.dataset.order || "0", 10);
+        const orderB = parseInt(b.dataset.order || "0", 10);
+
+        if (sortValue === "price_low") return priceA - priceB;
+        if (sortValue === "price_high") return priceB - priceA;
+        if (sortValue === "year_high") return yearB - yearA || orderA - orderB;
+        return orderA - orderB;
+      });
+
+    const grid = document.getElementById("galleryGrid");
+    if (grid) {
+      sortedCards.forEach((card) => grid.appendChild(card));
+    }
+    if (visibleCount) {
+      visibleCount.textContent = String(shown);
+    }
+    if (emptyState) {
+      emptyState.classList.toggle("gallery-hidden", shown !== 0);
+    }
+  }
+
+  modeTabs.forEach((tab) => {
+    tab.addEventListener("click", () => setMode(tab.dataset.filterMode));
+  });
+
+  if (compareTrigger) {
+    compareTrigger.addEventListener("click", () => {
+      setCompareMode(!compareMode);
+    });
+  }
+
+  if (sellTrigger) {
+    sellTrigger.addEventListener("click", () => {
+      setSellMode(!sellMode);
+    });
+  }
+
+  compareCheckboxes.forEach((checkbox) => {
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+    checkbox.addEventListener("change", syncCompareBar);
+  });
+
+  document.querySelectorAll("[data-compare-toggle]").forEach((toggle) => {
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  });
+
+  cards.forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("[data-compare-toggle]")) {
+        event.preventDefault();
+      }
+    });
+  });
+
+  if (clearCompareBtn) {
+    clearCompareBtn.addEventListener("click", () => {
+      compareCheckboxes.forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+      syncCompareBar();
+    });
+  }
+
+  if (openCompareBtn) {
+    openCompareBtn.addEventListener("click", (event) => {
+      if (selectedIds.size < 2) {
+        event.preventDefault();
+      }
+    });
+  }
+
+  statusChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      chipStatus = chip.dataset.statusChip || "";
+      statusChips.forEach((item) => item.classList.toggle("active", item === chip));
+      applyFilters();
+    });
+  });
+
+  [
+    "gallerySearchInput",
+    "galleryBrandInput",
+    "galleryModeInput",
+    "gallerySortInput",
+    "galleryPriceSearchInput",
+    "galleryPriceBucketInput",
+    "galleryPriceBrandInput",
+    "galleryPriceSortInput",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", applyFilters);
+    el.addEventListener("change", applyFilters);
+  });
+
+  document.querySelectorAll("[data-gallery-search]").forEach((button) => {
+    button.addEventListener("click", applyFilters);
+  });
+
+  applyFilters();
+  setCompareMode(false);
+  setSellMode(sellMode);
+});
+</script>
+{% endblock %}

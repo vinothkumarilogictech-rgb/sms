@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>License Generator</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f5f5f5;
+            text-align: center;
+            margin-top: 50px;
+        }
+        .box {
+            background: white;
+            padding: 30px;
+            width: 400px;
+            margin: auto;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #ccc;
+        }
+        input, button {
+            padding: 8px;
+            width: 90%;
+            margin: 10px 0;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        textarea {
+            width: 95%;
+            height: 100px;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>License Generator</h2>
+
+    <form method="POST">
+        <label>Machine ID</label><br>
+        <input type="text" name="machine_id" value="{{ machine_id }}"><br>
+
+        <label>Expiry Date</label><br>
+        <input type="date" name="expiry_date" required><br>
+
+        <button type="submit">Generate License</button>
+    </form>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if license_code %}
+        <h3>License Code</h3>
+        <textarea readonly>{{ license_code }}</textarea>
+    {% endif %}
+</div>
+
+</body>
+</html>

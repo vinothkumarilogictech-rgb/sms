@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <!-- <h1>Order : {{ next_order_code or (next_order_id|fmt_id if next_order_id else "NEW") }}</h1> -->
+     <!-- <h1>Order : {{ next_order_code if next_order_code else "" }}</h1> -->
+    <!-- <p>Sell items directly from inventory with clear quantities and pricing.</p> -->
+  </div>
+  <div class="order-type-tabs">
+    <a class="btn ghost btn-compact"
+      href="{{ url_for('order_new', customer_id=prefill_customer_id) }}">
+      Tailoring Order
+    </a>
+
+    <a class="btn ghost btn-compact"
+      href="{{ url_for('order_new_alteration', customer_id=prefill_customer_id) }}">
+      Alteration Order
+    </a>
+
+    <a class="btn ghost btn-compact active"
+      href="{{ url_for('order_new_material', customer_id=prefill_customer_id) }}">
+      Material Purchase
+    </a>
+  </div>
+
+</div>
+
+{% if error %}
+  <div class="alert">{{ error }}</div>
+{% endif %}
+
+<form class="stack" method="post">
+  <input type="hidden" name="customer_id" value="{{ prefill_customer_id or '' }}">
+  <section class="card">
+    <div class="card-header">
+      <h3>Material Items</h3>
+      <button class="btn ghost btn-compact" type="button" id="add-material-row">+ Add item</button>
+    </div>
+    <div class="material-table material-sales" id="material-table">
+      <div class="material-row material-head">
+        <div>Item Code</div>
+        <div>Material Name</div>
+        <div>Available Stock</div>
+        <div>Quantity</div>
+        <div>Unit Price</div>
+        <div>Total Amount</div>
+        <div></div>
+      </div>
+      <div class="material-row" data-base-stock="0">
+        <div>
+          <input type="text" name="material_code" class="material-code-input" list="inventory-code-list" placeholder="Code" />
+          <input type="hidden" name="material_item_id" class="material-item-id" />
+        </div>
+        <div><input type="text" class="material-name" readonly /></div>
+        <div><input type="number" class="material-stock" readonly value="0" /></div>
+        <div><input type="number" step="0.01" name="material_qty" value="0" min="0" /></div>
+        <div><input type="number" step="0.01" name="material_unit_price" value="0" min="0" /></div>
+        <div><input type="number" step="0.01" class="material-line-total" readonly value="0" /></div>
+        <div><button type="button" class="btn ghost material-remove">x</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card cost-card payment-simple">
+    <div class="order-header-grid align-top">
+      <div>
+        <div class="grid order-form-grid order-form-grid-three order-form-grid-tight">
+          <label>
+            Customer Name
+            <!-- <input type="text" name="name" required /> -->
+              <input type="text"
+                name="name"
+                value="{{ prefill_name or '' }}"
+                {% if prefill_customer_id %}readonly{% endif %}
+                required />
+          </label>
+          <label>
+            Phone Number
+            <!-- <input type="text" name="phone" required /> -->
+              <input type="text"
+                name="phone"
+                value="{{ prefill_phone or '' }}"
+                inputmode="tel"
+                maxlength="16"
+                pattern="^\+?[0-9]{1,15}$"
+                oninput="this.value=this.value.replace(/[^0-9+]/g,'').replace(/(?!^)\+/g,'');const d=this.value.replace(/\D/g,'').slice(0,15);this.value=(this.value.startsWith('+')?'+':'')+d;"
+                {% if prefill_customer_id %}readonly{% endif %}
+                required />
+          </label>
+          <label>
+            Order Date
+            <input type="text" value="{{ today_date }}" readonly />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="cost-top">
+      <div class="cost-box">
+        <label>Total Cost</label>
+        <div class="cost-input">
+          <span>₹</span>
+          <input type="number" step="0.01" name="wage_cost" placeholder="00" data-cost="wage" min="0.01" required readonly />
+        </div>
+      </div>
+      <div class="cost-input payment-method-top-input">
+        <select name="payment_method" aria-label="Payment method">
+          <option value="Cash" selected>Cash</option>
+          <option value="GPay">GPay</option>
+          <option value="Card">Card</option>
+        </select>
+      </div>
+      <div class="cost-summary">
+        <span>Subtotal</span>
+        <strong id="subtotal-value">₹ 0</strong>
+      </div>
+    </div>
+
+    <div class="cost-rows">
+      <div class="cost-row">
+        <div class="cost-label">Discount</div>
+        <div class="cost-input compact discount-toggle discount-box">
+          <input type="hidden" name="discount_type" value="percent" />
+          <input type="number" step="0.01" name="discount" placeholder="00" data-cost="discount" />
+          <div class="discount-switch">
+            <button type="button" class="disc-btn active" data-mode="percent">%</button>
+            <button type="button" class="disc-btn" data-mode="amount">₹</button>
+          </div>
+        </div>
+        <div class="cost-value" id="discount-value">₹ 0</div>
+      </div>
+      <div class="cost-row" data-gst-row="main">
+        <div class="cost-label" id="gst-label">GST (0.00%)</div>
+        <div></div>
+        <div class="cost-value" id="gst-value">₹ 0</div>
+      </div>
+      <div class="cost-row" data-gst-row="cgst">
+        <div class="cost-label" id="cgst-label">CGST</div>
+        <div></div>
+        <div class="cost-value" id="cgst-value">₹ 0</div>
+      </div>
+      <div class="cost-row" data-gst-row="sgst">
+        <div class="cost-label" id="sgst-label">SGST</div>
+        <div></div>
+        <div class="cost-value" id="sgst-value">₹ 0</div>
+      </div>
+      <div class="cost-row total">
+        <div class="cost-label">Total</div>
+        <div></div>
+        <div class="cost-value" id="total-value">₹ 0</div>
+      </div>
+      <!-- <div class="cost-row">
+        <div class="cost-label">Advance</div>
+        <div class="cost-input wide">
+          <span>₹</span>
+          <input type="number" step="0.01" name="advance_amount" placeholder="00" data-cost="advance" />
+        </div>
+        <div class="cost-value" id="advance-value">₹ 0</div>
+      </div> -->
+      <!-- <div class="cost-row total">
+        <div class="cost-label">Balance Amount</div>
+        <div></div>
+        <div class="cost-value" id="due-value">₹ 0</div>
+      </div> -->
+    </div>
+    <input type="hidden" name="total_amount" id="total-amount-input" value="0" />
+    <input type="hidden" name="gst_type" id="gst-type-input" value="percent" />
+    <input type="hidden" id="gst-input" value="{{ app_setting('default_gst_percent', '0') }}" />
+    <input type="hidden" name="taxable_amount" id="taxable-amount-input" value="0" />
+    <input type="hidden" name="gst_percent" id="gst-percent-input" value="0" />
+    <input type="hidden" name="gst_amount" id="gst-amount-input" value="0" />
+    <input type="hidden" name="cgst_percent" id="cgst-percent-input" value="0" />
+    <input type="hidden" name="cgst_amount" id="cgst-amount-input" value="0" />
+    <input type="hidden" name="sgst_percent" id="sgst-percent-input" value="0" />
+    <input type="hidden" name="sgst_amount" id="sgst-amount-input" value="0" />
+    <input type="hidden" id="gst-enabled-input" value="{{ '1' if app_setting('gst_enabled', '1') == '1' else '0' }}" />
+    <input type="hidden" name="status" value="In-Progress" />
+    <input type="hidden" name="assigned_tailor" value="" />
+  </section>
+
+  <div class="actions">
+    <button type="submit" class="btn primary">Save</button>
+    <a class="btn ghost" href="{{ url_for('orders') }}">Cancel</a>
+  </div>
+</form>
+
+<template id="material-row-template">
+  <div class="material-row" data-base-stock="0">
+    <div>
+      <input type="text" name="material_code" class="material-code-input" list="inventory-code-list" placeholder="Code" />
+      <input type="hidden" name="material_item_id" class="material-item-id" />
+    </div>
+    <div><input type="text" class="material-name" readonly /></div>
+    <div><input type="number" class="material-stock" readonly value="0" /></div>
+    <div><input type="number" step="0.01" name="material_qty" value="0" min="0" /></div>
+    <div><input type="number" step="0.01" name="material_unit_price" value="0" min="0" /></div>
+    <div><input type="number" step="0.01" class="material-line-total" readonly value="0" /></div>
+    <div><button type="button" class="btn ghost material-remove">x</button></div>
+  </div>
+</template>
+
+<datalist id="inventory-code-list">
+  {% for item in inventory %}
+    {% if item.inventory_code %}
+      <option
+        value="{{ item.inventory_code }}"
+        data-id="{{ item.id }}"
+        data-name="{{ item.name }}"
+        data-qty="{{ item.qty or 0 }}"
+        data-price="{{ item.selling_price or 0 }}"
+      ></option>
+    {% endif %}
+  {% endfor %}
+</datalist>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const table = document.getElementById("material-table");
+    const addBtn = document.getElementById("add-material-row");
+    const template = document.getElementById("material-row-template");
+    const advanceInput = document.querySelector('[data-cost="advance"]');
+    const discountInput = document.querySelector('[data-cost="discount"]');
+    const wageInput = document.querySelector('[data-cost="wage"]');
+    const totalValue = document.getElementById("total-value");
+    const discountValueEl = document.getElementById("discount-value");
+    const advanceValue = document.getElementById("advance-value");
+    const dueValue = document.getElementById("due-value");
+    const subtotalValue = document.getElementById("subtotal-value");
+    const totalInput = document.getElementById("total-amount-input");
+
+    function parseNumber(value) {
+      const parsed = parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value) {
+      return `₹ ${value.toFixed(2)}`;
+    }
+
+    function getDiscountMode() {
+      const hidden = document.querySelector('input[name="discount_type"]');
+      return hidden ? hidden.value : "percent";
+    }
+
+    function getGstMode() {
+      const hidden = document.getElementById("gst-type-input");
+      return hidden && hidden.value === "amount" ? "amount" : "percent";
+    }
+
+    function getTaxableForGstConversion() {
+      let subtotal = 0;
+      table.querySelectorAll(".material-row").forEach((row) => {
+        if (row.classList.contains("material-head")) return;
+        subtotal += updateRow(row);
+      });
+      const discount = parseNumber(discountInput?.value);
+      const mode = getDiscountMode();
+      const rawDiscountValue = mode === "amount" ? discount : subtotal * (discount / 100);
+      const discountValue = Math.max(0, Math.min(rawDiscountValue, subtotal));
+      return Math.max(0, subtotal - discountValue);
+    }
+
+    function updateRow(row) {
+      const codeInput = row.querySelector(".material-code-input");
+      const hiddenId = row.querySelector(".material-item-id");
+      const nameInput = row.querySelector(".material-name");
+      const qtyInput = row.querySelector('input[name="material_qty"]');
+      const priceInput = row.querySelector('input[name="material_unit_price"]');
+      const stockInput = row.querySelector(".material-stock");
+      const lineTotalInput = row.querySelector(".material-line-total");
+
+      if (codeInput) {
+        const code = codeInput.value.trim();
+        const option = document.querySelector(`#inventory-code-list option[value="${code}"]`);
+        if (option) {
+          const itemId = option.dataset.id || "";
+          const itemName = option.dataset.name || "";
+          const qty = parseNumber(option.dataset.qty);
+          const price = parseNumber(option.dataset.price);
+          if (hiddenId) hiddenId.value = itemId;
+          if (nameInput) nameInput.value = itemName;
+          row.dataset.baseStock = String(qty);
+          if (stockInput) stockInput.value = qty;
+          if (priceInput && parseNumber(priceInput.value) === 0) {
+            priceInput.value = price.toFixed(2);
+          }
+        }
+      }
+
+      const baseStock = parseNumber(row.dataset.baseStock || "0");
+      const qtyVal = parseNumber(qtyInput?.value);
+      const priceVal = parseNumber(priceInput?.value);
+      const remaining = Math.max(baseStock - qtyVal, 0);
+      if (stockInput) stockInput.value = remaining;
+      const lineTotal = qtyVal * priceVal;
+      if (lineTotalInput) lineTotalInput.value = lineTotal.toFixed(2);
+      return lineTotal;
+    }
+
+    function recalcTotals() {
+      let subtotal = 0;
+      table.querySelectorAll(".material-row").forEach((row) => {
+        if (row.classList.contains("material-head")) return;
+        subtotal += updateRow(row);
+      });
+      if (subtotalValue) subtotalValue.textContent = formatMoney(subtotal);
+      if (wageInput) wageInput.value = subtotal.toFixed(2);
+
+      const discount = parseNumber(discountInput?.value);
+      const mode = getDiscountMode();
+      const rawDiscountValue = mode === "amount" ? discount : subtotal * (discount / 100);
+      const discountValue = Math.max(0, Math.min(rawDiscountValue, subtotal));
+      const taxable = Math.max(0, subtotal - discountValue);
+      const gstEnabled = document.getElementById("gst-enabled-input")?.value === "1";
+      const gstMode = getGstMode();
+      const gstInputValue = parseNumber(document.getElementById("gst-input")?.value);
+      const gstAmount = gstEnabled ? (gstMode === "amount" ? Math.max(0, gstInputValue) : Math.max(0, taxable * (gstInputValue / 100))) : 0;
+      const gstPercent = gstEnabled ? (gstMode === "amount" ? (taxable > 0 ? (gstAmount * 100) / taxable : 0) : Math.max(0, gstInputValue)) : 0;
+      const cgstPercent = gstPercent / 2;
+      const sgstPercent = gstPercent / 2;
+      const cgstAmount = gstAmount / 2;
+      const sgstAmount = gstAmount / 2;
+      const total = Math.max(0, taxable + gstAmount);
+      const advance = parseNumber(advanceInput?.value);
+      const due = Math.max(total - advance, 0);
+
+      if (discountValueEl) discountValueEl.textContent = formatMoney(discountValue);
+      const gstValueEl = document.getElementById("gst-value");
+      if (gstValueEl) gstValueEl.textContent = formatMoney(gstAmount);
+      const cgstValueEl = document.getElementById("cgst-value");
+      if (cgstValueEl) cgstValueEl.textContent = formatMoney(cgstAmount);
+      const sgstValueEl = document.getElementById("sgst-value");
+      if (sgstValueEl) sgstValueEl.textContent = formatMoney(sgstAmount);
+      const cgstLabel = document.getElementById("cgst-label");
+      const sgstLabel = document.getElementById("sgst-label");
+      const gstLabel = document.getElementById("gst-label");
+      if (gstLabel) gstLabel.textContent = `GST (${gstPercent.toFixed(2)}%)`;
+      if (cgstLabel) cgstLabel.textContent = `CGST (${cgstPercent.toFixed(2)}%)`;
+      if (sgstLabel) sgstLabel.textContent = `SGST (${sgstPercent.toFixed(2)}%)`;
+      if (totalValue) totalValue.textContent = formatMoney(total);
+      if (advanceValue) advanceValue.textContent = formatMoney(advance);
+      if (dueValue) dueValue.textContent = formatMoney(due);
+      if (totalInput) totalInput.value = String(Math.max(0, total));
+      const taxableInput = document.getElementById("taxable-amount-input");
+      if (taxableInput) taxableInput.value = String(Math.max(0, taxable));
+      const gstPercentInput = document.getElementById("gst-percent-input");
+      if (gstPercentInput) gstPercentInput.value = String(Math.max(0, gstPercent));
+      const gstAmountInput = document.getElementById("gst-amount-input");
+      if (gstAmountInput) gstAmountInput.value = String(Math.max(0, gstAmount));
+      const cgstPercentInput = document.getElementById("cgst-percent-input");
+      if (cgstPercentInput) cgstPercentInput.value = String(Math.max(0, cgstPercent));
+      const cgstAmountInput = document.getElementById("cgst-amount-input");
+      if (cgstAmountInput) cgstAmountInput.value = String(Math.max(0, cgstAmount));
+      const sgstPercentInput = document.getElementById("sgst-percent-input");
+      if (sgstPercentInput) sgstPercentInput.value = String(Math.max(0, sgstPercent));
+      const sgstAmountInput = document.getElementById("sgst-amount-input");
+      if (sgstAmountInput) sgstAmountInput.value = String(Math.max(0, sgstAmount));
+    }
+
+    document.querySelectorAll(".discount-switch .disc-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (btn.closest("#gst-switch")) return;
+        const mode = btn.dataset.mode;
+        const hidden = document.querySelector('input[name="discount_type"]');
+        if (hidden) hidden.value = mode;
+        btn.parentElement.querySelectorAll(".disc-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        recalcTotals();
+      });
+    });
+    document.querySelectorAll("#gst-switch .disc-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode;
+        const currentMode = getGstMode();
+        if (mode !== currentMode) {
+          const gstInputEl = document.getElementById("gst-input");
+          const currentValue = parseNumber(gstInputEl?.value);
+          const taxable = getTaxableForGstConversion();
+          if (gstInputEl) {
+            if (currentMode === "percent" && mode === "amount") {
+              gstInputEl.value = String(Math.max(0, taxable * (currentValue / 100)));
+            } else if (currentMode === "amount" && mode === "percent") {
+              const percent = taxable > 0 ? (currentValue * 100) / taxable : 0;
+              gstInputEl.value = String(Math.max(0, percent));
+            }
+          }
+        }
+        const hidden = document.getElementById("gst-type-input");
+        if (hidden) hidden.value = mode;
+        btn.parentElement.querySelectorAll(".disc-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        recalcTotals();
+      });
+    });
+    const gstInput = document.getElementById("gst-input");
+    const gstEnabled = document.getElementById("gst-enabled-input")?.value === "1";
+    if (!gstEnabled) {
+      document.querySelectorAll('[data-gst-row]').forEach((row) => {
+        row.style.display = "none";
+      });
+      if (gstInput) gstInput.value = "0";
+      const gstTypeInput = document.getElementById("gst-type-input");
+      if (gstTypeInput) gstTypeInput.value = "percent";
+    }
+    if (gstInput) {
+      gstInput.addEventListener("input", recalcTotals);
+      gstInput.addEventListener("change", recalcTotals);
+    }
+    document.querySelectorAll("[data-cost]").forEach((input) => {
+      input.addEventListener("input", recalcTotals);
+      input.addEventListener("change", recalcTotals);
+    });
+
+    function wireRow(row) {
+      row.querySelectorAll("input, select").forEach((el) => {
+        el.addEventListener("input", recalcTotals);
+        el.addEventListener("change", recalcTotals);
+      });
+      const remove = row.querySelector(".material-remove");
+      if (remove) {
+        remove.addEventListener("click", () => {
+          row.remove();
+          recalcTotals();
+        });
+      }
+    }
+
+    if (addBtn && table && template) {
+      addBtn.addEventListener("click", () => {
+        const clone = template.content.cloneNode(true);
+        const row = clone.querySelector(".material-row");
+        if (row) wireRow(row);
+        table.appendChild(clone);
+        recalcTotals();
+      });
+    }
+
+    table.querySelectorAll(".material-row").forEach((row) => {
+      if (row.classList.contains("material-head")) return;
+      wireRow(row);
+    });
+
+    recalcTotals();
+  });
+</script>
+{% endblock %}

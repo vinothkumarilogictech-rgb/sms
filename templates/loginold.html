@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login - iLogicTech</title>
+    <style>
+      :root {
+        --bg: #f5f7fb;
+        --panel: #eef2f8;
+        --line: #d9dfeb;
+        --ink: #0f172a;
+        --muted: #5b6475;
+        --input-bg: #e8eef7;
+        --input-border: #b8c4d8;
+        --brand: #b91c1c;
+        --brand-hover: #991b1b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+
+      .login-shell {
+        height: 100vh;
+        display: block;
+        overflow: hidden;
+      }
+
+      .login-main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100vh;
+      }
+
+      .login-visual {
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        display: block;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .visual-graphic {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .login-form-panel {
+        display: grid;
+        place-items: center;
+        padding: 16px 24px 20px;
+        background-color: #f4f6fb;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .login-form-panel::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: url("{{ url_for('static', filename='loginbg.jpg') }}") center / cover no-repeat;
+        filter: blur(12px);
+        opacity: 0.7;
+        transform: scale(1.08);
+        z-index: 0;
+      }
+
+      .login-form-wrap {
+        width: min(420px, 100%);
+        margin-top: 0;
+        position: relative;
+        z-index: 2;
+        padding: 22px 18px 20px;
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(229, 231, 235, 0.86) 100%);
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        box-shadow:
+          0 18px 35px rgba(15, 23, 42, 0.22),
+          inset 0 1px 0 rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(2px);
+      }
+
+      .login-accent-nool {
+        position: absolute;
+        top: -62px;
+        right: -42px;
+        width: 112px;
+        height: auto;
+        opacity: 0.88;
+        border-radius: 12px;
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      .login-brand {
+        display: block;
+        width: min(150px, 46%);
+        max-height: 110px;
+        height: auto;
+        margin: 0 auto 8px;
+        object-fit: contain;
+      }
+
+      h1 {
+        margin: 0 0 20px 0;
+        font-size: clamp(2rem, 2.8vw, 2.6rem);
+        font-weight: 700;
+        line-height: 1.1;
+        color: #b91c1c;
+        text-align: center;
+      }
+
+      .subtitle {
+        margin: 0 0 30px 0;
+        font-size: 25px;
+        color: var(--muted);
+      }
+
+      .error {
+        background: #fff1f2;
+        border: 1px solid #fecdd3;
+        color: #be123c;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        font-size: 14px;
+      }
+
+      .field {
+        margin-bottom: 16px;
+      }
+
+      .field input {
+        width: 100%;
+        height: 52px;
+        border: 1px solid var(--input-border);
+        border-radius: 8px;
+        background: var(--input-bg);
+        padding: 0 14px;
+        font-size: 21px;
+        color: #111827;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.7),
+          0 8px 16px rgba(15, 23, 42, 0.16);
+      }
+
+      .field input:focus {
+        outline: none;
+        border-color: #94a3b8;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22);
+      }
+
+      .password-wrap {
+        position: relative;
+      }
+
+      .password-wrap input {
+        padding-right: 46px;
+      }
+
+      .password-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 30px;
+        height: 30px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #334155;
+        cursor: pointer;
+      }
+
+      .password-toggle svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+      }
+
+      .forgot-wrap {
+        margin: 8px 0 16px;
+        text-align: right;
+      }
+
+      .forgot-wrap a {
+        color: #11a675;
+        text-decoration: none;
+        font-size: 29px;
+      }
+
+      .forgot-wrap a:hover {
+        text-decoration: underline;
+      }
+
+      .submit-btn {
+        width: 100%;
+        height: 50px;
+        border: none;
+        border-radius: 8px;
+        background: var(--brand);
+        color: #ffffff;
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        box-shadow:
+          0 10px 20px rgba(153, 27, 27, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+
+      .submit-btn:hover {
+        background: var(--brand-hover);
+      }
+
+      .submit-btn:active {
+        transform: translateY(1px);
+      }
+
+      .login-powered-by {
+        position: absolute;
+        left: 50%;
+        bottom: 20px;
+        transform: translateX(-50%);
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.01em;
+        z-index: 1;
+      }
+
+      .login-powered-logo {
+        display: block;
+        width: 136px;
+        height: 40px;
+        object-fit: contain;
+        border-radius: 8px;
+        filter: brightness(1.18) contrast(1.07) saturate(1.06);
+      }
+
+      @media (max-width: 980px) {
+        .login-main {
+          grid-template-columns: 1fr;
+        }
+
+        .login-visual {
+          display: none;
+        }
+
+        .login-form-panel {
+          padding: 26px 16px;
+        }
+
+        .login-accent-nool {
+          right: -10px;
+          top: -46px;
+          width: 82px;
+        }
+
+        .login-powered-by {
+          bottom: 12px;
+          font-size: 13px;
+        }
+
+        .login-powered-logo {
+          width: 124px;
+          height: 36px;
+        }
+
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-shell">
+      <main class="login-main">
+        <section class="login-visual" aria-hidden="true">
+          <img class="visual-graphic" src="{{ url_for('static', filename='OIL3.jpg') }}" alt="Premium Bike Consultancy" />
+        </section>
+
+        <section class="login-form-panel">
+          <div class="login-form-wrap">
+            <img class="login-accent-nool" src="{{ url_for('static', filename='nool.png') }}" alt="" aria-hidden="true" />
+            <img class="login-brand" src="{{ url_for('static', filename='loginlogo4.jpeg') }}" alt="Premium Bike logo" />
+            <h1>Welcome </h1>
+            <!-- <p class="subtitle">Sign in to your company account</p> -->
+
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+
+            <form method="post">
+              <input type="hidden" name="next" value="{{ next_url or url_for('dashboard') }}" />
+
+              <div class="field">
+                <select id="branch_code" name="branch_code" required>
+                  {% for branch in branches or [] %}
+                  <option value="{{ branch.code }}" {% if selected_branch_code == branch.code %}selected{% endif %}>{{ branch.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="field">
+                <input id="username" name="username" type="text" placeholder="Username" required />
+              </div>
+
+              <div class="field">
+                <div class="password-wrap">
+                  <input id="password" name="password" type="password" placeholder="Password" required />
+                  <button class="password-toggle" id="passwordToggle" type="button" aria-label="Show password" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- <div class="forgot-wrap">
+                <a href="#" onclick="return false;">Forgot your password?</a>
+              </div> -->
+
+              <button class="submit-btn" type="submit">LOGIN</button>
+            </form>
+          </div>
+          <p class="login-powered-by">Powered by @iLogicTech</p>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        const passwordInput = document.getElementById("password");
+        const toggleBtn = document.getElementById("passwordToggle");
+        if (!passwordInput || !toggleBtn) return;
+        toggleBtn.addEventListener("click", function () {
+          const show = passwordInput.type === "password";
+          passwordInput.type = show ? "text" : "password";
+          toggleBtn.setAttribute("aria-pressed", show ? "true" : "false");
+          toggleBtn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .gallery-grid {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+  }
+  @media (max-width: 900px) {
+    .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 901px) {
+    .gallery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  .vehicle-card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .vehicle-card {
+    position: relative;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .vehicle-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    transform: translateY(-2px);
+  }
+  .vehicle-photo {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    display: block;
+    background: #f0f0f0;
+  }
+  .vehicle-photo-placeholder {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #f4f6f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #bbb;
+    font-size: 2.5rem;
+  }
+  .vehicle-info {
+    padding: 10px 12px 12px;
+  }
+  .vehicle-name {
+    font-weight: 700;
+    font-size: 0.97rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .vehicle-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    gap: 6px;
+  }
+  .vehicle-number {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .vehicle-price {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .vehicle-year {
+    font-size: 0.78rem;
+    color: #999;
+    margin-top: 2px;
+  }
+  .status-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    letter-spacing: 0.02em;
+  }
+  .status-available { background: #dcfce7; color: #15803d; }
+  .status-sold      { background: #fee2e2; color: #b91c1c; }
+  .status-hold      { background: #fef9c3; color: #92400e; }
+  .status-default   { background: #e5e7eb; color: #374151; }
+
+  .gallery-tab-panel {
+    display: none;
+    margin-top: 0.8rem;
+  }
+  .gallery-tab-panel.active {
+    display: block;
+  }
+  .gallery-tab-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .gallery-tab-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .vehicle-count {
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .gallery-tabs {
+    margin-bottom: 0.35rem;
+  }
+  .gallery-tabs .tab-chip {
+    border-radius: 10px 10px 0 0;
+  }
+  .empty-state {
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: #666;
+    background: #fff;
+    text-align: center;
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>Vehicle Gallery</h1>
+  </div>
+  <a class="btn primary" href="{{ url_for('inventory_add') }}">+ Add Vehicle</a>
+</div>
+
+{% set all_tabs = [
+  ('all',       'All',       vehicles),
+  ('available', 'Available', vehicles | selectattr('status', 'equalto', 'available') | list),
+  ('hold',      'Hold',      vehicles | selectattr('status', 'equalto', 'hold')      | list),
+  ('sold',      'Sold',      vehicles | selectattr('status', 'equalto', 'sold')      | list)
+] %}
+
+{% set active_tab = request.args.get('status', 'all') %}
+
+{% if vehicles %}
+  <div class="tabs-bar gallery-tabs" role="tablist" aria-label="Vehicle status tabs">
+    {% for tab_id, tab_label, tab_items in all_tabs %}
+      <button
+        class="tab-chip {% if active_tab == tab_id %}active{% endif %}"
+        type="button"
+        data-gallery-tab="{{ tab_id }}"
+      >
+        {{ tab_label }}
+        <span style="margin-left:4px;font-weight:500;opacity:0.65;">({{ tab_items | length }})</span>
+      </button>
+    {% endfor %}
+  </div>
+
+  {% for tab_id, tab_label, tab_items in all_tabs %}
+    <section
+      class="gallery-tab-panel {% if active_tab == tab_id %}active{% endif %}"
+      data-gallery-panel="{{ tab_id }}"
+    >
+      <div class="gallery-tab-head">
+        <div class="gallery-tab-title">{{ tab_label }} Vehicles</div>
+        <span class="vehicle-count">{{ tab_items | length }} vehicle{{ 's' if tab_items | length != 1 }}</span>
+      </div>
+
+      {% if tab_items %}
+        <div class="gallery-grid" data-panel-id="{{ tab_id }}">
+          {% for v in tab_items %}
+            {% set caption = v.vehicle_name ~ (' ' ~ v.model_year if v.model_year else '') %}
+
+            <a class="vehicle-card-link" href="{{ url_for('vehicle_detail', vehicle_id=v['id']) }}">
+              <article class="vehicle-card">
+
+                {% set status_class = 'status-' ~ (v.status|lower if v.status else 'default') %}
+                <span class="status-badge {{ status_class }}">{{ v.status or 'Unknown' }}</span>
+
+                {% if v.photo_filename %}
+                  <img
+                    class="vehicle-photo"
+                    src="{{ url_for('static', filename='uploads/vehicles/' ~ v.photo_filename) }}"
+                    alt="{{ caption }}"
+                    loading="lazy"
+                  >
+                {% else %}
+                  <div class="vehicle-photo-placeholder">
+                    <i class="icon-motorbike"></i>
+                  </div>
+                {% endif %}
+
+                <div class="vehicle-info">
+                  <div class="vehicle-name">{{ v.vehicle_name }}</div>
+                  {% if v.model_year %}<div class="vehicle-year">{{ v.model_year }}</div>{% endif %}
+                  <div class="vehicle-meta">
+                    <span class="vehicle-number">{{ v.vehicle_number or '—' }}</span>
+                    {% if v.selling_price %}
+                      <span class="vehicle-price">₹{{ '%.0f'|format(v.selling_price) }}</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+              </article>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">No {{ tab_label | lower }} vehicles yet.</div>
+      {% endif %}
+    </section>
+  {% endfor %}
+
+{% else %}
+  <div class="empty-state">No vehicles in inventory yet. <a href="{{ url_for('inventory_add') }}">Add your first vehicle →</a></div>
+{% endif %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const tabs   = document.querySelectorAll("[data-gallery-tab]");
+  const panels = document.querySelectorAll("[data-gallery-panel]");
+
+  function setActive(id) {
+    tabs.forEach(t   => t.classList.toggle("active", t.dataset.galleryTab === id));
+    panels.forEach(p => p.classList.toggle("active", p.dataset.galleryPanel === id));
+    const url = new URL(window.location.href);
+    url.searchParams.set("status", id);
+    window.history.replaceState({}, "", url.toString());
+  }
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => setActive(tab.dataset.galleryTab));
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,11 @@
+pip install -r requirements.txt
+pyinstaller DesktopClient.spec --clean --noconfirm
+
+Output EXE:
+dist\BikeApplication.exe
+
+Default server URL:
+desktop_constants.py -> DEFAULT_SERVER_URL
+
+Optional developer override:
+.env -> REMOTE_APP_URL

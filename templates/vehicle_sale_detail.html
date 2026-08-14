@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="sell-detail-shell" style="display:grid;gap:16px;">
+  <div class="detail-head">
+    <div>
+      <h1 style="margin:0;">Vehicle Sale Detail</h1>
+      <p class="muted" style="margin:6px 0 0;">Customer details, bike details, documents, payment summary, and expenses for this sale.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="btn primary" href="{{ url_for('order_new', sale_id=sale.id if sale else '') }}">Edit</a>
+      <a class="btn ghost" href="{{ url_for('orders') }}">Back</a>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="detail-grid">
+      <div class="detail-left">
+        <div class="detail-field"><span>Customer Name</span><input type="text" value="{{ sale.customer_name if sale else order.name }}" readonly></div>
+        <div class="detail-field"><span>Customer ID</span><input type="text" value="{{ sale.customer_identifier if sale else '-' }}" readonly></div>
+        <div class="detail-field"><span>Phone Number</span><input type="text" value="{{ sale.customer_phone if sale else order.phone }}" readonly></div>
+        <div class="detail-field"><span>Address</span><input type="text" value="{{ sale.customer_address if sale else '-' }}" readonly></div>
+      </div>
+      <div class="detail-right">
+        <div class="detail-row"><span>Order ID</span><strong>{{ order.order_no or order.invoice_id or order.id }}</strong></div>
+        <div class="detail-row"><span>Status</span><strong>{{ order.status or '-' }}</strong></div>
+        <div class="detail-row"><span>Delivery Date</span><strong>{{ order.due_date or '-' }}</strong></div>
+        <div class="detail-row"><span>Payment Method</span><strong>{{ sale.payment_method if sale else '-' }}</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Bike Details</h3>
+    <div class="veh-view-grid" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+      <div class="veh-view-cell"><div class="veh-view-label">Bike Name</div><div class="veh-view-value">{{ sale.vehicle_name if sale else '-' }}</div></div>
+      <div class="veh-view-cell"><div class="veh-view-label">Vehicle Number</div><div class="veh-view-value">{{ sale.vehicle_number if sale else '-' }}</div></div>
+      <div class="veh-view-cell"><div class="veh-view-label">Model Year</div><div class="veh-view-value">{{ sale.model_year if sale else '-' }}</div></div>
+      <div class="veh-view-cell"><div class="veh-view-label">Chassis No</div><div class="veh-view-value">{{ sale.registration_no if sale else '-' }}</div></div>
+      <div class="veh-view-cell"><div class="veh-view-label">Current FC</div><div class="veh-view-value">{{ sale.current_fc if sale else '-' }}</div></div>
+      <div class="veh-view-cell"><div class="veh-view-label">Owners</div><div class="veh-view-value">{{ sale.owners if sale else '-' }}</div></div>
+    </div>
+
+    {% if sale and sale.gallery_images %}
+    <div class="sell-gallery" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px;">
+      {% for image_name in sale.gallery_images %}
+      <img src="{{ url_for('static', filename='uploads/vehicles/' ~ image_name) }}" alt="Bike image {{ loop.index }}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:16px;border:1px solid var(--line);" />
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h3>Documents</h3>
+    <div class="veh-files" style="display:grid;gap:10px;">
+      {% if sale and sale.customer_id_proof_filename %}
+      <a class="veh-file" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Customer ID Proof</a>
+      {% endif %}
+      {% if sale and sale.rc_book_filename %}
+      <a class="veh-file" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_filename) }}" target="_blank" rel="noopener">RC Book</a>
+      {% endif %}
+      {% if sale and sale.insurance_document_filename %}
+      <a class="veh-file" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.insurance_document_filename) }}" target="_blank" rel="noopener">Insurance Document</a>
+      {% endif %}
+      {% if sale and sale.puc_certificate_filename %}
+      <a class="veh-file" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.puc_certificate_filename) }}" target="_blank" rel="noopener">PUC Certificate</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Payment Summary</h3>
+    <div class="delivery-grid" style="display:grid;grid-template-columns:1fr auto;gap:10px;">
+      <div>Vehicle Selling Price</div><div>Rs {{ '%.2f'|format(sale.selling_price or 0) if sale else '0.00' }}</div>
+      <div>Repair Cost</div><div>Rs {{ '%.2f'|format(sale.repair_cost or 0) if sale else '0.00' }}</div>
+      <div>Subtotal</div><div>Rs {{ '%.2f'|format(sale.subtotal_amount or 0) if sale else '0.00' }}</div>
+      <div>Discount</div><div>Rs {{ '%.2f'|format(sale.discount_amount or 0) if sale else '0.00' }}</div>
+      <div>GST</div><div>Rs {{ '%.2f'|format(sale.gst_amount or 0) if sale else '0.00' }}{% if sale and (sale.gst_percent or 0) > 0 %} ({{ '%.2f'|format(sale.gst_percent or 0) }}%){% endif %}</div>
+      <div>Advance</div><div>Rs {{ '%.2f'|format(sale.advance_amount or 0) if sale else '0.00' }}</div>
+      <div><strong>Total Amount</strong></div><div><strong>Rs {{ '%.2f'|format(sale.total_amount or order.total_amount or 0) }}</strong></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Expenses</h3>
+    {% if repairs %}
+    <div class="order-item-list">
+      {% for repair in repairs %}
+      <div class="order-item-row" style="display:grid;grid-template-columns:1.3fr auto auto;gap:10px;">
+        <span>{{ repair.description or 'Repair' }}</span>
+        <span>{{ repair.repair_date or repair.created_at or '-' }}</span>
+        <strong>Rs {{ '%.2f'|format(repair.cost or 0) }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No repair expenses found.</p>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

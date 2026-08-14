@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="detail-head">
+  <div>
+    <!-- <div class="detail-title">Order Number: {{ order.id|fmt_order_id(order.order_type) }}</div> -->
+     <!-- <h3>Order Number: {{ order.id|fmt_order_id(order.order_type) }}</h3> -->
+    <!-- <h3>Order Number: {{ order.order_no }}</h3> -->
+  </div>
+  <div class="detail-actions">
+    <a class="btn primary" href="{{ url_for('order_edit', order_id=order.id) }}">Edit Order</a>
+    <button class="btn ghost" type="button" onclick="window.print()">Print (Full)</button>
+    {% if order.order_type == "Tailoring" %}
+    <a class="btn primary" href="{{ url_for('order_print_thermal', order_id=order.id) }}">Print (Thermal Tailor Slip)</a>
+    {% endif %}
+    <a class="btn ghost hover-red-fill" href="{{ url_for('orders') }}">Back</a>
+  </div>
+</div>
+
+<section class="card detail-card">
+  <div class="detail-grid">
+    <div class="detail-left">
+      <div class="detail-field">
+        <span>Customer Name</span>
+        <input type="text" value="{{ order.name }}" readonly />
+      </div>
+      <div class="detail-field">
+        <span>Phone Number</span>
+        <input type="text" value="{{ order.phone }}" readonly />
+      </div>
+      <div class="detail-field">
+        <span>Notes</span>
+        <input type="text" value="{{ order.customer_notes or '' }}" readonly />
+      </div>
+    </div>
+    <div class="detail-right">
+      <div class="detail-row">
+        <span>Order Date</span>
+        <strong>{{ order.created_at|datetime_display if order.created_at else "-" }}</strong>
+      </div>
+      <div class="detail-row">
+        <span>Assigned Tailor</span>
+        <strong>{{ order.assigned_tailor or "-" }}</strong>
+      </div>
+      {% if order.order_type == "Tailoring" %}
+      <div class="detail-row">
+        <span>Completed Date</span>
+        <strong>{{ (worker_delivery_date|string)[:10] if worker_delivery_date else "-" }}</strong>
+      </div>
+      <div class="detail-row">
+        <span>Delivery Date</span>
+        <strong>{{ (order.due_date|string)[:10] if order.due_date else "-" }}</strong>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="card detail-card">
+  <h3>Order Items</h3>
+  {% if items %}
+    <div class="order-item-list">
+      {% for item in items %}
+        <div class="order-item-row">
+          <span>{{ item.item_type }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No items found.</p>
+  {% endif %}
+</section>
+
+{% if material_items %}
+<section class="card detail-card">
+  <h3>Shop Materials</h3>
+  <div class="measure-table-wrap">
+    <table class="measure-table material-table">
+      <thead>
+        <tr>
+          <th class="fw-bold">Item</th>
+          <th class="fw-bold">Rate</th>
+          <th class="fw-bold">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in material_items if item.item_name %}
+        <tr>
+          <td>{{ item.item_name }}</td>
+          <td>&#8377; {{ "%.2f"|format(item.unit_price or 0) }}</td>
+          <td>&#8377; {{ "%.2f"|format(item.line_total or 0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card detail-card">
+  <h3>Measurements</h3>
+  {% if measurements %}
+    <div class="measure-table-wrap">
+      <div class="measure-stacked">
+      {% for m in measurements %}
+      {% set ns = namespace(measure_lines=[], note_lines=[], seen_measure_labels=[]) %}
+      {% for key, label in {
+        "neck":"Neck","chest":"Chest","waist":"Waist","hip":"Hip","shoulder":"Shoulder","sleeve":"Sleeve",
+        "length":"Length","cuff":"Cuff","inseam":"Inseam","outseam":"Outseam","thigh":"Thigh","knee":"Knee","bottom":"Bottom"
+      }.items() %}
+        {% if m[key] %}
+          {% set ns.measure_lines = ns.measure_lines + [label ~ ": " ~ (m[key]|fmt_measure)] %}
+          {% set ns.seen_measure_labels = ns.seen_measure_labels + [label|lower] %}
+        {% endif %}
+      {% endfor %}
+      {% if m.notes %}
+        {% for raw_line in m.notes.splitlines() %}
+          {% set cleaned = raw_line.strip() %}
+          {% if not cleaned %}
+          {% elif ":" in cleaned %}
+            {% set parts = cleaned.split(":", 1) %}
+            {% set parsed_label = parts[0].strip() %}
+            {% set parsed_value = parts[1].strip() %}
+            {% if parsed_value and parsed_label|lower not in ns.seen_measure_labels and parsed_label|lower != "label" %}
+              {% set ns.measure_lines = ns.measure_lines + [parsed_label ~ ": " ~ (parsed_value|fmt_measure)] %}
+              {% set ns.seen_measure_labels = ns.seen_measure_labels + [parsed_label|lower] %}
+            {% elif parsed_label|lower == "label" %}
+              {% set ns.note_lines = ns.note_lines + [cleaned] %}
+            {% endif %}
+          {% else %}
+            {% set ns.note_lines = ns.note_lines + [cleaned] %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      <article class="measure-entry">
+        <div class="measure-entry-title"><strong>{{ m.kind }}</strong></div>
+        <div class="measure-entry-row">
+          <div class="measure-entry-key">Measurements</div>
+          <div class="measure-entry-value">
+            {% if ns.measure_lines %}
+              <ul class="measure-notes">
+                {% for line in ns.measure_lines %}
+                  <li>{{ line }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              -
+            {% endif %}
+          </div>
+        </div>
+        <div class="measure-entry-row">
+          <div class="measure-entry-key">Notes</div>
+          <div class="measure-entry-value">
+            {% if ns.note_lines %}
+              <div class="measure-note-lines">
+                {% for line in ns.note_lines %}
+                  <div>{{ line }}</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              -
+            {% endif %}
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <p class="muted">No measurements found.</p>
+  {% endif %}
+</section>
+
+<section class="card detail-card">
+  <h3>Fabric and Wage Cost</h3>
+  <div class="summary-line">
+    <div>Sub Total</div>
+    <div>&#8377; {{ "%.2f"|format(sub_total or 0) }}</div>
+  </div>
+  <div class="summary-line">
+    <div>Discount</div>
+    <div>&#8377; {{ "%.2f"|format(discount_amount or 0) }}</div>
+  </div>
+  {% if (gst_amount or 0) > 0 %}
+  <div class="summary-line">
+    <div>CGST{% if (cgst_percent or 0) > 0 %} ({{ "%.2f"|format(cgst_percent) }}%){% endif %}</div>
+    <div>&#8377; {{ "%.2f"|format(cgst_amount or 0) }}</div>
+  </div>
+  <div class="summary-line">
+    <div>SGST{% if (sgst_percent or 0) > 0 %} ({{ "%.2f"|format(sgst_percent) }}%){% endif %}</div>
+    <div>&#8377; {{ "%.2f"|format(sgst_amount or 0) }}</div>
+  </div>
+  <div class="summary-line">
+    <div>Total GST</div>
+    <div>&#8377; {{ "%.2f"|format(gst_amount or 0) }}</div>
+  </div>
+  {% endif %}
+  <div class="summary-line">
+    <div>Advance</div>
+    <div>&#8377; {{ "%.2f"|format(order.advance_amount or 0) }}</div>
+  </div>
+  <div class="summary-line">
+    <div>Paid</div>
+    <div>&#8377; {{ "%.2f"|format(paid_amount or 0) }}</div>
+  </div>
+  <div class="summary-line">
+    <div>Balance Amount</div>
+    <div>&#8377; {{ "%.2f"|format(due_amount or 0) }}</div>
+  </div>
+  <div class="summary-line">
+    <div><strong>Total Amount</strong></div>
+    <div><strong>&#8377; {{ "%.2f"|format(order.total_amount or 0) }}</strong></div>
+  </div>
+</section>
+
+<section class="card detail-card">
+  <h3>Requirements</h3>
+  {% if requirement_icons %}
+    <div class="req-display">
+      {% for req in requirement_icons %}
+        <div class="req-item">
+          <span class="req-icon">
+            <img src="{{ url_for('static', filename='req_icons/' ~ req.filename) }}" alt="{{ req.name }}"/>
+          </span>
+          <span>{{ req.name }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No requirements selected.</p>
+  {% endif %}
+</section>
+
+<section class="card detail-card order-photos">
+  <h3>Reference photos</h3>
+  {% if images_by_item %}
+    <div class="photo-group-row">
+      {% for item_type, photos in images_by_item.items() %}
+        <div class="photo-group">
+          <div class="photo-group-title">{{ item_type }}</div>
+          <div class="preview-grid">
+            {% for img in photos %}
+              <div class="image-box">
+                <div class="image-frame">
+                  <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}" class="preview-click" alt="Order image"/>
+                </div>
+                {% if img.label %}
+                  <div class="image-label-view">{{ img.label }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No images.</p>
+  {% endif %}
+</section>
+
+{% if order.order_type == "Tailoring" %}
+<section class="card detail-card">
+  <h3>Update status</h3>
+  <form class="stack" method="post">
+    <div class="grid two">
+      <label>
+        Status
+        <select name="status" class="status-select">
+          {% for value in ["In-Progress", "Completed", "Delivered"] %}
+          <option {% if order.status == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% if order.order_type == "Tailoring" %}
+      <label>
+        Due date
+        <input type="date" name="due_date" value="{{ order.due_date|date_only if order.due_date else '' }}" />
+      </label>
+      {% endif %}
+    </div>
+    <div class="grid two">
+      <label>
+        Advance amount
+        <input type="number" step="0.01" name="advance_amount" value="{{ order.advance_amount or '' }}" />
+      </label>
+      <label>
+        Total amount
+        <input type="number" step="0.01" name="total_amount" value="{{ order.total_amount or '' }}" />
+      </label>
+    </div>
+    <div class="radio-group">
+      <label>
+        <input type="checkbox" name="paid" value="1" {% if order.paid_at %}checked{% endif %}> Paid
+      </label>
+      <label>
+        <input type="checkbox" name="picked_up" value="1" {% if order.picked_up_at %}checked{% endif %}> Picked up
+      </label>
+    </div>
+    <label>
+      Order notes
+      <textarea name="notes" rows="3">{{ order.notes or "" }}</textarea>
+    </label>
+    <button class="btn primary" type="submit">Save changes</button>
+  </form>
+</section>
+{% endif %}
+
+<div id="image-modal" class="image-modal hidden">
+  <div class="image-modal-backdrop"></div>
+  <div class="image-modal-content">
+    <button class="modal-close" id="modal-close">x</button>
+    <img id="modal-image" src="" alt="Preview" />
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const modal = document.getElementById("image-modal");
+  const modalImg = document.getElementById("modal-image");
+  const closeBtn = document.getElementById("modal-close");
+
+  document.querySelectorAll(".preview-click").forEach(img => {
+    img.addEventListener("click", () => {
+      modalImg.src = img.src;
+      modal.classList.remove("hidden");
+    });
+  });
+
+  closeBtn.addEventListener("click", () => {
+    modal.classList.add("hidden");
+  });
+
+  modal.addEventListener("click", (e) => {
+    if (e.target.classList.contains("image-modal-backdrop")) {
+      modal.classList.add("hidden");
+    }
+  });
+});
+</script>
+
+{% endblock %}
+

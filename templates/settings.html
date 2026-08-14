@@ -1,0 +1,1762 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .settings-theme-card {
+    background: linear-gradient(180deg, #fffaf8 0%, #fcf7f2 100%);
+    border: 1px solid #eadbf0;
+    border-radius: 24px;
+    box-shadow: 0 16px 32px rgba(62, 11, 99, 0.08);
+  }
+  .settings-theme-card .tab-panel {
+    margin-top: 12px;
+    padding: 16px;
+    border: 1px solid #e4cff1;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #fffdfd 0%, #faf5ff 100%);
+    overflow: hidden !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .settings-tabs .tab-chip {
+    border-color: #d7c1ee;
+    background: #fffdfd;
+    color: #4b3168;
+  }
+  .settings-tabs .tab-chip:hover {
+    background: #f0e4fb;
+    border-color: #c9acee;
+    color: #4a2370;
+  }
+  .settings-tabs .tab-chip.active {
+    background: linear-gradient(135deg, #eadbfb, #d8e8ff);
+    border-color: #b892de;
+    color: #3f2265;
+    box-shadow: 0 10px 20px rgba(111, 61, 145, 0.12);
+  }
+  .settings-theme-card label {
+    color: #43295f;
+    font-weight: 700;
+  }
+  .settings-theme-card input,
+  .settings-theme-card select,
+  .settings-theme-card textarea {
+    background: #fffdfd;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .settings-theme-card .access-card,
+  .settings-theme-card .clean-card,
+  .settings-theme-card .printer-softcopy-note,
+  .settings-theme-card .access-control-intro,
+  .settings-theme-card .clean-list,
+  .settings-theme-card .company-preview-card {
+    border-color: #dec9f0;
+    background: linear-gradient(180deg, #fffdfd 0%, #f7efff 100%);
+  }
+
+  .settings-theme-card .permission-grid {
+  background: transparent;
+}
+
+  .settings-theme-card .permission-chip,
+  .settings-theme-card .gst-toggle-field,
+  .settings-theme-card .printer-toggle,
+  .settings-theme-card .toggle-row,
+  .settings-theme-card .gst-toggle-row {
+    border-radius: 16px;
+  }
+  .settings-theme-card .permission-chip {
+    border: 1px solid #dac3ef;
+    background: #fffdfd;
+  }
+  .settings-theme-card .clean-list-head,
+  .settings-theme-card .dash-menu-table thead th {
+    background: #f3eafb;
+    color: #644d79;
+  }
+  .settings-theme-card .thank-you-message-label textarea {
+    min-height: 120px;
+  }
+  .settings-theme-card .settings-actions {
+    margin-top: 6px;
+  }
+  
+  /* Fix ONLY GST and Toggle checkboxes - NOT Access Control */
+.gst-toggle-field input[type="checkbox"],
+.printer-toggle input[type="checkbox"],
+.toggle-row input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Keep Access Control checkboxes as they are */
+.permission-chip input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+}
+
+@media (max-width: 768px) {
+  .access-create-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .access-inline-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .access-inline-grid-two {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+  @media (max-width: 768px) {
+  .settings-tabs {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  
+  .settings-tabs .tab-chip {
+    flex: 1 1 calc(50% - 3px) !important;
+    min-width: calc(50% - 3px) !important;
+    padding: 8px 6px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-tabs .tab-chip {
+    flex: 1 1 calc(33.33% - 2px) !important;
+    min-width: calc(33.33% - 2px) !important;
+    padding: 8px 4px !important;
+    font-size: 11px !important;
+    line-height: 1.1 !important;
+  }
+}
+
+/* Fix spacing between filter buttons - STRONG FIX */
+.tabs-bar {
+  display: flex !important;
+  gap: 16px !important;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tabs-bar .tab-chip {
+  margin: 0 !important;
+  padding: 8px 16px !important;
+  flex-shrink: 0;
+}
+
+/* --- Paper Size select with custom down arrow --- */
+.paper-size-wrapper {
+    position: relative;
+    display: block;
+    width: 100%;
+}
+
+.paper-size-wrapper select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 100%;
+    padding-right: 40px;
+    background: #fffdfd;
+    border: 1px solid #dac3ef;
+    border-radius: 12px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.paper-size-wrapper select:focus {
+    border-color: #b892de;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(184, 146, 222, 0.25);
+}
+
+.paper-size-wrapper .arrow-icon {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #6f5b7d;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.paper-size-wrapper select:focus+.arrow-icon {
+    color: #4a2370;
+}
+
+/* A4 size badge inside the selected value */
+.paper-size-wrapper .size-badge {
+    display: inline-block;
+    background: #eadbfb;
+    color: #3f2265;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    margin-left: 6px;
+    letter-spacing: 0.02em;
+}
+
+/* label styling for the paper size field */
+.paper-size-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.paper-size-label .badge-a4 {
+    background: #d8e8ff;
+    color: #1e4a7a;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+</style>
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+  </div>
+</div>
+
+<section class="card settings-card settings-theme-card">
+  <div class="tabs-bar settings-tabs" role="tablist" aria-label="Settings tabs">
+    <button class="tab-chip" type="button" data-tab="data-settings">Data Settings</button>
+    <button class="tab-chip" type="button" data-tab="billing-message">Thank You Message</button>
+    <button class="tab-chip" type="button" data-tab="gst-settings">GST Settings</button>
+    <button class="tab-chip" type="button" data-tab="printer-settings">Printer Settings</button>
+    <button class="tab-chip" type="button" data-tab="access-control">Access Control</button>
+    <button class="tab-chip" type="button" data-tab="staff-roles">Staff Roles</button>
+    <button class="tab-chip" type="button" data-tab="company-settings">Company Settings</button>
+  </div>
+
+  {% if status_message %}
+  <div class="alert alert-info" style="margin: 12px 0 0;">{{ status_message }}</div>
+  {% endif %}
+
+  <div class="tab-panel" data-panel="data-settings">
+    <form class="stack" method="post">
+      <input type="hidden" name="action" value="date_settings" />
+      <div class="settings-grid">
+        <label>
+          Worker Delivery Duration (days)
+          <input type="number" name="worker_days" value="{{ worker_days }}" min="0" />
+        </label>
+        <label>
+          Delivery Duration (days)
+          <input type="number" name="delivery_days" value="{{ delivery_days }}" min="0" />
+        </label>
+        <label>
+          Insurance Alert Before Expiry (days)
+          <input type="number" name="insurance_alert_days" value="{{ insurance_alert_days or '0' }}" min="0" />
+        </label>
+        <label>
+          Loss Amount
+          <input type="number" step="0.01" name="loss_amount" value="{{ loss_amount or '0' }}" min="0" />
+        </label>
+      </div>
+      <div class="settings-actions">
+        <button class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel" data-panel="billing-message">
+    <form class="stack" method="post" id="billing-settings-form" enctype="multipart/form-data">
+      <input type="hidden" name="action" value="sms_settings" />
+      <div class="settings-grid">
+        <label>
+          Company Name
+          <input
+            type="text"
+            name="company_name"
+            value="{{ company_name or '' }}"
+            placeholder="Enter company name"
+          />
+        </label>
+        <label>
+  Company Logo
+  <input type="file" name="print_logo_file" accept="image/*" />
+  {% if print_logo_path %}
+  <small>Current: {{ print_logo_path.split('/')[-1] }}</small>
+  {% endif %}
+</label>
+        <label>
+          Address Line 1
+          <input
+            type="text"
+            name="address_line1"
+            value="{{ address_line1 or '' }}"
+            placeholder="Enter address line 1"
+          />
+        </label>
+        <label>
+          Address Line 2
+          <input
+            type="text"
+            name="address_line2"
+            value="{{ address_line2 or '' }}"
+            placeholder="Enter address line 2"
+          />
+        </label>
+        <label>
+          Address Line 3
+          <input
+            type="text"
+            name="address_line3"
+            value="{{ address_line3 or '' }}"
+            placeholder="Enter address line 3"
+          />
+        </label>
+        <label>
+          Phone Number
+          <input
+            type="text"
+            name="company_phone"
+            value="{{ company_phone or '' }}"
+            placeholder="Enter phone number"
+          />
+        </label>
+      </div>
+      <label class="thank-you-message-label">
+        Thank You Message
+        <textarea
+          name="sms_order_content"
+          rows="4"
+          placeholder="Enter thank-you message for customer bill"
+        >{{ sms_order_content }}</textarea>
+      </label>
+      <!-- <label>
+        Footer Text
+        <input
+          type="text"
+          name="billing_footer_text"
+          value="{{ billing_footer_text or '' }}"
+          placeholder="Powered by @iLogictech"
+          readonly
+        />
+      </label> -->
+      <div class="settings-actions">
+        <button class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel" data-panel="gst-settings">
+    <form class="stack" method="post">
+      <input type="hidden" name="action" value="gst_settings" />
+      <div class="settings-grid">
+        <label>
+          GST NO
+          <input
+            type="text"
+            name="gst_no"
+            value="{{ gst_no or '' }}"
+            placeholder="Enter GST number"
+          />
+        </label>
+        <label>
+          GST Value Mode
+          <select name="gst_value_mode" id="gst-value-mode">
+            <option value="percent" {% if (gst_value_mode or 'percent') == 'percent' %}selected{% endif %}>Percentage (%)</option>
+            <option value="amount" {% if (gst_value_mode or 'percent') == 'amount' %}selected{% endif %}>Amount (₹)</option>
+          </select>
+        </label>
+        <label>
+          Default GST Percentage (%)
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            name="default_gst_percent"
+            id="default-gst-percent"
+            value="{{ default_gst_percent or '0' }}"
+            placeholder="Enter GST %"
+          />
+        </label>
+        <label>
+          Default GST Amount (₹)
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            name="default_gst_amount"
+            id="default-gst-amount"
+            value="{{ default_gst_amount or '0' }}"
+            placeholder="Enter GST amount"
+          />
+        </label>
+        <label>
+          CGST Split
+          <input type="text" id="cgst-preview" value="0" readonly />
+        </label>
+        <label>
+          SGST Split
+          <input type="text" id="sgst-preview" value="0" readonly />
+        </label>
+        <label class="gst-toggle-field">
+          <span>Enable GST</span>
+          <span class="gst-toggle-row">
+            <input type="checkbox" name="gst_enabled" value="1" {% if gst_enabled %}checked{% endif %} />
+            <span class="gst-toggle-help">Apply GST in orders.</span>
+          </span>
+        </label>
+      </div>
+      <div class="settings-actions">
+        <button class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel" data-panel="printer-settings">
+    <form class="stack" method="post">
+      <input type="hidden" name="action" value="printer_settings" />
+      <div class="settings-grid">
+        <label>
+          Default Printer Name
+          <select name="default_printer_name">
+            <option value="">Select printer</option>
+            {% if default_printer_name and default_printer_name not in installed_printers %}
+            <option value="{{ default_printer_name }}" selected>{{ default_printer_name }} (Unavailable)</option>
+            {% endif %}
+            {% for printer_name in installed_printers %}
+            <option value="{{ printer_name }}" {% if default_printer_name == printer_name %}selected{% endif %}>{{ printer_name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <!-- PAPER SIZE — with custom down arrow + A4 badge -->
+<label class="paper-size-label">
+    <span>Paper Size</span>
+   <!-- <span class="badge-a4">A4</span> -->
+    <div class="paper-size-wrapper">
+        <select name="paper_size">
+            <option value="A4" selected>A4</option>
+            <option value="A5">A5</option>
+            <option value="Letter">Letter</option>
+            <option value="Legal">Legal</option>
+            <option value="Executive">Executive</option>
+            <option value="B5">B5</option>
+        </select>
+        <span class="arrow-icon">&#9660;</span>   <!-- down arrow -->
+    </div>
+</label>
+
+        <label class="printer-toggle">
+  <span>Enable Direct Printer <small style="font-weight:400; color:#6f5b7d; font-size:11px;">(Softcopy always saved)</small></span>
+  <span class="toggle-row">
+    <input type="checkbox" name="auto_print_on_click" value="1" {% if auto_print_on_click %}checked{% endif %} />
+    <span class="toggle-help">When ON, Print actions send directly to the selected printer.</span>
+  </span>
+</label>
+       <!-- <div class="printer-softcopy-note">
+          Softcopy is always saved to <code>print_softcopies</code> in the app/exe folder.
+        </div> -->
+      </div>
+      <div class="settings-actions">
+        <button class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="tab-panel" data-panel="access-control">
+    <div class="access-control-stack">
+      <div class="access-control-intro">
+        <div>
+          <h3>Branch Access</h3>
+          <p>{{ current_branch.name if current_branch else "Current branch" }} uses role-based access. Users inherit modules and actions from their assigned role.</p>
+        </div>
+      </div>
+
+      <div class="access-create-grid">
+        <section class="access-card access-card-compact">
+          <div class="access-card-head">
+            <div>
+              <h3>New Role</h3>
+            </div>
+          </div>
+          <form class="stack" method="post" autocomplete="off">
+            <input type="hidden" name="action" value="create_app_role" />
+            <div class="access-inline-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" name="role_name" placeholder="Role name" required />
+              </label>
+            </div>
+            <div class="access-permission-sections">
+              <div>
+                <div class="access-section-label">Modules</div>
+                <div class="permission-grid permission-grid-compact">
+                  {% for permission in menu_permission_definitions %}
+                  <label class="permission-chip">
+                    <input type="checkbox" name="role_permissions" value="{{ permission.key }}" />
+                    <span>{{ permission.label }}</span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div>
+                <div class="access-section-label">Actions</div>
+                <div class="permission-grid permission-grid-compact">
+                  {% for permission in action_permission_definitions %}
+                  <label class="permission-chip">
+                    <input type="checkbox" name="role_permissions" value="{{ permission.key }}" />
+                    <span>{{ permission.label }}</span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            <div class="settings-actions access-actions">
+              <button class="btn primary" type="submit">Create Role</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="access-card access-card-compact">
+          <div class="access-card-head">
+            <div>
+              <h3>New User</h3>
+            </div>
+          </div>
+          <form class="stack" method="post" autocomplete="off">
+            <input type="hidden" name="action" value="create_app_user" />
+            <div class="access-inline-grid access-inline-grid-two">
+              <label>
+                <span>Username</span>
+                <input type="text" name="username" placeholder="Username" required />
+              </label>
+              <label>
+                <span>Display</span>
+                <input type="text" name="display_name" placeholder="Display name" />
+              </label>
+              <label>
+                <span>Branch</span>
+                <select name="branch_code" required>
+                  {% for branch in branches or [] %}
+                  <option value="{{ branch.code }}" {% if current_branch and current_branch.code == branch.code %}selected{% endif %}>{{ branch.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                <span>Role</span>
+                <select name="role" required>
+                  {% for role in app_roles %}
+                  {% if role.is_active and not role.is_super_admin %}
+                  <option value="{{ role.role_key }}">{{ role.name }}</option>
+                  {% endif %}
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                <span>Password</span>
+                <input type="password" name="password" placeholder="Password" required />
+              </label>
+              <label>
+                <span>Confirm Password</span>
+                <input type="password" name="confirm_password" placeholder="Confirm password" required />
+              </label>
+            </div>
+            <div class="settings-actions access-actions">
+              <button class="btn primary" type="submit">Create User</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <section class="access-card">
+        <div class="access-card-head access-card-head-row">
+          <div>
+            <h3>Roles</h3>
+          </div>
+          <span class="access-count">{{ app_roles|length }}</span>
+        </div>
+
+        <div class="managed-users managed-users-compact">
+          {% for managed_role in app_roles %}
+          <details class="managed-user-card managed-user-card-collapsible" {% if loop.first %}open{% endif %}>
+            <summary class="managed-user-summary managed-user-summary-clickable">
+              <div>
+                <h4>{{ managed_role.name }}</h4>
+                <div class="managed-user-meta">
+                  <span>{{ managed_role.role_key }}</span>
+                  {% if managed_role.is_super_admin %}
+                  <span>Full access</span>
+                  {% elif managed_role.is_system %}
+                  <span>Built-in</span>
+                  {% endif %}
+                  <span>{{ 'Active' if managed_role.is_active else 'Inactive' }}</span>
+                </div>
+              </div>
+              <span class="summary-hint">Open</span>
+            </summary>
+
+            <form class="stack managed-user-form" method="post" autocomplete="off">
+              <input type="hidden" name="action" value="update_app_role" />
+              <input type="hidden" name="role_key" value="{{ managed_role.role_key }}" />
+              <div class="access-inline-grid">
+                <label>
+                  <span>Name</span>
+                  <input type="text" name="role_name" value="{{ managed_role.name }}" {% if managed_role.is_super_admin %}readonly{% endif %} required />
+                </label>
+                <label class="permission-status-toggle">
+                  <span>Status</span>
+                  {% if managed_role.is_system %}
+                  <input type="text" value="Always Active" readonly />
+                  <input type="hidden" name="is_active" value="1" />
+                  {% else %}
+                  <select name="is_active">
+                    <option value="1" {% if managed_role.is_active %}selected{% endif %}>Active</option>
+                    <option value="0" {% if not managed_role.is_active %}selected{% endif %}>Inactive</option>
+                  </select>
+                  {% endif %}
+                </label>
+              </div>
+
+              <div class="access-permission-sections">
+                <div>
+                  <div class="access-section-label">Modules</div>
+                  <div class="permission-grid permission-grid-compact {% if managed_role.is_super_admin %}permission-grid-disabled{% endif %}">
+                    {% for permission in menu_permission_definitions %}
+                    <label class="permission-chip">
+                      <input
+                        type="checkbox"
+                        name="role_permissions"
+                        value="{{ permission.key }}"
+                        {% if managed_role.is_super_admin or permission.key in managed_role.permissions %}checked{% endif %}
+                        {% if managed_role.is_super_admin %}disabled{% endif %}
+                      />
+                      <span>{{ permission.label }}</span>
+                    </label>
+                    {% endfor %}
+                  </div>
+                </div>
+                <div>
+                  <div class="access-section-label">Actions</div>
+                  <div class="permission-grid permission-grid-compact {% if managed_role.is_super_admin %}permission-grid-disabled{% endif %}">
+                    {% for permission in action_permission_definitions %}
+                    <label class="permission-chip">
+                      <input
+                        type="checkbox"
+                        name="role_permissions"
+                        value="{{ permission.key }}"
+                        {% if managed_role.is_super_admin or permission.key in managed_role.permissions %}checked{% endif %}
+                        {% if managed_role.is_super_admin %}disabled{% endif %}
+                      />
+                      <span>{{ permission.label }}</span>
+                    </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-actions access-actions">
+                {% if not managed_role.is_super_admin %}
+                <button class="btn primary" type="submit">Save</button>
+                {% endif %}
+              </div>
+            </form>
+            {% if not managed_role.is_system and not managed_role.is_super_admin %}
+            <form method="post" onsubmit="return confirm('Delete this role?');" class="access-inline-delete">
+              <input type="hidden" name="action" value="delete_app_role" />
+              <input type="hidden" name="role_key" value="{{ managed_role.role_key }}" />
+              <button class="btn ghost hover-red-fill" type="submit">Delete</button>
+            </form>
+            {% endif %}
+          </details>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="access-card">
+        <div class="access-card-head access-card-head-row">
+          <div>
+            <h3>Users</h3>
+          </div>
+          <span class="access-count">{{ app_users|length }}</span>
+        </div>
+
+        <div class="managed-users managed-users-compact">
+          {% for managed_user in app_users %}
+          <details class="managed-user-card managed-user-card-collapsible">
+            <summary class="managed-user-summary managed-user-summary-clickable">
+              <div>
+                <h4>{{ managed_user.display_name }}</h4>
+                <div class="managed-user-meta">
+                  <span>{{ managed_user.username }}</span>
+                  <span>{{ managed_user.role_label }}</span>
+                  {% if managed_user.is_super_admin %}
+                  <span>Full access</span>
+                  {% if managed_user.is_default_super_admin %}
+                  <span>Default</span>
+                  {% endif %}
+                  {% endif %}
+                  <span>{{ 'Active' if managed_user.is_active else 'Inactive' }}</span>
+                </div>
+              </div>
+              <span class="summary-hint">Open</span>
+            </summary>
+
+            <form class="stack managed-user-form" method="post" autocomplete="off">
+              <input type="hidden" name="action" value="update_app_user" />
+              <input type="hidden" name="user_id" value="{{ managed_user.id }}" />
+              <div class="access-inline-grid access-inline-grid-two">
+                <label>
+                  <span>Username</span>
+                  <input type="text" name="username" value="{{ managed_user.username }}" required />
+                </label>
+                <label>
+                  <span>Display</span>
+                  <input type="text" name="display_name" value="{{ managed_user.display_name }}" />
+                </label>
+                <label>
+                  <span>Role</span>
+                  {% if managed_user.is_super_admin %}
+                  <input type="text" value="Super Admin" readonly />
+                  <input type="hidden" name="role" value="super_admin" />
+                  {% else %}
+                  <select name="role">
+                    {% for role in app_roles %}
+                    {% if not role.is_super_admin and (role.is_active or role.role_key == managed_user.role) %}
+                    <option value="{{ role.role_key }}" {% if managed_user.role == role.role_key %}selected{% endif %}>{{ role.name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                  </select>
+                  {% endif %}
+                </label>
+                <label>
+                  <span>Branch</span>
+                  {% if managed_user.is_super_admin %}
+                  <input type="text" value="All Branches" readonly />
+                  <input type="hidden" name="branch_code" value="{{ current_branch.code if current_branch else '' }}" />
+                  {% else %}
+                  <select name="branch_code">
+                    {% for branch in branches or [] %}
+                    <option value="{{ branch.code }}" {% if (managed_user.branch_code or current_branch.code) == branch.code %}selected{% endif %}>{{ branch.name }}</option>
+                    {% endfor %}
+                  </select>
+                  {% endif %}
+                </label>
+                <label>
+                  <span>Status</span>
+                  {% if managed_user.is_super_admin %}
+                  <input type="text" value="Always Active" readonly />
+                  <input type="hidden" name="is_active" value="1" />
+                  {% else %}
+                  <select name="is_active">
+                    <option value="1" {% if managed_user.is_active %}selected{% endif %}>Active</option>
+                    <option value="0" {% if not managed_user.is_active %}selected{% endif %}>Inactive</option>
+                  </select>
+                  {% endif %}
+                </label>
+                <label>
+                  <span>Password</span>
+                  <input type="password" name="password" placeholder="Leave blank" />
+                </label>
+                <label>
+                  <span>Confirm</span>
+                  <input type="password" name="confirm_password" placeholder="Confirm password" />
+                </label>
+              </div>
+
+              <div class="settings-actions access-actions">
+                <button class="btn primary" type="submit">Save</button>
+              </div>
+            </form>
+            {% if not managed_user.is_default_super_admin and managed_user.id != current_user.id %}
+            <form method="post" onsubmit="return confirm('Delete this user account?');" class="access-inline-delete">
+              <input type="hidden" name="action" value="delete_app_user" />
+              <input type="hidden" name="user_id" value="{{ managed_user.id }}" />
+              <button class="btn ghost hover-red-fill" type="submit">Delete</button>
+            </form>
+            {% elif managed_user.is_default_super_admin %}
+            <div class="access-inline-delete">
+              <button class="btn ghost btn-sm" type="button" disabled>Default Super Admin</button>
+            </div>
+            {% endif %}
+          </details>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="staff-roles">
+    <div class="access-control-stack">
+      <div class="access-control-intro">
+        <div>
+          <h3>Staff Roles</h3>
+          <p>These roles are used in staff creation and repair/staff assignment. Keep them short and clear.</p>
+        </div>
+      </div>
+
+      <section class="access-card access-card-compact">
+        <div class="access-card-head access-card-head-row">
+          <div>
+            <h3>Manage Roles</h3>
+          </div>
+          <span class="access-count">{{ staff_roles|length }}</span>
+        </div>
+
+        <div class="staff-role-toolbar">
+          <form class="staff-role-create" method="post">
+            <input type="hidden" name="action" value="add_staff_role" />
+            <label>
+              <span>Name</span>
+              <input type="text" name="role_name" placeholder="Mechanic / Supervisor / Helper" required />
+            </label>
+            <button class="btn primary" type="submit">Add</button>
+          </form>
+
+          <form method="post" id="staff-role-order-form" class="staff-role-order-save">
+            <input type="hidden" name="action" value="save_staff_role_order" />
+            <div id="staff-role-order-inputs"></div>
+            {% if staff_roles %}
+            <button class="btn ghost" type="submit">Save Order</button>
+            {% endif %}
+          </form>
+        </div>
+
+        <div class="staff-role-note">Drag roles to reorder them.</div>
+
+        <div class="staff-role-list" id="staff-role-order-list">
+          {% for role in staff_roles %}
+          <div class="staff-role-item" draggable="true" data-id="{{ role.id }}">
+            <button type="button" class="sort-drag" aria-label="Drag to reorder" title="Drag to reorder">
+              <i class="bi bi-grip-vertical"></i>
+            </button>
+            <div class="staff-role-item-name">{{ role.name }}</div>
+            <form method="post" onsubmit="return confirm('Delete this staff role?');">
+              <input type="hidden" name="action" value="delete_staff_role" />
+              <input type="hidden" name="role_id" value="{{ role.id }}" />
+              <button class="btn ghost hover-red-fill btn-sm" type="submit">Delete</button>
+            </form>
+          </div>
+          {% else %}
+          <div class="clean-list-empty">No staff roles yet.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-panel="company-settings">
+    <div class="stack company-settings-stack">
+      <div class="branch-summary-card">
+        <div>
+          <h3 style="margin:0;">Active Branch</h3>
+          <p class="muted" style="margin:6px 0 0;">{{ current_branch.name if current_branch else 'Main Branch' }}{% if current_branch %}  {{ current_branch.database_name.replace('_tailor', '').replace('tailor', '') }}{% endif %}</p>
+        </div>
+      </div>
+
+      <div class="company-settings-grid">
+        <form class="company-mini-card" method="post" autocomplete="off">
+          <input type="hidden" name="action" value="switch_branch" />
+          <label class="company-inline-field">
+            <span>Switch Branch</span>
+            <select name="branch_code" required>
+              {% for branch in branches or [] %}
+              <option value="{{ branch.code }}" {% if current_branch and current_branch.code == branch.code %}selected{% endif %}>{{ branch.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="company-inline-actions">
+            <button class="btn" type="submit">Open Branch</button>
+          </div>
+        </form>
+
+        <form class="company-branding-card company-branch-config-card" method="post" autocomplete="off">
+          <input type="hidden" name="action" value="branch_mode_device_settings" />
+          <div class="access-card-head">
+            <h3>Branch Mode & Device Limits</h3>
+          </div>
+          <p class="muted" style="margin:0 0 12px;">Configure the selected branch/customer.</p>
+          <div class="company-branch-config-grid">
+            <section class="company-config-section">
+              <div class="company-config-title">Business Mode</div>
+              <div class="company-inline-actions company-radio-row">
+                <label class="company-inline-field" style="flex-direction:row; align-items:center; gap:8px;">
+                  <input type="radio" name="business_mode" value="sale" {% if business_mode != 'rental' %}checked{% endif %} />
+                  <span>Sale Mode</span>
+                </label>
+                <label class="company-inline-field" style="flex-direction:row; align-items:center; gap:8px;">
+                  <input type="radio" name="business_mode" value="rental" {% if business_mode == 'rental' %}checked{% endif %} />
+                  <span>Rental Mode</span>
+                </label>
+              </div>
+            </section>
+            <section class="company-config-section">
+              <div class="company-config-title">Device Limits</div>
+              <div class="company-device-limit-grid">
+                <label>
+                  Mobile devices
+                  <input
+                    type="number"
+                    name="max_mobile_devices"
+                    value="{{ max_mobile_devices or 1 }}"
+                    min="1"
+                    max="100"
+                    step="1"
+                    required
+                  />
+                </label>
+                <label>
+                  Desktop EXE machines
+                  <input
+                    type="number"
+                    name="max_desktop_devices"
+                    value="{{ max_desktop_devices or 1 }}"
+                    min="1"
+                    max="100"
+                    step="1"
+                    required
+                  />
+                </label>
+              </div>
+            </section>
+          </div>
+          <div class="company-inline-actions company-branding-actions">
+            <button class="btn primary" type="submit">Save</button>
+          </div>
+        </form>
+
+        <form class="company-mini-card" method="post" autocomplete="off">
+          <input type="hidden" name="action" value="add_branch" />
+          <label class="company-inline-field">
+            <span>Add Branch</span>
+            <input type="text" name="branch_name" placeholder="Enter new branch name" required />
+          </label>
+          <div class="company-inline-actions">
+            <button class="btn" type="submit">Create Branch</button>
+          </div>
+        </form>
+
+        <form class="company-mini-card" method="post" autocomplete="off">
+          <input type="hidden" name="action" value="rename_branch" />
+          <label class="company-inline-field">
+            <span>Rename Branch</span>
+            <select name="branch_code" required>
+              {% for branch in branches or [] %}
+              <option value="{{ branch.code }}" {% if current_branch and current_branch.code == branch.code %}selected{% endif %}>{{ branch.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="company-inline-field">
+            <span>New Branch Name</span>
+            <input type="text" name="branch_name" value="{{ current_branch.name if current_branch else '' }}" placeholder="Enter branch display name" required />
+          </label>
+          <div class="company-inline-actions">
+            <button class="btn" type="submit">Rename Branch</button>
+          </div>
+        </form>
+      </div>
+
+      <section class="company-branding-card">
+        <div class="access-card-head access-card-head-row">
+          <div>
+            <h3>Branches</h3>
+          </div>
+          <span class="access-count">{{ (branches or [])|length }}</span>
+        </div>
+        <div class="staff-role-list">
+          {% for branch in branches or [] %}
+          <div class="staff-role-item">
+            <div class="staff-role-item-name">
+              {{ branch.name }}
+              <div class="muted" style="font-size:12px; margin-top:4px;">
+                {{ branch.name }}
+                {% if current_branch and current_branch.code == branch.code %} | Current{% endif %}
+                {% if branch.is_default %} | Default{% endif %}
+              </div>
+            </div>
+            <div></div>
+            {% if not branch.is_default and not (current_branch and current_branch.code == branch.code) %}
+            <form method="post" onsubmit="return confirm('Delete this branch? This only works if the branch has no users or data.');">
+              <input type="hidden" name="action" value="delete_branch" />
+              <input type="hidden" name="branch_code" value="{{ branch.code }}" />
+              <button class="btn ghost hover-red-fill btn-sm" type="submit">Delete</button>
+            </form>
+            {% else %}
+            <button class="btn ghost btn-sm" type="button" disabled>Protected</button>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <form class="company-branding-card" method="post" enctype="multipart/form-data" autocomplete="off">
+        <input type="hidden" name="action" value="company_branding" />
+        <div class="company-branding-grid">
+          <label>
+            Company Name
+            <input
+              type="text"
+              name="brand_company_name"
+              value="{{ brand_company_name or '' }}"
+              placeholder="Enter company name"
+              required
+            />
+          </label>
+          <label>
+            Company Logo
+            <input type="file" name="brand_logo" accept="image/*" />
+            {% if brand_logo_filename %}
+            <div class="company-logo-current">
+              <div class="muted company-logo-label">Current:</div>
+              <img
+                src="{{ url_for('static', filename='uploads/branding/' ~ brand_logo_filename) }}"
+                alt="Company logo"
+                class="company-logo-preview"
+              />
+            </div>
+            {% endif %}
+          </label>
+        </div>
+        <div class="company-inline-actions company-branding-actions">
+          <button class="btn primary" type="submit">Save</button>
+        </div>
+      </form>
+
+      <form class="company-branding-card" method="post" autocomplete="off">
+        <input type="hidden" name="action" value="change_password" />
+        <div class="access-card-head">
+          <h3>Change Password</h3>
+        </div>
+        <div class="company-password-grid">
+          <label>
+            Current Password
+            <input type="password" name="current_password" autocomplete="current-password" required />
+          </label>
+          <label>
+            New Password
+            <input type="password" name="new_password" autocomplete="new-password" minlength="4" required />
+          </label>
+          <label>
+            Confirm Password
+            <input type="password" name="confirm_password" autocomplete="new-password" minlength="4" required />
+          </label>
+        </div>
+        <div class="company-inline-actions company-branding-actions">
+          <button class="btn primary" type="submit">Change Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<style>
+  .settings-card {
+    background: #dcc4ef;
+    border-color: #c4a8df;
+    box-shadow: 0 18px 34px rgba(102, 73, 143, 0.10);
+  }
+
+  .settings-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 6px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    border: 1px solid #c4a8df;
+    border-radius: 18px;
+    background: #dcc4ef;
+  }
+
+  .settings-tabs .tab-chip {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 8px;
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .settings-tabs .tab-chip.active {
+    background: rgba(255, 255, 255, 0.34);
+    border-color: #c4a8df;
+    box-shadow: 0 10px 20px rgba(102, 73, 143, 0.10);
+  }
+
+  .settings-card .tab-panel {
+    border: 1px solid #c4a8df;
+    border-radius: 20px;
+    padding: 18px;
+    background: #dcc4ef;
+  }
+
+  .settings-grid > label,
+  .thank-you-message-label,
+  .access-card,
+  .access-control-intro,
+  .branch-summary-card,
+  .company-mini-card,
+  .company-branding-card,
+  .staff-role-item {
+    border: 1px solid #c4a8df;
+    border-radius: 16px;
+    padding: 12px 14px;
+    background: #dcc4ef;
+  }
+
+  .settings-actions {
+    justify-content: flex-start;
+  }
+
+  .printer-toggle .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .printer-toggle .toggle-help {
+    font-size: 12px;
+    color: #6f5b7d;
+    line-height: 1.3;
+  }
+
+  .printer-softcopy-note {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6f5b7d;
+  }
+
+  .branch-summary-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border: 1px solid #c4a8df;
+    border-radius: 16px;
+    background: #dcc4ef;
+  }
+
+  .company-settings-stack {
+    gap: 14px;
+  }
+
+  .company-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .company-branch-config-card {
+    grid-column: 1 / -1;
+  }
+
+  .company-branch-config-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.85fr) minmax(360px, 1.15fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .company-config-section {
+    display: grid;
+    gap: 10px;
+  }
+
+  .company-config-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #3f2265;
+  }
+
+  .company-radio-row {
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-top: 0;
+    margin-top: 0;
+  }
+
+  .company-mini-card,
+  .company-branding-card {
+    border: 1px solid #c4a8df;
+    border-radius: 18px;
+    background: #dcc4ef;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .company-inline-field {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .company-inline-field > span {
+    font-weight: 700;
+  }
+
+  .company-inline-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: auto;
+    padding-top: 12px;
+  }
+
+  .company-branding-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .company-password-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .company-device-limit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .company-logo-current {
+    margin-top: 10px;
+  }
+
+  .company-logo-label {
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+
+  .company-logo-preview {
+    width: 170px;
+    height: 60px;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fffdfd;
+    padding: 6px;
+  }
+
+  .company-branding-actions {
+    margin-top: 14px;
+  }
+
+  @media (max-width: 900px) {
+    .company-settings-grid,
+    .company-branding-grid,
+    .company-branch-config-grid,
+    .company-password-grid,
+    .company-device-limit-grid,
+    .access-create-grid,
+    .access-inline-grid,
+    .access-inline-grid-two {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .thank-you-message-label {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .gst-toggle-field .gst-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .gst-toggle-help {
+    font-size: 12px;
+    color: #5b5b5b;
+    line-height: 1.3;
+  }
+
+  .access-control-stack {
+    display: grid;
+    gap: 16px;
+  }
+
+  .access-control-intro {
+    border: 1px solid #c4a8df;
+    border-radius: 18px;
+    background: #dcc4ef;
+    padding: 14px 16px;
+  }
+
+  .access-control-intro h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .access-control-intro p {
+    margin: 6px 0 0;
+    color: #666;
+    font-size: 14px;
+  }
+
+  .access-create-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .access-card {
+    border: 1px solid #c4a8df;
+    border-radius: 18px;
+    padding: 16px;
+    background: #dcc4ef;
+  }
+
+  .access-card-compact {
+    padding: 14px;
+  }
+
+  .access-card-head h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .access-card-head p {
+    margin: 6px 0 0;
+    color: #666;
+    font-size: 14px;
+  }
+
+  .access-card-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .access-count {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .managed-users {
+    display: grid;
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  .managed-users-compact {
+    gap: 10px;
+  }
+
+  .managed-user-card {
+    border: 1px solid #e8ddd7;
+    border-radius: 16px;
+    padding: 14px;
+    background: #fcfbfa;
+  }
+
+  .managed-user-card-collapsible {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .managed-user-card-collapsible[open] {
+    background: #fffdfb;
+  }
+
+  .managed-user-card-collapsible summary {
+    list-style: none;
+  }
+
+  .managed-user-card-collapsible summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .managed-user-summary h4 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .managed-user-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .managed-user-meta span {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #efe6e0;
+    color: #7a3c2a;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .managed-user-summary-clickable {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    cursor: pointer;
+  }
+
+  .managed-user-card-collapsible[open] .managed-user-summary-clickable {
+    border-bottom: 1px solid #efe6e0;
+  }
+
+  .summary-hint {
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    white-space: nowrap;
+  }
+
+  .managed-user-form {
+    margin: 0;
+    padding: 14px;
+  }
+
+  .access-inline-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+    gap: 12px;
+    align-items: end;
+  }
+
+  .access-inline-grid-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .access-inline-grid label,
+  .access-inline-grid-two label {
+    display: grid;
+    gap: 6px;
+  }
+
+  .access-inline-grid label > span,
+  .access-inline-grid-two label > span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .access-permission-sections {
+    display: grid;
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .access-section-label {
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .permission-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .permission-grid-compact {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  .permission-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #e6d8d1;
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .permission-grid-disabled {
+    opacity: 0.78;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  .access-actions {
+    justify-content: flex-start;
+    margin-top: 10px;
+  }
+
+  .access-inline-delete {
+    padding: 0 14px 14px;
+  }
+
+  .staff-role-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .staff-role-create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 10px;
+    flex: 1 1 420px;
+  }
+
+  .staff-role-create label {
+    display: grid;
+    gap: 6px;
+    min-width: min(100%, 320px);
+    flex: 1 1 260px;
+  }
+
+  .staff-role-create label > span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .staff-role-order-save {
+    display: flex;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+  }
+
+  .staff-role-note {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .staff-role-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .staff-role-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid #e8ddd7;
+    border-radius: 14px;
+    background: #fcfbfa;
+  }
+
+  .staff-role-item.dragging {
+    opacity: 0.6;
+  }
+
+  .staff-role-item-name {
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .btn-sm {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* Add user form: label : input alignment */
+  .kv-form label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .kv-form label > span {
+    flex: 0 0 150px;
+    font-weight: 900;
+    color: #3f2265;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .kv-form label > span::after {
+    content: ":";
+    margin-left: auto;
+    padding-left: 8px;
+    color: rgba(63, 34, 101, 0.9);
+  }
+
+  .kv-form input,
+  .kv-form select {
+    width: min(100%, 340px);
+    min-height: 42px;
+  }
+
+  @media (max-width: 960px) {
+    .kv-form label {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+    }
+    .kv-form label > span {
+      flex: 0 0 auto;
+      width: 100%;
+    }
+    .kv-form input,
+    .kv-form select {
+      width: 100%;
+    }
+  }
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const tabs = document.querySelectorAll(".settings-tabs [data-tab]");
+  const panels = document.querySelectorAll(".settings-card .tab-panel");
+  const initialTab = "{{ active_tab or 'data-settings' }}";
+
+  function setActive(tabName) {
+    tabs.forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.tab === tabName);
+    });
+    panels.forEach((panel) => {
+      panel.classList.toggle("active", panel.dataset.panel === tabName);
+    });
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", function () {
+      setActive(this.dataset.tab);
+    });
+  });
+
+  const staffRoleList = document.getElementById("staff-role-order-list");
+  const staffRoleInputs = document.getElementById("staff-role-order-inputs");
+  if (staffRoleList && staffRoleInputs) {
+    const buildStaffRoleOrderInputs = () => {
+      staffRoleInputs.innerHTML = "";
+      Array.from(staffRoleList.querySelectorAll("[data-id]")).forEach((item) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "role_order_ids";
+        input.value = item.dataset.id || "";
+        staffRoleInputs.appendChild(input);
+      });
+    };
+
+    let draggedItem = null;
+    staffRoleList.querySelectorAll("[draggable='true']").forEach((item) => {
+      item.addEventListener("dragstart", () => {
+        draggedItem = item;
+        item.classList.add("dragging");
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("dragging");
+        draggedItem = null;
+        buildStaffRoleOrderInputs();
+      });
+      item.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        if (!draggedItem || draggedItem === item) return;
+        const rect = item.getBoundingClientRect();
+        const shouldInsertAfter = (event.clientY - rect.top) > rect.height / 2;
+        if (shouldInsertAfter) {
+          item.parentNode.insertBefore(draggedItem, item.nextSibling);
+        } else {
+          item.parentNode.insertBefore(draggedItem, item);
+        }
+      });
+    });
+    buildStaffRoleOrderInputs();
+  }
+
+  setActive(initialTab);
+
+  const gstMode = document.getElementById("gst-value-mode");
+  const gstPercent = document.getElementById("default-gst-percent");
+  const gstAmount = document.getElementById("default-gst-amount");
+  const cgstPreview = document.getElementById("cgst-preview");
+  const sgstPreview = document.getElementById("sgst-preview");
+
+  function asNum(value) {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function refreshSplitPreview() {
+    if (!gstMode || !cgstPreview || !sgstPreview) return;
+    const mode = gstMode.value === "amount" ? "amount" : "percent";
+    const base = mode === "amount" ? asNum(gstAmount?.value) : asNum(gstPercent?.value);
+    const half = Math.max(0, base / 2);
+    if (mode === "amount") {
+      cgstPreview.value = `₹ ${half.toFixed(2)}`;
+      sgstPreview.value = `₹ ${half.toFixed(2)}`;
+    } else {
+      cgstPreview.value = `${half.toFixed(2)} %`;
+      sgstPreview.value = `${half.toFixed(2)} %`;
+    }
+  }
+
+  [gstMode, gstPercent, gstAmount].forEach((el) => {
+    if (el) {
+      el.addEventListener("input", refreshSplitPreview);
+      el.addEventListener("change", refreshSplitPreview);
+    }
+  });
+  refreshSplitPreview();
+
+});
+</script>
+{% endblock %}

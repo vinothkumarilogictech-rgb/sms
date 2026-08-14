@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .purchase-detail-layout {
+    display: grid;
+    gap: 14px;
+  }
+  .purchase-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .purchase-title {
+    margin: 0;
+  }
+  .purchase-subtitle {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+  .purchase-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .meta-chip {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.86rem;
+    background: #fff;
+  }
+  .purchase-summary {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .summary-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    padding: 12px;
+  }
+  .summary-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+  }
+  .summary-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+  .purchase-main {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: 1.6fr 1fr;
+    align-items: start;
+  }
+  .items-wrap .card-title,
+  .side-wrap .card-title {
+    margin: 0 0 10px;
+  }
+  .material-table.compact .material-row {
+    grid-template-columns: 1.5fr 0.7fr 0.8fr 0.9fr 0.9fr;
+  }
+  .material-table.compact .material-head {
+    font-weight: 700;
+  }
+  .payment-form {
+    display: grid;
+    gap: 10px;
+  }
+  .payment-form input {
+    width: 100%;
+  }
+  .purchase-notes {
+    margin-top: 12px;
+    border-top: 1px dashed var(--line);
+    padding-top: 10px;
+  }
+  .purchase-notes p {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .bill-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+  .bill-card-wrap {
+    display: grid;
+    gap: 6px;
+  }
+  .bill-card {
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .bill-card img {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+    display: block;
+  }
+  .bill-card-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .bill-download-btn {
+    font-size: 0.82rem;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink);
+    text-decoration: none;
+    background: #fff;
+  }
+  .bill-download-btn:hover {
+    background: #a3202d;
+    border-color: #a3202d;
+    color: #fff;
+  }
+  .bill-lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 16px;
+  }
+  .bill-lightbox.open {
+    display: flex;
+  }
+  .bill-lightbox-inner {
+    position: relative;
+    width: min(70vw, calc(70vh * 4 / 3));
+    max-width: 95vw;
+  }
+  .bill-lightbox-media {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #111;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  }
+  .bill-lightbox-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .bill-lightbox-close,
+  .bill-lightbox-nav {
+    position: absolute;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(20, 20, 20, 0.72);
+    color: #fff;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  }
+  .bill-lightbox-close {
+    top: 10px;
+    right: 10px;
+  }
+  .bill-lightbox-download {
+    top: 10px;
+    left: 10px;
+    width: auto;
+    min-width: 36px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    line-height: 34px;
+    text-decoration: none;
+    text-align: center;
+    display: inline-block;
+  }
+  .bill-lightbox-nav {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .bill-lightbox-prev { left: 10px; }
+  .bill-lightbox-next { right: 10px; }
+  .bill-lightbox-caption {
+    text-align: center;
+    color: #f5f5f5;
+    margin-top: 10px;
+    font-size: 0.92rem;
+  }
+  @media (max-width: 1100px) {
+    .purchase-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .purchase-main {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 700px) {
+    .purchase-summary {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+{% set balance_amount = (purchase.total_amount or 0) - (purchase.paid_amount or 0) %}
+
+<div class="purchase-detail-layout">
+  <div class="purchase-topbar">
+    <div>
+      <h1 class="purchase-title">Purchase Details</h1>
+      <p class="purchase-subtitle">{{ purchase.vendor_code }} - {{ purchase.vendor_name }}</p>
+      <div class="purchase-meta">
+        <span class="meta-chip">Purchase No: {{ purchase.purchase_no or ("P" ~ purchase.id) }}</span>
+        <span class="meta-chip">Purchased: {{ purchase.purchased_at|datetime_display if purchase.purchased_at else "-" }}</span>
+        <span class="meta-chip">Status: {{ purchase.status or "-" }}</span>
+        <span class="meta-chip">Payment Mode: {{ purchase.payment_mode or "Cash" }}</span>
+      </div>
+    </div>
+    <a class="btn ghost hover-red-fill js-back-button" href="{{ url_for('vendors') }}" data-fallback="{{ url_for('vendors') }}">Back</a>
+  </div>
+
+  <section class="purchase-summary">
+    <article class="summary-card">
+      <div class="summary-label">Total Amount</div>
+      <div class="summary-value">₹ {{ "%.2f"|format(purchase.total_amount or 0) }}</div>
+    </article>
+    <article class="summary-card">
+      <div class="summary-label">Paid Amount</div>
+      <div class="summary-value">₹ {{ "%.2f"|format(purchase.paid_amount or 0) }}</div>
+    </article>
+    <article class="summary-card">
+      <div class="summary-label">Balance Amount</div>
+      <div class="summary-value">₹ {{ "%.2f"|format(balance_amount) }}</div>
+    </article>
+    <article class="summary-card">
+      <div class="summary-label">Items Count</div>
+      <div class="summary-value">{{ items|length if items else 0 }}</div>
+    </article>
+  </section>
+
+  <div class="purchase-main">
+    <section class="card items-wrap">
+      <h3 class="card-title">Purchased Items</h3>
+      {% if items %}
+      <div class="material-table compact">
+        <div class="material-row material-head">
+          <div>Item</div>
+          <div>Qty</div>
+          <div>UOM</div>
+          <div>Unit Price</div>
+          <div>Line Total</div>
+        </div>
+        {% for item in items %}
+        <div class="material-row">
+          <div>{{ item.item_name or "-" }}</div>
+          <div>{{ item.qty or 0 }}</div>
+          <div>{{ item.uom_name or "-" }}</div>
+          <div>₹ {{ "%.2f"|format(item.unit_price or 0) }}</div>
+          <div>₹ {{ "%.2f"|format(item.line_total or 0) }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">No purchase items found.</p>
+      {% endif %}
+    </section>
+
+    <section class="card side-wrap">
+      <h3 class="card-title">Payment</h3>
+      <form class="payment-form" method="post" action="{{ url_for('vendors_purchase_pay', purchase_id=purchase.id) }}">
+        <label>
+          Add Payment Amount
+          <input type="number" step="0.01" name="pay_amount" min="0" />
+        </label>
+        <label>
+          Payment Mode
+          <select name="payment_mode">
+            {% for mode in ["Cash", "GPay", "Card"] %}
+            <option value="{{ mode }}" {% if (purchase.payment_mode or "Cash") == mode %}selected{% endif %}>{{ mode }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="btn primary" type="submit">Add Payment</button>
+      </form>
+
+      {% if purchase.notes %}
+      <div class="purchase-notes">
+        <h4>Notes</h4>
+        <p>{{ purchase.notes }}</p>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="card">
+    <h3 class="card-title">Bill Images</h3>
+    {% if images %}
+    <div class="bill-grid">
+      {% for img in images %}
+      {% set img_src = url_for('static', filename='uploads/' ~ img.filename) %}
+      {% set img_name = (img.filename.rsplit('/', 1)[-1] if '/' in img.filename else img.filename) %}
+      <div class="bill-card-wrap">
+        <button class="bill-card" type="button" data-bill-index="{{ loop.index0 }}" data-bill-src="{{ img_src }}" data-bill-name="{{ img_name }}">
+          <img src="{{ img_src }}" alt="Bill image {{ loop.index }}">
+        </button>
+        <div class="bill-card-actions">
+          <a class="bill-download-btn" href="{{ img_src }}" download="{{ img_name }}">Download</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No bill images uploaded.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="bill-lightbox" id="billLightbox" aria-hidden="true">
+  <div class="bill-lightbox-inner">
+    <div class="bill-lightbox-media">
+      <a class="bill-lightbox-download" id="billLightboxDownload" href="#" download>Download</a>
+      <button class="bill-lightbox-close" type="button" aria-label="Close">x</button>
+      <button class="bill-lightbox-nav bill-lightbox-prev" type="button" aria-label="Previous">&lt;</button>
+      <img class="bill-lightbox-img" src="" alt="Bill image preview">
+      <button class="bill-lightbox-nav bill-lightbox-next" type="button" aria-label="Next">&gt;</button>
+    </div>
+    <div class="bill-lightbox-caption" id="billLightboxCaption"></div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const tiles = Array.from(document.querySelectorAll("[data-bill-index]"));
+    const lightbox = document.getElementById("billLightbox");
+    if (!tiles.length || !lightbox) return;
+    const img = lightbox.querySelector(".bill-lightbox-img");
+    const closeBtn = lightbox.querySelector(".bill-lightbox-close");
+    const downloadBtn = document.getElementById("billLightboxDownload");
+    const prevBtn = lightbox.querySelector(".bill-lightbox-prev");
+    const nextBtn = lightbox.querySelector(".bill-lightbox-next");
+    const caption = document.getElementById("billLightboxCaption");
+    let index = 0;
+
+    function openAt(i) {
+      index = (i + tiles.length) % tiles.length;
+      const tile = tiles[index];
+      const src = tile.getAttribute("data-bill-src") || "";
+      const name = tile.getAttribute("data-bill-name") || `bill_${index + 1}.jpg`;
+      img.src = src;
+      if (downloadBtn) {
+        downloadBtn.href = src;
+        downloadBtn.setAttribute("download", name);
+      }
+      if (caption) caption.textContent = `Bill ${index + 1} of ${tiles.length}`;
+      lightbox.classList.add("open");
+      lightbox.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+    }
+
+    function close() {
+      lightbox.classList.remove("open");
+      lightbox.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }
+
+    function move(step) {
+      openAt(index + step);
+    }
+
+    tiles.forEach((tile, i) => {
+      tile.addEventListener("click", function () {
+        openAt(i);
+      });
+    });
+
+    closeBtn?.addEventListener("click", close);
+    prevBtn?.addEventListener("click", function () { move(-1); });
+    nextBtn?.addEventListener("click", function () { move(1); });
+    lightbox.addEventListener("click", function (event) {
+      if (event.target === lightbox) close();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (!lightbox.classList.contains("open")) return;
+      if (event.key === "Escape") close();
+      if (event.key === "ArrowLeft") move(-1);
+      if (event.key === "ArrowRight") move(1);
+    });
+  })();
+</script>
+{% endblock %}

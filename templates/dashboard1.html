@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  #dashboard-theme {
+    --dash-bg: linear-gradient(180deg, #f7f9fc 0%, #eff2f7 100%);
+    --dash-ink: #101828;
+    --dash-muted: #344054;
+    --dash-border: #e4e8f0;
+    --dash-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+  }
+
+  #dashboard-theme.dash-shell {
+    background: var(--dash-bg) !important;
+    border: 1px solid #e8edf5 !important;
+    border-radius: 24px;
+    padding: 1.4rem;
+  }
+
+  #dashboard-theme .dash-head,
+  #dashboard-theme .card,
+  #dashboard-theme .notify-panel,
+  #dashboard-theme .dash-search,
+  #dashboard-theme .dash-search input,
+  #dashboard-theme .chart-filter select {
+    background: #ffffff !important;
+    border-color: var(--dash-border) !important;
+    color: var(--dash-ink) !important;
+    box-shadow: var(--dash-shadow);
+  }
+
+  #dashboard-theme .dash-head,
+  #dashboard-theme .card {
+    border-radius: 18px;
+  }
+
+  #dashboard-theme h1,
+  #dashboard-theme .card-header h3 {
+    letter-spacing: 0.01em;
+    font-weight: 700;
+    color: #111827 !important;
+  }
+
+  #dashboard-theme .card-header {
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid #edf1f7;
+  }
+
+  #dashboard-theme .chart-filter select {
+    border-radius: 12px;
+    min-width: 145px;
+    padding: 0.45rem 0.8rem;
+  }
+
+  #dashboard-theme .dash-eyebrow,
+  #dashboard-theme .muted,
+  #dashboard-theme .chip {
+    color: var(--dash-muted) !important;
+  }
+
+  #dashboard-theme .status-card {
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15) !important;
+  }
+
+  #dashboard-theme .status-card .status-top,
+  #dashboard-theme .status-card .status-top span,
+  #dashboard-theme .status-card .chip,
+  #dashboard-theme .status-card .status-subrow,
+  #dashboard-theme .status-card .status-sublist,
+  #dashboard-theme .status-card .status-value {
+    color: #ffffff !important;
+  }
+
+  #dashboard-theme .status-card i,
+  #dashboard-theme .status-card .status-top-icon {
+    color: #ffffff !important;
+  }
+
+  #dashboard-theme .tone-violet { background: linear-gradient(135deg, #dcb0f2, #caa0e8) !important; }
+  #dashboard-theme .tone-rose { background: linear-gradient(135deg, #fe88b1, #f37fa6) !important; }
+  #dashboard-theme .tone-cyan { background: linear-gradient(135deg, #66c5cc, #56b5bc) !important; }
+  #dashboard-theme .tone-lime { background: linear-gradient(135deg, #c9db74, #bacd66) !important; }
+  #dashboard-theme .tone-green { background: linear-gradient(135deg, #8be0a4, #7bd094) !important; }
+  #dashboard-theme .tone-purchase { background: linear-gradient(135deg, #f89c74, #ec8f67) !important; }
+  #dashboard-theme .tone-inventory { background: linear-gradient(135deg, #9eb9f3, #8fa9e4) !important; }
+  #dashboard-theme .tone-red { background: linear-gradient(135deg, #b3b3b3, #a5a5a5) !important; }
+  #dashboard-theme .tone-amber { background: linear-gradient(135deg, #f6cf71, #e7c061) !important; }
+  #dashboard-theme .tone-profit { background: linear-gradient(135deg, #87c55f, #78b552) !important; }
+  #dashboard-theme .tone-expense { background: linear-gradient(135deg, #b497e7, #a588d8) !important; }
+  #dashboard-theme .tone-reports { background: linear-gradient(135deg, #66c5cc, #8be0a4) !important; }
+
+  #dashboard-theme .dash-search-row:hover,
+  #dashboard-theme .notify-item:hover {
+    background: #f2f4f7 !important;
+  }
+
+  #dashboard-theme .stat-chart {
+    border-radius: 14px;
+    padding: 0.7rem;
+    background: linear-gradient(135deg, #fcfdff 0%, #f4f7ff 100%) !important;
+    border: 1px solid #e4eaf5 !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  }
+</style>
+<section id="dashboard-theme" class="dash-shell">
+  <header class="dash-head">
+    <div>
+      <div class="dash-eyebrow">Bike Management</div>
+      <h1>Order Status</h1>
+      <!-- <p>Live snapshot of revenue, production, and stock health.</p> -->
+    </div>
+    <div class="dash-actions">
+      <form class="dash-search" method="get" action="{{ url_for('dashboard') }}">
+        <i class="bi bi-search search-icon" aria-hidden="true"></i>
+        <input type="text" name="q" placeholder="Search invoice, tailor, customer id, name, phone" value="{{ q or '' }}" autocomplete="off" />
+        {% if q %}
+        <div class="dash-search-results">
+          {% if search_orders %}
+            {% for order in search_orders %}
+            <a class="dash-search-row" href="{{ url_for('order_detail', order_id=order.id) }}">
+              <span>{{ order.id|fmt_order_id(order.order_type) }}</span>
+              <span>{{ order.name }}</span>
+              <span>{{ order.phone }}</span>
+            </a>
+            {% endfor %}
+            <a class="dash-search-all" href="{{ url_for('orders', q=q) }}">View all results</a>
+          {% else %}
+            <div class="dash-search-empty">No results found.</div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </form>
+      <a class="btn primary" href="{{ url_for('order_new') }}"><i class="bi bi-journal-text"></i> New Order</a>
+      <a class="btn ghost" href="{{ url_for('orders') }}">View orders</a>
+      <div class="notify-wrap" data-count="{{ completed_notifications|length }}">
+        <button type="button" class="notify-btn" id="notifyToggle" aria-expanded="false" aria-controls="notifyPanel">
+          <i class="bi bi-bell"></i>
+          {% if completed_notifications|length > 0 %}
+          <span class="notify-badge">{{ completed_notifications|length }}</span>
+          {% endif %}
+        </button>
+        <div class="notify-panel" id="notifyPanel" role="dialog" aria-label="Notifications">
+          <div class="notify-head">
+            <span>Notifications</span>
+            <span class="notify-count">{{ completed_notifications|length }}</span>
+          </div>
+          <div class="notify-body">
+            {% if completed_notifications %}
+              {% for order in completed_notifications %}
+              <a class="notify-item" href="{{ url_for('order_detail', order_id=order.id) }}">
+                <div>
+                  <strong>{{ order.id|fmt_order_id(order.order_type) }} {{ order.name }}</strong>
+                  <div class="muted">
+                    Completed{% if order.completed_at %} · {{ order.completed_at|date_only }}{% endif %}
+                  </div>
+                </div>
+                <span class="notify-pill">Ready</span>
+              </a>
+              {% endfor %}
+            {% else %}
+              <div class="notify-empty">No notifications yet.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+  <section class="dash-grid">
+    <div class="dash-row cols-5">
+      <a class="status-card tone-violet link-card" href="{{ url_for('orders') }}">
+        <div class="status-top">
+          <span><i class="bi bi-receipt-cutoff status-top-icon" aria-hidden="true"></i> Total Order</span>
+          <span class="chip">Today</span>
+        </div>
+        <div class="status-value">{{ total_orders_today }}</div>
+      </a>
+
+      <a class="status-card tone-rose link-card" href="{{ url_for('orders', status='In-Progress') }}">
+        <div class="status-top">
+          <span><i class="bi bi-scissors status-top-icon" aria-hidden="true"></i> In-Progress</span>
+        </div>
+        <div class="status-value">{{ counts.get('In-Progress', 0) }}</div>
+      </a>
+
+      <a class="status-card tone-cyan link-card" href="{{ url_for('orders', status='Urgent') }}">
+        <div class="status-top">
+          <span><i class="bi bi-exclamation-triangle status-top-icon" aria-hidden="true"></i> Urgent</span>
+        </div>
+        <div class="status-value">{{ urgent_count }}</div>
+      </a>
+
+      <a class="status-card tone-lime link-card" href="{{ url_for('orders', status='Completed') }}">
+        <div class="status-top">
+          <span><i class="bi bi-hourglass-split status-top-icon" aria-hidden="true"></i> Completed</span>
+          <span class="chip">Balance</span>
+        </div>
+        <div class="status-value">{{ counts.get('Completed', 0) }}</div>
+      </a>
+
+      <a class="status-card tone-green link-card" href="{{ url_for('orders', status='Delivered') }}">
+        <div class="status-top">
+          <span><i class="bi bi-check-circle status-top-icon" aria-hidden="true"></i> Delivered</span>
+          <span class="chip">Done</span>
+        </div>
+        <div class="status-value">{{ counts.get('Delivered', 0) }}</div>
+      </a>
+    </div>
+
+    <div class="dash-row cols-4">
+      <a class="status-card tone-purchase link-card" href="{{ url_for('vendors', tab='purchases') }}">
+        <div class="status-top">
+          <span><i class="bi bi-bag-check status-top-icon" aria-hidden="true"></i> Material Purchase</span>
+          <span class="chip">Spend</span>
+        </div>
+        <div class="status-value">₹ {{ '%.2f'|format(spent) }}</div>
+        {% if material_purchase_summary %}
+        <div class="status-sublist">
+          {% for row in material_purchase_summary %}
+          <div class="status-subrow">{{ row.material_name }}: {{ row.total_qty }} qty</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </a>
+
+      <a class="status-card tone-profit link-card" href="{{ url_for('orders') }}">
+        <div class="status-top">
+          <span><i class="bi bi-currency-rupee status-top-icon" aria-hidden="true"></i> Material Sales</span>
+        </div>
+        <div class="status-value">â‚¹ {{ '%.2f'|format(material_sales) }}</div>
+      </a>
+
+      <a class="status-card tone-inventory link-card" href="{{ url_for('inventory', tab='vehicles') }}">
+        <div class="status-top">
+          <span><i class="bi bi-box-seam status-top-icon" aria-hidden="true"></i> Stock Quantity</span>
+          <span class="chip">Units</span>
+        </div>
+        <div class="status-value">{{ stock_units }}</div>
+      </a>
+
+      <a class="status-card tone-red link-card" href="{{ url_for('inventory', tab='vehicles') }}">
+        <div class="status-top">
+          <span><i class="bi bi-graph-down-arrow status-top-icon" aria-hidden="true"></i> Low Stock</span>
+          <span class="chip">Alert</span>
+        </div>
+        <div class="status-value">{{ low_stock_count }}</div>
+      </a>
+    </div>
+
+    <div class="dash-row cols-4">
+      
+
+      <a class="status-card tone-profit link-card" href="{{ url_for('reports') }}">
+        <div class="status-top">
+          <span><i class="bi bi-graph-up-arrow status-top-icon" aria-hidden="true"></i> Total Profit</span>
+          <span class="chip">₹</span>
+        </div>
+        <div class="status-value">₹ {{ '%.2f'|format(total_profit) }}</div>
+      </a>
+
+      <a class="status-card tone-expense link-card" href="{{ url_for('reports', type='expenses') }}">
+        <div class="status-top">
+          <span><i class="bi bi-cash-stack status-top-icon" aria-hidden="true"></i> Total Expense</span>
+          <span class="chip">₹</span>
+        </div>
+        <div class="status-value">₹ {{ '%.2f'|format(total_loss) }}</div>
+      </a>
+
+      <a class="status-card tone-reports link-card" href="{{ url_for('reports') }}">
+        <div class="status-top">
+          <span><i class="bi bi-file-earmark-bar-graph status-top-icon" aria-hidden="true"></i> Reports</span>
+          <span class="chip">Files</span>
+        </div>
+        <div class="status-value">{{ report_count }}</div>
+      </a>
+
+      <div class="status-card tone-amber">
+        <div class="status-top">
+          <span><i class="bi bi-currency-rupee status-top-icon" aria-hidden="true"></i> Total Revenue</span>
+          <span class="chip">₹</span>
+        </div>
+        <div class="status-value">₹ {{ '%.2f'|format(revenue) }}</div>
+      </div>
+    </div>
+  </section>
+  <section class="dash-bottom">
+    <div class="dash-row">
+      <div class="card stat-chart-card">
+        <div class="card-header">
+          <h3><i class="bi bi-bar-chart-line"></i> Expenses &amp; Profit</h3>
+          <form method="get" class="chart-filter">
+            {% if q %}<input type="hidden" name="q" value="{{ q }}"/>{% endif %}
+            <input type="hidden" name="orders_range" value="{{ orders_range }}"/>
+            <input type="hidden" name="inventory_range" value="{{ inventory_range }}"/>
+            <select name="profit_range" onchange="this.form.submit()">
+              <option value="today" {% if profit_range == 'today' %}selected{% endif %}>Today</option>
+              <option value="yesterday" {% if profit_range == 'yesterday' %}selected{% endif %}>Yesterday</option>
+              <option value="week" {% if profit_range == 'week' %}selected{% endif %}>Last week</option>
+              <option value="6month" {% if profit_range == '6month' %}selected{% endif %}>Last 6 months</option>
+              <option value="1year" {% if profit_range == '1year' %}selected{% endif %}>1 year</option>
+            </select>
+          </form>
+        </div>
+        <div class="stat-chart">
+          <canvas id="profitChart" height="220" aria-label="Expenses and profit chart"></canvas>
+        </div>
+      </div>
+
+      <div class="card stat-chart-card">
+        <div class="card-header">
+          <h3><i class="bi bi-pie-chart"></i> Orders Status</h3>
+          <form method="get" class="chart-filter">
+            {% if q %}<input type="hidden" name="q" value="{{ q }}"/>{% endif %}
+            <input type="hidden" name="profit_range" value="{{ profit_range }}"/>
+            <input type="hidden" name="inventory_range" value="{{ inventory_range }}"/>
+            <select name="orders_range" onchange="this.form.submit()">
+              <option value="today" {% if orders_range == 'today' %}selected{% endif %}>Today</option>
+              <option value="yesterday" {% if orders_range == 'yesterday' %}selected{% endif %}>Yesterday</option>
+              <option value="week" {% if orders_range == 'week' %}selected{% endif %}>Last week</option>
+              <option value="6month" {% if orders_range == '6month' %}selected{% endif %}>Last 6 months</option>
+              <option value="1year" {% if orders_range == '1year' %}selected{% endif %}>1 year</option>
+            </select>
+          </form>
+        </div>
+        <div class="stat-chart">
+          <canvas id="ordersChart" height="220" aria-label="Orders status chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-row">
+      <div class="card stat-chart-card">
+        <div class="card-header">
+          <h3><i class="bi bi-boxes"></i> Inventory Stock</h3>
+          <form method="get" class="chart-filter">
+            {% if q %}<input type="hidden" name="q" value="{{ q }}"/>{% endif %}
+            <input type="hidden" name="profit_range" value="{{ profit_range }}"/>
+            <input type="hidden" name="orders_range" value="{{ orders_range }}"/>
+            <select name="inventory_range" onchange="this.form.submit()">
+              <option value="today" {% if inventory_range == 'today' %}selected{% endif %}>Today</option>
+              <option value="yesterday" {% if inventory_range == 'yesterday' %}selected{% endif %}>Yesterday</option>
+              <option value="week" {% if inventory_range == 'week' %}selected{% endif %}>Last week</option>
+              <option value="6month" {% if inventory_range == '6month' %}selected{% endif %}>Last 6 months</option>
+              <option value="1year" {% if inventory_range == '1year' %}selected{% endif %}>1 year</option>
+            </select>
+          </form>
+        </div>
+        <div class="stat-chart">
+          <canvas id="inventoryChart" height="220" aria-label="Inventory stock chart"></canvas>
+        </div>
+        {% if inventory_rows %}
+        <div class="inventory-number-list">
+          {% for row in inventory_rows %}
+          <div class="inventory-number-row">
+            <span>{{ row.name }}</span>
+            <strong>{{ row.qty }}</strong>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card recent-card">
+        <div class="card-header">
+          <h3><i class="bi bi-clock-history"></i> Recent Orders</h3>
+          <span class="pill">Top</span>
+        </div>
+        <div class="recent-orders">
+          {% if recent_orders %}
+            {% for order in recent_orders %}
+            <div class="recent-order-row">
+              <div>
+                <strong>{{ order.invoice_id if order.invoice_id else (order.order_no if order.order_no else (order.id|fmt_order_id(order.order_type))) }} {{ order.name }}</strong>
+                <div class="muted">{{ order.phone }} · {{ order.created_at|datetime_display }}</div>
+              </div>
+              <a class="link" href="{{ url_for('order_detail', order_id=order.id) }}">Open</a>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="muted">No recent orders.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.addEventListener("load", function () {
+    const profitCtx = document.getElementById("profitChart");
+    const ordersCtx = document.getElementById("ordersChart");
+    const inventoryCtx = document.getElementById("inventoryChart");
+    if (!profitCtx || !ordersCtx || !inventoryCtx || !window.Chart) return;
+
+    const textColor = "#334155";
+    const axisGridColor = "rgba(148, 163, 184, 0.2)";
+    const legendText = "#1f2937";
+
+    const makeGradient = (canvasEl, start, end) => {
+      const ctx = canvasEl.getContext("2d");
+      const g = ctx.createLinearGradient(0, 0, 0, 240);
+      g.addColorStop(0, start);
+      g.addColorStop(1, end);
+      return g;
+    };
+
+    const sharedLegend = {
+      position: "bottom",
+      labels: {
+        color: legendText,
+        padding: 14,
+        boxWidth: 18,
+        boxHeight: 9,
+        usePointStyle: true,
+        font: { weight: "600" }
+      }
+    };
+
+    const profitLabels = {{ profit_labels | tojson }};
+    const profitValues = {{ profit_values | tojson }};
+    const lossValues = {{ loss_values | tojson }};
+    const netValues = profitValues.map((profit, index) => profit - (lossValues[index] || 0));
+    new Chart(profitCtx, {
+      type: "bar",
+      data: {
+        labels: profitLabels,
+        datasets: [
+          {
+            label: "Profit",
+            data: profitValues,
+            backgroundColor: makeGradient(profitCtx, "rgba(99, 102, 241, 0.92)", "rgba(59, 130, 246, 0.76)"),
+            borderColor: "#4f46e5",
+            borderWidth: 1,
+            borderRadius: 10,
+            borderSkipped: false
+          },
+          {
+            label: "Expenses",
+            data: lossValues,
+            backgroundColor: makeGradient(profitCtx, "rgba(249, 115, 22, 0.92)", "rgba(236, 72, 153, 0.72)"),
+            borderColor: "#ea580c",
+            borderWidth: 1,
+            borderRadius: 10,
+            borderSkipped: false
+          },
+          {
+            type: "line",
+            label: "Net Trend",
+            data: netValues,
+            borderColor: "#0d9488",
+            backgroundColor: "rgba(13, 148, 136, 0.2)",
+            borderWidth: 3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: "#0f766e",
+            tension: 0.35
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: {
+            ticks: { color: textColor },
+            grid: { display: false }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: textColor },
+            grid: { color: axisGridColor }
+          }
+        },
+        plugins: {
+          legend: sharedLegend,
+          tooltip: {
+            backgroundColor: "rgba(255, 255, 255, 0.98)",
+            titleColor: "#0f172a",
+            bodyColor: "#334155",
+            borderColor: "rgba(148, 163, 184, 0.5)",
+            borderWidth: 1
+          }
+        }
+      }
+    });
+
+    const ordersLabels = {{ orders_labels | tojson }};
+    const ordersValues = {{ orders_values | tojson }};
+    new Chart(ordersCtx, {
+      type: "doughnut",
+      data: {
+        labels: ordersLabels,
+        datasets: [{
+          data: ordersValues,
+          backgroundColor: ["#7c3aed", "#14b8a6", "#22c55e", "#f97316", "#3b82f6", "#ec4899"],
+          borderColor: "#ffffff",
+          borderWidth: 2,
+          hoverOffset: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "56%",
+        plugins: {
+          legend: sharedLegend,
+          tooltip: {
+            backgroundColor: "rgba(255, 255, 255, 0.98)",
+            titleColor: "#0f172a",
+            bodyColor: "#334155",
+            borderColor: "rgba(148, 163, 184, 0.5)",
+            borderWidth: 1
+          }
+        }
+      }
+    });
+
+    const inventoryLabels = {{ inventory_labels | tojson }};
+    const inventoryValues = {{ inventory_values | tojson }};
+    new Chart(inventoryCtx, {
+      type: "bar",
+      data: {
+        labels: inventoryLabels,
+        datasets: [{
+          label: "Qty",
+          data: inventoryValues,
+          backgroundColor: makeGradient(inventoryCtx, "rgba(20, 184, 166, 0.9)", "rgba(59, 130, 246, 0.7)"),
+          borderColor: "#0ea5e9",
+          borderWidth: 1,
+          borderRadius: 10,
+          borderSkipped: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: "y",
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: { color: textColor },
+            grid: { color: axisGridColor }
+          },
+          y: {
+            ticks: { color: textColor },
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(255, 255, 255, 0.98)",
+            titleColor: "#0f172a",
+            bodyColor: "#334155",
+            borderColor: "rgba(148, 163, 184, 0.5)",
+            borderWidth: 1
+          }
+        }
+      }
+    });
+
+    const wrap = document.querySelector(".notify-wrap");
+    if (!wrap) return;
+    const btn = wrap.querySelector("#notifyToggle");
+    const panel = wrap.querySelector("#notifyPanel");
+    if (!btn || !panel) return;
+
+    const closePanel = () => {
+      panel.classList.remove("open");
+      btn.setAttribute("aria-expanded", "false");
+    };
+
+    const openPanel = () => {
+      panel.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+    };
+
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (panel.classList.contains("open")) {
+        closePanel();
+      } else {
+        openPanel();
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!wrap.contains(event.target)) closePanel();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closePanel();
+    });
+  });
+</script>
+{% endblock %}

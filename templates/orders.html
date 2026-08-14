@@ -1,0 +1,1079 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .tabs-bar[aria-label="Order and customer tabs"] {
+    background: transparent !important;
+  }
+
+  .tab-panel[data-panel="orders"],
+  .tab-panel[data-panel="orders"] .card,
+  .tab-panel[data-panel="orders"] .list-table,
+  .tab-panel[data-panel="orders"] .orders-table .list-row:not(.list-head) {
+    background: #dcc4ef !important;
+  }
+
+  .tab-panel[data-panel="orders"] .orders-table .list-row:not(.list-head) {
+    background: rgba(255, 255, 255, 0.34) !important;
+  }
+</style>
+<div class="page-head orders-page-head">
+  <div class="orders-head-filters">
+    <div class="filter-group orders-head-filter-group">
+      <div class="orders-head-search-wrap">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input class="filter-input orders-head-input" type="text" placeholder="Search invoice, customer, phone, vehicle no" data-filter="search" />
+      </div>
+      <input class="filter-input orders-head-input orders-head-date" type="date" data-filter="from" aria-label="From date" />
+      <input class="filter-input orders-head-input orders-head-date" type="date" data-filter="to" aria-label="To date" />
+      <button class="btn primary orders-head-search-btn" type="button" id="orders-head-search-btn">Search</button>
+    </div>
+  </div>
+  <a class="btn primary orders-head-new-order-btn" href="{{ url_for('order_new') }}"><i class="bi bi-bag-check"></i> + Add Sale</a>
+</div>
+
+{# Charts removed: show graphs only on dashboard #}
+
+<div class="tabs-bar" role="tablist" aria-label="Order and customer tabs">
+  <button class="tab-chip tab-btn active" type="button" data-tab="orders">Sales</button>
+</div>
+
+<div class="tab-panel active" data-panel="orders">
+  <div class="tabs-bar orders-tabs-bar" role="tablist" aria-label="Order status tabs">
+    <div class="orders-tabs-actions">
+      <div class="orders-inline-filters" style="margin-top: 12px;">
+        <div class="orders-inline-filter-control">
+          <div class="orders-filter-field">
+            <span>Search By Sale Status</span>
+            <button class="orders-select-trigger" type="button" id="status-filter-toggle">
+              <span id="status-filter-label">All</span>
+              <i class="bi bi-chevron-down"></i>
+            </button>
+          </div>
+          <div class="orders-filter-section orders-filter-list hidden" id="status-filter-list">
+            <label class="orders-filter-option">
+              <input type="checkbox" id="status-filter-all" checked />
+              <span>All</span>
+            </label>
+            <label class="orders-filter-option">
+              <input class="status-filter-item" type="checkbox" value="In-Progress" {% if status == "In-Progress" %}checked{% endif %} />
+              <span>In-Progress</span>
+            </label>
+            <label class="orders-filter-option">
+              <input class="status-filter-item" type="checkbox" value="Completed" {% if status == "Completed" %}checked{% endif %} />
+              <span>Completed</span>
+            </label>
+            <label class="orders-filter-option">
+              <input class="status-filter-item" type="checkbox" value="Ready for Delivery" {% if status == "Ready for Delivery" %}checked{% endif %} />
+              <span>Ready for Delivery</span>
+            </label>
+            <label class="orders-filter-option">
+              <input class="status-filter-item" type="checkbox" value="Delivered" {% if status == "Delivered" %}checked{% endif %} />
+              <span>Delivered</span>
+            </label>
+            <label class="orders-filter-option">
+              <input class="status-filter-item" type="checkbox" value="Cancelled" {% if status == "Cancelled" %}checked{% endif %} />
+              <span>Cancelled</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="card">
+    {% if orders %}
+    <div class="list-table orders-table" style="--list-cols: 0.95fr 1.2fr 1fr 0.8fr 0.8fr 0.85fr 0.55fr 0.45fr;">
+      <div class="list-row list-head">
+        <div>Invoice</div>
+        <div>Vehicle / Customer</div>
+        <div>Vehicle No / Phone</div>
+        <div>Payment</div>
+        <div>Total</div>
+        <div>Date</div>
+        <div style="text-align:center;">Print</div>
+        <div>Action</div>
+      </div>
+	      {% for order in orders %}
+	      {% set invoice_display = (order.invoice_id if order.invoice_id else ('INV' ~ '%03d'|format(order.id or 0))) %}
+	      {% set id_display = invoice_display %}
+      <div
+        class="list-row"
+	        data-order-id="{{ order.id }}"
+        data-order-no="{{ order.order_no }}"
+        data-invoice-id="{{ invoice_display }}"
+        data-created="{{ order.created_at|date_only if order.created_at else '' }}"
+        data-name="{{ order.name or '' }}"
+        data-phone="{{ order.phone or '' }}"
+        data-status="{{ order.status or '' }}"
+        data-vehicle-name="{{ order.vehicle_name or '' }}"
+        data-vehicle-number="{{ order.vehicle_number or '' }}"
+        data-payment="{{ order.payment_method or '' }}"
+        data-total="{{ order.total_amount or 0 }}"
+        data-advance="{{ order.advance_amount or 0 }}"
+        data-paid="{{ order.paid_amount or 0 }}"
+      >
+	        <div class="order-id-cell">
+	          {{ id_display }}
+	        </div>
+        <div>
+          <strong>{{ order.vehicle_name or '-' }}</strong>
+          <div class="muted">{{ order.name or '-' }}</div>
+        </div>
+        <div class="muted">
+          {{ order.vehicle_number or '-' }}
+          <div>{{ order.phone or '-' }}</div>
+        </div>
+        <div>
+          {{ order.payment_method or "-" }}
+        </div>
+        <div>&#8377; {{ '%.2f'|format(order.total_amount or 0) }}</div>
+        <div>{{ order.created_at|date_only_dmy if order.created_at else "-" }}</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <a class="btn tiny primary" href="{{ url_for('order_print_a4', order_id=order.id) }}">
+            <i class="bi bi-printer"></i> Print
+          </a>
+        </div>
+        <div class="list-actions action-menu-wrap" style="margin-left:9px;">
+          <button class="icon-action menu-btn" type="button" aria-label="More actions">
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+	        <div class="menu-pop">
+	            <a class="menu-item" href="{{ url_for('order_detail', order_id=order.id, source='orders') }}">
+	              <i class="bi bi-eye"></i> View
+	            </a>
+              {% if order.sale_id %}
+	            <a class="menu-item" href="{{ url_for('order_new', sale_id=order.sale_id) }}">
+	              <i class="bi bi-pencil"></i> Edit
+	            </a>
+              {% else %}
+	            <a class="menu-item" href="{{ url_for('order_edit', order_id=order.id) }}">
+	              <i class="bi bi-pencil"></i> Edit
+	            </a>
+              {% endif %}
+	            {% if (order.status or "") != "Cancelled" %}
+	            <button class="menu-item cancel-order-btn" type="button" data-order-id="{{ order.id }}">
+	              <i class="bi bi-x-circle"></i> Cancel
+	            </button>
+	            {% endif %}
+	          </div>
+	        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No sales found.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="status-toast hidden" id="status-toast">
+  <div class="status-toast-card">
+    <div class="status-toast-icon">âœ“</div>
+    <div class="status-toast-text">Sale status updated successfully</div>
+  </div>
+</div>
+
+<div class="print-modal hidden" id="print-modal">
+  <div class="print-backdrop"></div>
+  <div class="print-card">
+    <button class="print-close" type="button" id="print-close">x</button>
+    <h3>Print</h3>
+    <div class="print-grid">
+      <div class="print-tile" data-print-type="tailor">
+        <div class="print-icon"><i class="bi bi-scissors"></i></div>
+        <div>Tailor Slip</div>
+      </div>
+      <div class="print-tile" data-print-type="customer">
+        <div class="print-icon"><i class="bi bi-receipt"></i></div>
+        <div>Customer Copy</div>
+      </div>
+    </div>
+    <button class="btn primary print-action" type="button" id="print-action">Print</button>
+    <button class="btn ghost btn-compact print-all" type="button" id="print-all">Print All</button>
+  </div>
+</div>
+
+<div class="download-modal hidden" id="download-modal">
+  <div class="download-backdrop"></div>
+  <div class="download-card">
+    <h3>Preparing download</h3>
+    <div class="download-progress">
+      <div class="download-bar" id="download-bar" style="width: 0%"></div>
+    </div>
+    <div class="download-value" id="download-value">0%</div>
+  </div>
+</div>
+
+<div class="delivery-modal hidden" id="delivery-modal">
+  <div class="delivery-backdrop"></div>
+  <div class="delivery-card">
+    <button class="delivery-close" type="button" id="delivery-close">&times;</button>
+    <h3>Sale Details</h3>
+    <div class="delivery-grid">
+      <div>Total</div>
+      <div id="delivery-total">â‚¹ 0</div>
+      <div>Advance</div>
+      <div id="delivery-advance">â‚¹ 0</div>
+      <div>Paid</div>
+      <div id="delivery-paid">â‚¹ 0</div>
+      <div>Balance</div>
+      <div id="delivery-due">â‚¹ 0</div>
+    </div>
+    <div class="delivery-actions">
+      <button class="btn primary" type="button" id="delivery-confirm">Delivery</button>
+      <button class="btn ghost" type="button" id="delivery-skip">Skip Payment</button>
+    </div>
+  </div>
+</div>
+
+<div class="print-modal hidden" id="status-detail-modal">
+  <div class="print-backdrop" id="status-detail-backdrop"></div>
+  <div class="print-card">
+    <button class="print-close" type="button" id="status-detail-close">&times;</button>
+    <h3>Status Details</h3>
+    <div id="status-detail-order" class="muted"></div>
+    <div class="delivery-grid" id="status-detail-list"></div>
+  </div>
+</div>
+
+<div class="print-modal hidden" id="delivery-detail-modal">
+  <div class="print-backdrop" id="delivery-detail-backdrop"></div>
+  <div class="print-card">
+    <button class="print-close" type="button" id="delivery-detail-close">&times;</button>
+    <h3>Delivery Details</h3>
+    <div id="delivery-detail-order" class="muted"></div>
+    <div class="delivery-grid" id="delivery-detail-list"></div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const toast = document.getElementById("status-toast");
+    const printModal = document.getElementById("print-modal");
+    const printClose = document.getElementById("print-close");
+    const printAction = document.getElementById("print-action");
+    const printAll = document.getElementById("print-all");
+    const printTailorTile = document.querySelector('.print-tile[data-print-type="tailor"]');
+    const printCustomerTile = document.querySelector('.print-tile[data-print-type="customer"]');
+    const printBackdrop = document.querySelector(".print-backdrop");
+    const searchInput = document.querySelector('[data-filter="search"]');
+    const fromInput = document.querySelector('[data-filter="from"]');
+    const toInput = document.querySelector('[data-filter="to"]');
+    const ordersHeadSearchBtn = document.getElementById("orders-head-search-btn");
+    const statusFilterToggle = document.getElementById("status-filter-toggle");
+    const statusFilterList = document.getElementById("status-filter-list");
+    const statusFilterLabel = document.getElementById("status-filter-label");
+    const statusFilterAll = document.getElementById("status-filter-all");
+    const statusFilterItems = document.querySelectorAll(".status-filter-item");
+    const downloadBtn = document.getElementById("download-orders");
+    const downloadModal = document.getElementById("download-modal");
+    const downloadBar = document.getElementById("download-bar");
+    const downloadValue = document.getElementById("download-value");
+    const deliveryModal = document.getElementById("delivery-modal");
+    const deliveryClose = document.getElementById("delivery-close");
+    const deliveryConfirm = document.getElementById("delivery-confirm");
+    const deliverySkip = document.getElementById("delivery-skip");
+    const deliveryTotal = document.getElementById("delivery-total");
+    const deliveryAdvance = document.getElementById("delivery-advance");
+    const deliveryPaid = document.getElementById("delivery-paid");
+    const deliveryDue = document.getElementById("delivery-due");
+    const statusDetailModal = document.getElementById("status-detail-modal");
+    const statusDetailBackdrop = document.getElementById("status-detail-backdrop");
+    const statusDetailClose = document.getElementById("status-detail-close");
+    const statusDetailOrder = document.getElementById("status-detail-order");
+    const statusDetailList = document.getElementById("status-detail-list");
+    const deliveryDetailModal = document.getElementById("delivery-detail-modal");
+    const deliveryDetailBackdrop = document.getElementById("delivery-detail-backdrop");
+    const deliveryDetailClose = document.getElementById("delivery-detail-close");
+    const deliveryDetailOrder = document.getElementById("delivery-detail-order");
+    const deliveryDetailList = document.getElementById("delivery-detail-list");
+    let activeOrderId = null;
+    let activePrintType = "tailor";
+    let activeOrderType = "";
+    let pendingDeliveryId = null;
+    let pendingDeliveryStatus = "Delivered";
+    const directPrintEnabled = "{{ '1' if auto_print_on_click else '0' }}" === "1";
+
+    function showToast(message) {
+      if (!toast) return;
+      const toastText = toast.querySelector(".status-toast-text");
+      if (toastText && message) {
+        toastText.textContent = message;
+      }
+      toast.classList.remove("hidden");
+      window.setTimeout(() => toast.classList.add("hidden"), 2000);
+    }
+
+    function applyCancelledStatus(row) {
+      if (!row) return;
+      row.dataset.status = "Cancelled";
+      const statusText = row.querySelector(".status-text");
+      if (statusText) {
+        statusText.textContent = "Cancelled";
+        statusText.className = "status-text status-cancelled";
+      }
+      const cancelBtn = row.querySelector(".cancel-order-btn");
+      if (cancelBtn) cancelBtn.remove();
+      applyFilters();
+    }
+
+    function closeAllMenus() {
+      document.querySelectorAll(".menu-pop.open").forEach((menu) => menu.classList.remove("open"));
+      document.querySelectorAll(".status-menu.open").forEach((menu) => menu.classList.remove("open"));
+      document.querySelectorAll(".tailor-menu.open").forEach((menu) => menu.classList.remove("open"));
+      if (statusFilterList) statusFilterList.classList.add("hidden");
+    }
+
+    function getSelectedStatuses() {
+      const checked = Array.from(statusFilterItems)
+        .filter((input) => input.checked)
+        .map((input) => (input.value || "").toLowerCase());
+      return new Set(checked);
+    }
+
+    function syncStatusAllToggle() {
+      if (!statusFilterAll) return;
+      const allChecked = Array.from(statusFilterItems).every((input) => input.checked);
+      statusFilterAll.checked = allChecked;
+    }
+
+    function syncStatusLabel() {
+      if (!statusFilterLabel) return;
+      const selected = Array.from(statusFilterItems).filter((input) => input.checked);
+      if (!selected.length || selected.length === statusFilterItems.length) {
+        statusFilterLabel.textContent = "All";
+        return;
+      }
+      if (selected.length === 1) {
+        statusFilterLabel.textContent = selected[0].value;
+        return;
+      }
+      statusFilterLabel.textContent = `${selected.length} selected`;
+    }
+
+    function initStatusFilters() {
+      const selected = Array.from(statusFilterItems).filter((input) => input.checked);
+      if (!selected.length) {
+        statusFilterItems.forEach((input) => {
+          input.checked = true;
+        });
+        if (statusFilterAll) statusFilterAll.checked = true;
+      }
+    }
+
+    function parseDateValue(raw) {
+      const text = String(raw || "").trim();
+      if (!text || text === "-") return null;
+      const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (isoMatch) {
+        const dt = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+        return Number.isNaN(dt.getTime()) ? null : dt;
+      }
+      const dmyMatch = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (dmyMatch) {
+        const dt = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
+        return Number.isNaN(dt.getTime()) ? null : dt;
+      }
+      const parsed = new Date(text);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function ymdStamp(dateObj) {
+      return dateObj ? dateObj.toISOString().slice(0, 10) : "";
+    }
+
+    function applyFilters() {
+      const term = (searchInput?.value || "").trim().toLowerCase();
+      const fromDate = parseDateValue(fromInput?.value || "");
+      const toDate = parseDateValue(toInput?.value || "");
+      const fromStamp = ymdStamp(fromDate);
+      const toStamp = ymdStamp(toDate);
+      const selectedStatuses = getSelectedStatuses();
+      const statusFiltering = selectedStatuses.size > 0 && selectedStatuses.size < statusFilterItems.length;
+      document.querySelectorAll(".list-row[data-order-id]").forEach((row) => {
+        const searchText = [
+          row.dataset.orderId,
+          row.dataset.orderNo,
+          row.dataset.invoiceId,
+          row.dataset.name,
+          row.dataset.phone,
+          row.dataset.vehicleName,
+          row.dataset.vehicleNumber,
+          row.dataset.payment,
+          row.dataset.status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        let matches = !term || searchText.includes(term);
+        if (matches && statusFiltering) {
+          matches = selectedStatuses.has((row.dataset.status || "").toLowerCase());
+        }
+        const createdDate = parseDateValue(row.dataset.created || "");
+        const createdStamp = ymdStamp(createdDate);
+        if (matches && (fromStamp || toStamp)) {
+          if (!createdStamp) {
+            matches = false;
+          } else {
+            if (fromStamp && createdStamp < fromStamp) matches = false;
+            if (toStamp && createdStamp > toStamp) matches = false;
+          }
+        }
+        row.classList.toggle("hidden", !matches);
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      const printBtn = event.target.closest(".print-btn");
+      if (printBtn) {
+        activeOrderId = printBtn.dataset.print;
+        activeOrderType = (printBtn.dataset.orderType || "").trim();
+        document.querySelectorAll(".print-tile").forEach((tile) => tile.classList.remove("active"));
+        if ((activeOrderType || "").trim().toLowerCase() === "tailoring") {
+          activePrintType = "tailor";
+          if (printTailorTile) printTailorTile.classList.remove("hidden");
+          if (printAll) printAll.classList.remove("hidden");
+          if (printTailorTile) printTailorTile.classList.add("active");
+        } else {
+          activePrintType = "customer";
+          if (printTailorTile) printTailorTile.classList.add("hidden");
+          if (printAll) printAll.classList.add("hidden");
+          if (printCustomerTile) printCustomerTile.classList.add("active");
+        }
+        if (printModal) printModal.classList.remove("hidden");
+        return;
+      }
+
+      const cancelBtn = event.target.closest(".cancel-order-btn");
+      if (cancelBtn) {
+        const orderId = cancelBtn.dataset.orderId;
+        const row = cancelBtn.closest(".list-row");
+        if (!orderId || !row) return;
+        const currentStatus = (row.dataset.status || "").trim().toLowerCase();
+        if (currentStatus === "cancelled") {
+          showToast("Bill already cancelled.");
+          return;
+        }
+        if (!window.confirm("Cancel this bill?")) {
+          return;
+        }
+        const body = new URLSearchParams();
+        body.set("next", window.location.pathname);
+        fetch(`/orders/${orderId}/cancel`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json",
+          },
+          body,
+        })
+          .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok || !data?.ok) {
+              showToast(data?.message || "Unable to cancel bill.");
+              return;
+            }
+            applyCancelledStatus(row);
+            showToast(data.message || "Bill successfully cancelled.");
+          })
+          .catch(() => {
+            showToast("Unable to cancel bill.");
+          });
+        closeAllMenus();
+        return;
+      }
+
+      if (event.target.closest("#status-filter-toggle")) {
+        const open = statusFilterList && !statusFilterList.classList.contains("hidden");
+        closeAllMenus();
+        if (!open) statusFilterList?.classList.remove("hidden");
+        return;
+      }
+
+      if (event.target.closest("#status-filter-list")) {
+        return;
+      }
+
+      const menuBtn = event.target.closest(".menu-btn");
+      if (menuBtn) {
+        const wrap = menuBtn.closest(".action-menu-wrap");
+        const menu = wrap?.querySelector(".menu-pop");
+
+        if (menu) {
+          const isOpen = menu.classList.contains("open");
+          closeAllMenus();
+
+          if (!isOpen) {
+            menu.classList.add("open");
+
+            // ðŸ”¥ detect viewport overflow
+            const rect = menu.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+
+            if (spaceBelow < 150) {
+              menu.classList.add("up");
+            } else {
+              menu.classList.remove("up");
+            }
+          }
+        }
+        return;
+      }
+
+
+      const statusBtn = event.target.closest(".status-btn");
+      if (statusBtn) {
+        const wrap = statusBtn.closest(".status-wrap");
+        const menu = wrap?.querySelector(".status-menu");
+        if (menu) {
+          const isOpen = menu.classList.contains("open");
+          closeAllMenus();
+          if (!isOpen) menu.classList.add("open");
+        }
+        return;
+      }
+
+      const tailorBtn = event.target.closest(".tailor-btn");
+      if (tailorBtn) {
+        if (tailorBtn.tagName === "A") {
+          event.preventDefault();
+        }
+        const wrap = tailorBtn.closest(".tailor-wrap");
+        const menu = wrap?.querySelector(".tailor-menu");
+        if (menu) {
+          const isOpen = menu.classList.contains("open");
+          closeAllMenus();
+          if (!isOpen) menu.classList.add("open");
+        }
+        return;
+      }
+
+      closeAllMenus();
+    });
+
+    document.querySelectorAll(".print-tile").forEach((tile) => {
+      tile.addEventListener("click", () => {
+        document.querySelectorAll(".print-tile").forEach((t) => t.classList.remove("active"));
+        tile.classList.add("active");
+        activePrintType = tile.dataset.printType || "tailor";
+      });
+    });
+
+    function openPrint(url) {
+      if (!url) return;
+      const printWindow = window.open(url, "_blank");
+      if (!printWindow) return;
+
+      const triggerPrint = () => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch (err) {
+          // Ignore print trigger errors to avoid interrupting flow.
+        }
+      };
+
+      printWindow.addEventListener("load", () => {
+        setTimeout(triggerPrint, 250);
+        setTimeout(triggerPrint, 900);
+      }, { once: true });
+      setTimeout(triggerPrint, 1400);
+    }
+
+    async function sendDirectPrint(url) {
+      try {
+        const res = await fetch(url, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          showToast(data.message || "Sent to selected printer.");
+        } else {
+          showToast(data.message || "Print failed.");
+        }
+      } catch (err) {
+        showToast("Print failed.");
+      }
+    }
+
+    function closePrint() {
+      if (printModal) printModal.classList.add("hidden");
+    }
+
+    if (printClose) printClose.addEventListener("click", closePrint);
+    if (printBackdrop) printBackdrop.addEventListener("click", closePrint);
+
+    if (printAction) {
+      printAction.addEventListener("click", () => {
+        if (!activeOrderId) return;
+        const url = activePrintType === "customer"
+          ? `/orders/${activeOrderId}/print/customer`
+          : `/orders/${activeOrderId}/print/thermal`;
+        if (directPrintEnabled) {
+          sendDirectPrint(url);
+        } else {
+          openPrint(url);
+        }
+        closePrint();
+      });
+    }
+
+    if (printAll) {
+      printAll.addEventListener("click", () => {
+        if (!activeOrderId) return;
+        if (directPrintEnabled) {
+          sendDirectPrint(`/orders/${activeOrderId}/print/all/direct`);
+        } else {
+          openPrint(`/orders/${activeOrderId}/print/all/download`);
+        }
+        closePrint();
+      });
+    }
+
+    function updateStatus(orderId, value, row, statusText, statusDot) {
+      if ((row?.dataset.status || "").trim().toLowerCase() === "cancelled" && value !== "Cancelled") {
+        showToast("Cancelled bills cannot be changed.");
+        return Promise.resolve({ ok: false });
+      }
+      const formData = new FormData();
+      formData.append("status", value);
+      return fetch(`/orders/${orderId}/status`, {
+        method: "POST",
+        body: formData,
+      }).then((res) => {
+        if (res.ok) {
+          statusText.textContent = value;
+          if (row) row.dataset.status = value;
+          const className = `status-${value.toLowerCase().replace(/\s+/g, "-")}`;
+          statusText.className = `status-text ${className}`;
+          if (statusDot) statusDot.className = `status-dot ${className}`;
+          showToast("Order status updated successfully");
+          applyFilters();
+        } else {
+          showToast("Cancelled bills cannot be changed.");
+        }
+        return res;
+      });
+    }
+
+    function openDeliveryModal(row, orderId, value) {
+      if (!deliveryModal) return;
+      const total = parseFloat(row.dataset.total || "0");
+      const advance = parseFloat(row.dataset.advance || "0");
+      const paid = parseFloat(row.dataset.paid || "0");
+      const due = Math.max(total - advance - paid, 0);
+      if (deliveryTotal) deliveryTotal.textContent = `â‚¹ ${total.toFixed(2)}`;
+      if (deliveryAdvance) deliveryAdvance.textContent = `â‚¹ ${advance.toFixed(2)}`;
+      if (deliveryPaid) deliveryPaid.textContent = `â‚¹ ${paid.toFixed(2)}`;
+      if (deliveryDue) deliveryDue.textContent = `â‚¹ ${due.toFixed(2)}`;
+      pendingDeliveryId = orderId;
+      pendingDeliveryStatus = value;
+      deliveryModal.classList.remove("hidden");
+    }
+
+    function closeDeliveryModal() {
+      if (!deliveryModal) return;
+      deliveryModal.classList.add("hidden");
+      pendingDeliveryId = null;
+    }
+
+    if (deliveryClose) deliveryClose.addEventListener("click", closeDeliveryModal);
+    document.querySelectorAll(".delivery-backdrop").forEach((el) => {
+      el.addEventListener("click", closeDeliveryModal);
+    });
+
+    if (deliveryConfirm) {
+      deliveryConfirm.addEventListener("click", () => {
+        if (!pendingDeliveryId) return;
+        const row = document.querySelector(`.list-row[data-order-id="${pendingDeliveryId}"]`);
+        const statusText = row?.querySelector(".status-text");
+        const statusDot = row?.querySelector(".status-dot");
+        if (!row || !statusText) return;
+        updateStatus(pendingDeliveryId, pendingDeliveryStatus, row, statusText, statusDot).then(() => {
+          closeDeliveryModal();
+        });
+      });
+    }
+
+    if (deliverySkip) {
+      deliverySkip.addEventListener("click", () => {
+        if (!pendingDeliveryId) return;
+        const row = document.querySelector(`.list-row[data-order-id="${pendingDeliveryId}"]`);
+        const statusText = row?.querySelector(".status-text");
+        const statusDot = row?.querySelector(".status-dot");
+        if (!row || !statusText) return;
+        updateStatus(pendingDeliveryId, pendingDeliveryStatus, row, statusText, statusDot).then(() => {
+          closeDeliveryModal();
+        });
+      });
+    }
+
+    function openStatusDetail(orderNo, invoiceId, rawLines, statusItems = []) {
+      if (!statusDetailModal || !statusDetailList || !statusDetailOrder) return;
+      const lines = String(rawLines || "")
+        .split("||")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      statusDetailOrder.textContent = invoiceId ? `Invoice: ${invoiceId}` : "";
+      statusDetailList.innerHTML = "";
+      if (Array.isArray(statusItems) && statusItems.length) {
+        statusItems.forEach((item, idx) => {
+          const left = document.createElement("div");
+          left.className = "status-detail-label";
+          left.textContent = item.label || `Item ${idx + 1}`;
+
+          const right = document.createElement("div");
+          right.className = "status-detail-controls";
+
+          const canEdit = item && item.can_edit !== false && (item.status || "") !== "Cancelled";
+          if (!canEdit) {
+            const valueText = document.createElement("div");
+            valueText.className = "status-text status-cancelled";
+            valueText.textContent = (item.status || "Cancelled");
+            right.appendChild(valueText);
+          } else {
+            const applyStatusSelectColor = (selectEl) => {
+              if (!selectEl) return;
+              const current = (selectEl.value || "").toLowerCase().replace(/\s+/g, "-");
+              selectEl.classList.remove("status-in-progress", "status-completed", "status-delivered");
+              if (current === "in-progress" || current === "completed" || current === "delivered") {
+                selectEl.classList.add(`status-${current}`);
+              }
+            };
+            const select = document.createElement("select");
+            select.className = "status-inline-select";
+            ["In-Progress", "Completed", "Delivered"].forEach((opt) => {
+              const option = document.createElement("option");
+              option.value = opt;
+              option.textContent = opt;
+              if ((item.status || "") === opt) option.selected = true;
+              select.appendChild(option);
+            });
+            applyStatusSelectColor(select);
+            select.addEventListener("change", () => applyStatusSelectColor(select));
+
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.className = "btn tiny primary";
+            saveBtn.textContent = "Save";
+            saveBtn.addEventListener("click", async () => {
+              const selectedStatus = select.value || "In-Progress";
+              saveBtn.disabled = true;
+              try {
+                const body = new URLSearchParams();
+                body.set("status", selectedStatus);
+                const res = await fetch(`/measurements/${item.measurement_id}/status`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                  body,
+                });
+                if (res.ok) {
+                  if (selectedStatus === "Completed" || selectedStatus === "Delivered") {
+                    closeStatusDetail();
+                    openOrderPaymentDetails(item.order_id || "");
+                    return;
+                  }
+                  const live = await fetchOrderPopupDetails(item.order_id || "");
+                  if (live) {
+                    const nextLines = Array.isArray(live.status_lines) ? live.status_lines.join("||") : rawLines;
+                    const nextItems = Array.isArray(live.status_items) ? live.status_items.map((x) => ({ ...x, order_id: item.order_id || "" })) : [];
+                    openStatusDetail(live.order_no || orderNo, live.invoice_id || invoiceId, nextLines, nextItems);
+                  }
+                }
+              } finally {
+                saveBtn.disabled = false;
+              }
+            });
+
+            right.appendChild(select);
+            right.appendChild(saveBtn);
+          }
+          statusDetailList.appendChild(left);
+          statusDetailList.appendChild(right);
+        });
+      } else if (!lines.length) {
+        const left = document.createElement("div");
+        left.textContent = "Order";
+        const right = document.createElement("div");
+        right.textContent = "-";
+        statusDetailList.appendChild(left);
+        statusDetailList.appendChild(right);
+      } else {
+        lines.forEach((line, idx) => {
+          const pair = line.split("@@");
+          const label = (pair[0] || "").trim() || `Item ${idx + 1}`;
+          const value = (pair[1] || "").trim() || "-";
+          const left = document.createElement("div");
+          left.textContent = label;
+          const right = document.createElement("div");
+          right.textContent = value;
+          statusDetailList.appendChild(left);
+          statusDetailList.appendChild(right);
+        });
+      }
+      statusDetailModal.classList.remove("hidden");
+    }
+
+    function closeStatusDetail() {
+      if (!statusDetailModal) return;
+      statusDetailModal.classList.add("hidden");
+    }
+
+    async function fetchOrderPopupDetails(orderId) {
+      if (!orderId) return null;
+      try {
+        const res = await fetch(`/orders/${orderId}/details/lines`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || data.ok !== true) return null;
+        return data;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function openOrderPaymentDetails(orderId) {
+      if (!orderId) return;
+      const row = document.querySelector(`.list-row[data-order-id="${orderId}"]`);
+      const customerId = row?.dataset.customerId || "";
+      if (customerId) {
+        window.location.href = `/customers/${customerId}?order_id=${orderId}&source=orders`;
+        return;
+      }
+      window.location.href = `/orders/${orderId}`;
+    }
+
+    if (statusDetailClose) statusDetailClose.addEventListener("click", closeStatusDetail);
+    if (statusDetailBackdrop) statusDetailBackdrop.addEventListener("click", closeStatusDetail);
+
+    document.querySelectorAll(".status-detail-open").forEach((btn) => {
+      btn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        let orderNo = btn.dataset.orderNo || "";
+        let invoiceId = btn.dataset.invoiceId || "";
+        let statusLines = btn.dataset.statusLines || "";
+        let statusItems = [];
+        const live = await fetchOrderPopupDetails(btn.dataset.orderId || "");
+        if (live) {
+          orderNo = live.order_no || orderNo;
+          invoiceId = live.invoice_id || invoiceId;
+          if (Array.isArray(live.status_lines) && live.status_lines.length) {
+            statusLines = live.status_lines.join("||");
+            btn.dataset.statusLines = statusLines;
+          }
+          if (Array.isArray(live.status_items)) {
+            statusItems = live.status_items.map((item) => ({
+              ...item,
+              order_id: btn.dataset.orderId || "",
+            }));
+          }
+        }
+        openStatusDetail(orderNo, invoiceId, statusLines, statusItems);
+      });
+    });
+
+    function openDeliveryDetail(orderNo, invoiceId, rawLines) {
+      if (!deliveryDetailModal || !deliveryDetailList || !deliveryDetailOrder) return;
+      const toYmdLocal = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const d = String(date.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      };
+      const isTodayOrTomorrowDate = (value) => {
+        const text = String(value || "").trim();
+        if (!text || text === "-") return false;
+        const isoMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+        const dateText = isoMatch ? isoMatch[0] : text;
+        const parsed = new Date(dateText);
+        if (Number.isNaN(parsed.getTime())) return false;
+        const target = toYmdLocal(parsed);
+        const today = new Date();
+        const tomorrow = new Date();
+        tomorrow.setDate(today.getDate() + 1);
+        return target === toYmdLocal(today) || target === toYmdLocal(tomorrow);
+      };
+      const lines = String(rawLines || "")
+        .split("||")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      deliveryDetailOrder.textContent = invoiceId ? `Invoice: ${invoiceId}` : "";
+      deliveryDetailList.innerHTML = "";
+      if (!lines.length) {
+        const left = document.createElement("div");
+        left.textContent = "Order";
+        const right = document.createElement("div");
+        right.textContent = "-";
+        deliveryDetailList.appendChild(left);
+        deliveryDetailList.appendChild(right);
+      } else {
+        lines.forEach((line, idx) => {
+          const pair = line.split("@@");
+          const label = (pair[0] || "").trim() || `Item ${idx + 1}`;
+          const value = (pair[1] || "").trim() || "-";
+          const left = document.createElement("div");
+          left.textContent = label;
+          const right = document.createElement("div");
+          right.textContent = value;
+          if (isTodayOrTomorrowDate(value)) {
+            right.classList.add("delivery-date-alert");
+          }
+          deliveryDetailList.appendChild(left);
+          deliveryDetailList.appendChild(right);
+        });
+      }
+      deliveryDetailModal.classList.remove("hidden");
+    }
+
+    function closeDeliveryDetail() {
+      if (!deliveryDetailModal) return;
+      deliveryDetailModal.classList.add("hidden");
+    }
+
+    if (deliveryDetailClose) deliveryDetailClose.addEventListener("click", closeDeliveryDetail);
+    if (deliveryDetailBackdrop) deliveryDetailBackdrop.addEventListener("click", closeDeliveryDetail);
+
+    document.querySelectorAll(".delivery-detail-open").forEach((btn) => {
+      btn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        let orderNo = btn.dataset.orderNo || "";
+        let invoiceId = btn.dataset.invoiceId || "";
+        let deliveryLines = btn.dataset.deliveryLines || "";
+        const live = await fetchOrderPopupDetails(btn.dataset.orderId || "");
+        if (live) {
+          orderNo = live.order_no || orderNo;
+          invoiceId = live.invoice_id || invoiceId;
+          if (Array.isArray(live.delivery_lines) && live.delivery_lines.length) {
+            deliveryLines = live.delivery_lines.join("||");
+            btn.dataset.deliveryLines = deliveryLines;
+          }
+        }
+        openDeliveryDetail(orderNo, invoiceId, deliveryLines);
+      });
+    });
+
+    document.querySelectorAll(".status-item").forEach((item) => {
+      item.addEventListener("click", async () => {
+        const value = item.dataset.value || "";
+        const row = item.closest(".list-row");
+        const orderId = row?.dataset.orderId;
+        const wrap = item.closest(".status-wrap");
+        const statusText = wrap?.querySelector(".status-text");
+        const statusDot = wrap?.querySelector(".status-dot");
+        if (!orderId || !value || !statusText) return;
+        if (value === "Delivered") {
+          const total = parseFloat(row.dataset.total || "0");
+          const advance = parseFloat(row.dataset.advance || "0");
+          const paid = parseFloat(row.dataset.paid || "0");
+          const due = Math.max(total - advance - paid, 0);
+          if (due > 0) {
+            openDeliveryModal(row, orderId, value);
+            closeAllMenus();
+            return;
+          }
+        }
+        const res = await updateStatus(orderId, value, row, statusText, statusDot);
+        if (value === "Delivered" && res?.ok) {
+          openPrint(`/orders/${orderId}/print/customer`);
+        }
+        closeAllMenus();
+      });
+    });
+
+    if (statusFilterAll) {
+      statusFilterAll.addEventListener("change", () => {
+        statusFilterItems.forEach((input) => {
+          input.checked = statusFilterAll.checked;
+        });
+        syncStatusLabel();
+        applyFilters();
+      });
+    }
+
+    statusFilterItems.forEach((input) => {
+      input.addEventListener("change", () => {
+        syncStatusAllToggle();
+        syncStatusLabel();
+        applyFilters();
+      });
+    });
+
+    if (downloadBtn) {
+      downloadBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (!downloadModal || !downloadBar || !downloadValue) {
+          window.location.href = downloadBtn.href;
+          return;
+        }
+        downloadModal.classList.remove("hidden");
+        downloadBar.style.width = "0%";
+        downloadValue.textContent = "0%";
+        let progress = 0;
+        const step = 100 / 40;
+        const timer = setInterval(() => {
+          progress = Math.min(100, progress + step);
+          downloadBar.style.width = `${progress.toFixed(0)}%`;
+          downloadValue.textContent = `${progress.toFixed(0)}%`;
+          if (progress >= 100) {
+            clearInterval(timer);
+            window.location.href = downloadBtn.href;
+            setTimeout(() => downloadModal.classList.add("hidden"), 300);
+          }
+        }, 50);
+      });
+    }
+
+    [searchInput, fromInput, toInput].forEach((input) => {
+      if (!input) return;
+      input.addEventListener("input", applyFilters);
+      input.addEventListener("change", applyFilters);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          applyFilters();
+        }
+      });
+    });
+
+    if (ordersHeadSearchBtn) {
+      ordersHeadSearchBtn.addEventListener("click", applyFilters);
+    }
+
+    const allowFilterListScroll = (el) => {
+      if (!el) return;
+      el.addEventListener("wheel", (event) => {
+        event.stopPropagation();
+      }, { passive: true });
+      el.addEventListener("touchmove", (event) => {
+        event.stopPropagation();
+      }, { passive: true });
+    };
+
+    allowFilterListScroll(statusFilterList);
+
+    const closeMenusOnWindowScroll = (event) => {
+      const target = event.target;
+      if (target instanceof Element) {
+        if (target.closest("#status-filter-list")) {
+          return;
+        }
+      }
+      closeAllMenus();
+    };
+
+    window.addEventListener("resize", closeAllMenus);
+    window.addEventListener("scroll", closeMenusOnWindowScroll, true);
+    window.addEventListener("pageshow", closeAllMenus);
+
+    initStatusFilters();
+    syncStatusAllToggle();
+    syncStatusLabel();
+    closeAllMenus();
+    applyFilters();
+  });
+</script>
+{% endblock %}
+
+
+
+

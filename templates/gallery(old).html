@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+    align-content: start;
+  }
+  .gallery-tile {
+    position: relative;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .gallery-photo {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    display: block;
+  }
+  .gallery-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .gallery-check {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+  }
+  .gallery-check input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .gallery-check-mark {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #8a8a8a;
+    border-radius: 50%;
+    background: #fff;
+    display: block;
+    box-sizing: border-box;
+  }
+  .gallery-check input:checked + .gallery-check-mark {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .gallery-check input:checked + .gallery-check-mark::after {
+    content: "";
+    display: block;
+    width: 4px;
+    height: 8px;
+    border: 2px solid #fff;
+    border-top: 0;
+    border-left: 0;
+    transform: translate(3px, 0px) rotate(45deg);
+  }
+  .gallery-tile.selected {
+    box-shadow: 0 0 0 2px var(--accent) inset;
+  }
+  .gallery-tile.selected .gallery-check {
+    background: var(--accent);
+    color: #fff;
+  }
+  .gallery-tab-panel {
+    display: none;
+    margin-top: 0.8rem;
+  }
+  .gallery-tab-panel.active {
+    display: block;
+  }
+  .gallery-tab-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+  }
+  .gallery-tab-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .gallery-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+  .select-count {
+    color: var(--muted);
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+  .gallery-tabs {
+    margin-bottom: 0.35rem;
+  }
+  .gallery-tabs .tab-chip {
+    border-radius: 10px 10px 0 0;
+  }
+  .empty-state {
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    padding: 1rem;
+    color: #666;
+    background: #fff;
+  }
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 12, 9, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    padding: 24px;
+  }
+  .lightbox.open {
+    display: flex;
+  }
+  .lightbox-inner {
+    position: relative;
+    width: min(70vw, calc(70vh * 4 / 3));
+    max-width: 92vw;
+  }
+  .lightbox-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: #111;
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(20, 20, 20, 0.72);
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  }
+  .lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(20, 20, 20, 0.72);
+    color: #fff;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  }
+  .lightbox-prev { left: 10px; }
+  .lightbox-next { right: 10px; }
+  .lightbox-media {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: 14px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    background: #111;
+  }
+  .lightbox-caption {
+    margin-top: 10px;
+    color: #f7efe9;
+    font-size: 0.95rem;
+    text-align: center;
+  }
+  .add-dialog {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+  }
+  .add-dialog.open {
+    display: flex;
+  }
+  .add-dialog-card {
+    width: min(460px, 100%);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .add-dialog-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .add-dialog-field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .add-dialog-field label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #444;
+  }
+  .add-dialog-input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 0.95rem;
+  }
+  .add-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  @media (max-width: 900px) {
+    .gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (min-width: 901px) {
+    .gallery-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>Gallery</h1>
+    <!-- <p>Showcase your best tailoring pieces by category.</p> -->
+  </div>
+</div>
+
+{% if categories %}
+  <div class="tabs-bar gallery-tabs" role="tablist" aria-label="Gallery categories">
+    {% for category in categories %}
+      <button
+        class="tab-chip {% if active_category and active_category == category.id %}active{% endif %}"
+        type="button"
+        data-gallery-tab="{{ category.id }}"
+      >
+        {{ category.name }}
+      </button>
+    {% endfor %}
+  </div>
+
+  {% for category in categories %}
+    {% set items = items_by_category.get(category.id, []) %}
+    <section
+      class="gallery-tab-panel {% if active_category and active_category == category.id %}active{% endif %}"
+      data-gallery-panel="{{ category.id }}"
+    >
+      <div class="gallery-tab-head">
+        <div class="gallery-tab-title">{{ category.name }}</div>
+        <div class="gallery-actions">
+          <button type="button" class="btn ghost btn-compact add-btn" data-category-id="{{ category.id }}" data-category-name="{{ category.name }}">
+            Add
+          </button>
+          {% if items %}
+          <button class="btn ghost btn-compact" type="submit" form="bulkForm-{{ category.id }}" formaction="{{ url_for('gallery_download') }}" id="download-{{ category.id }}" disabled>
+            Download
+          </button>
+          <button class="btn primary btn-compact" type="submit" form="bulkForm-{{ category.id }}" formaction="{{ url_for('gallery_delete') }}" id="delete-{{ category.id }}" disabled onclick="return confirm('Delete selected images?')">
+            Delete
+          </button>
+          <span class="select-count" id="count-{{ category.id }}">0 selected</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if items %}
+      <form id="bulkForm-{{ category.id }}" method="post">
+        <input type="hidden" name="category_id" value="{{ category.id }}">
+      </form>
+      <div class="gallery-grid">
+        {% for item in items %}
+          <article class="gallery-tile"
+                   data-index="{{ loop.index0 }}"
+                   data-src="{{ url_for('static', filename='uploads/gallery/' ~ item.image_filename) }}"
+                   data-caption="{{ item.item_name if item.item_name else (category.name ~ ' ' ~ loop.index) }}">
+            <button type="button" class="gallery-photo">
+              <img src="{{ url_for('static', filename='uploads/gallery/' ~ item.image_filename) }}" alt="{{ category.name }} image {{ loop.index }}">
+            </button>
+            <label class="gallery-check">
+              <input type="checkbox" name="image_ids" value="{{ item.id }}" class="gallery-checkbox" form="bulkForm-{{ category.id }}">
+              <span class="gallery-check-mark" aria-hidden="true"></span>
+            </label>
+          </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <section class="empty-state">No images yet for {{ category.name }}.</section>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <section class="empty-state">No gallery categories yet.</section>
+{% endif %}
+
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <div class="lightbox-inner">
+    <div class="lightbox-media">
+      <button class="lightbox-close" type="button" aria-label="Close">x</button>
+      <button class="lightbox-nav lightbox-prev" type="button" aria-label="Previous">&lt;</button>
+      <img class="lightbox-img" src="" alt="">
+      <button class="lightbox-nav lightbox-next" type="button" aria-label="Next">&gt;</button>
+    </div>
+    <div class="lightbox-caption"></div>
+  </div>
+</div>
+
+<div class="add-dialog" id="addDialog" aria-hidden="true">
+  <div class="add-dialog-card" role="dialog" aria-modal="true" aria-labelledby="addDialogTitle">
+    <form id="addDialogForm" method="post" action="{{ url_for('gallery_add') }}" enctype="multipart/form-data">
+      <input type="hidden" name="category_id" id="addDialogCategoryId">
+      <div class="add-dialog-title" id="addDialogTitle">Add Images</div>
+      <div class="add-dialog-field">
+        <label for="addDialogName">Image Name</label>
+        <input class="add-dialog-input" type="text" id="addDialogName" name="item_name" placeholder="e.g. Party Coat">
+      </div>
+      <div class="add-dialog-field">
+        <label for="addDialogImages">Select Images</label>
+        <input class="add-dialog-input" type="file" id="addDialogImages" name="images" accept="image/*" multiple required>
+      </div>
+      <div class="add-dialog-actions">
+        <button type="button" class="btn ghost btn-compact" id="addDialogCancel">Cancel</button>
+        <button type="submit" class="btn primary btn-compact">Add Images</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const tabs = document.querySelectorAll("[data-gallery-tab]");
+    const panels = document.querySelectorAll("[data-gallery-panel]");
+    const lightbox = document.getElementById("lightbox");
+    const lightboxImg = lightbox?.querySelector(".lightbox-img");
+    const lightboxCaption = lightbox?.querySelector(".lightbox-caption");
+    const lightboxClose = lightbox?.querySelector(".lightbox-close");
+    const lightboxPrev = lightbox?.querySelector(".lightbox-prev");
+    const lightboxNext = lightbox?.querySelector(".lightbox-next");
+    const addDialog = document.getElementById("addDialog");
+    const addDialogForm = document.getElementById("addDialogForm");
+    const addDialogCategoryId = document.getElementById("addDialogCategoryId");
+    const addDialogTitle = document.getElementById("addDialogTitle");
+    const addDialogName = document.getElementById("addDialogName");
+    const addDialogImages = document.getElementById("addDialogImages");
+    const addDialogCancel = document.getElementById("addDialogCancel");
+    const addButtons = document.querySelectorAll(".add-btn");
+    let activeLightboxTiles = [];
+    let lightboxIndex = 0;
+    if (!tabs.length || !panels.length || !lightbox || !lightboxImg || !lightboxCaption) return;
+
+    function setActive(id) {
+      tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.galleryTab === id));
+      panels.forEach((panel) => panel.classList.toggle("active", panel.dataset.galleryPanel === id));
+      const url = new URL(window.location.href);
+      url.searchParams.set("category_id", id);
+      window.history.replaceState({}, "", url.toString());
+    }
+
+    function openLightboxAt(tiles, index) {
+      if (!tiles.length) return;
+      activeLightboxTiles = tiles;
+      lightboxIndex = (index + tiles.length) % tiles.length;
+      const tile = activeLightboxTiles[lightboxIndex];
+      lightboxImg.src = tile.getAttribute("data-src") || "";
+      lightboxImg.alt = tile.getAttribute("data-caption") || "gallery image";
+      lightboxCaption.textContent = tile.getAttribute("data-caption") || "";
+      lightbox.classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeLightbox() {
+      lightbox.classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    function moveLightbox(step) {
+      if (!activeLightboxTiles.length) return;
+      openLightboxAt(activeLightboxTiles, lightboxIndex + step);
+    }
+
+    function setupPanel(panel) {
+      const panelId = panel.dataset.galleryPanel;
+      const tiles = Array.from(panel.querySelectorAll(".gallery-tile"));
+      const checkboxes = Array.from(panel.querySelectorAll(".gallery-checkbox"));
+      const count = document.getElementById(`count-${panelId}`);
+      const deleteBtn = document.getElementById(`delete-${panelId}`);
+      const downloadBtn = document.getElementById(`download-${panelId}`);
+
+      function syncSelection() {
+        const selected = checkboxes.filter((cb) => cb.checked).length;
+        if (count) count.textContent = `${selected} selected`;
+        if (deleteBtn) deleteBtn.disabled = selected === 0;
+        if (downloadBtn) downloadBtn.disabled = selected === 0;
+        tiles.forEach((tile) => {
+          const cb = tile.querySelector(".gallery-checkbox");
+          tile.classList.toggle("selected", !!cb?.checked);
+        });
+      }
+
+      tiles.forEach((tile, index) => {
+        const photoBtn = tile.querySelector(".gallery-photo");
+        photoBtn?.addEventListener("click", function () {
+          openLightboxAt(tiles, index);
+        });
+      });
+
+      checkboxes.forEach((cb) => cb.addEventListener("change", syncSelection));
+      syncSelection();
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", function () {
+        setActive(tab.dataset.galleryTab);
+      });
+    });
+
+    function closeAddDialog() {
+      if (!addDialog || !addDialogForm) return;
+      addDialog.classList.remove("open");
+      addDialog.setAttribute("aria-hidden", "true");
+      addDialogForm.reset();
+    }
+
+    addButtons.forEach((button) => {
+      button.addEventListener("click", function () {
+        const categoryId = button.getAttribute("data-category-id");
+        const categoryName = button.getAttribute("data-category-name") || "Category";
+        if (!addDialog || !addDialogCategoryId || !addDialogTitle || !addDialogName) return;
+        addDialogCategoryId.value = categoryId || "";
+        addDialogTitle.textContent = `Add Images - ${categoryName}`;
+        addDialog.classList.add("open");
+        addDialog.setAttribute("aria-hidden", "false");
+        addDialogName.focus();
+      });
+    });
+
+    addDialogCancel?.addEventListener("click", closeAddDialog);
+    addDialog?.addEventListener("click", function (event) {
+      if (event.target === addDialog) closeAddDialog();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && addDialog?.classList.contains("open")) closeAddDialog();
+    });
+    panels.forEach(setupPanel);
+    lightboxClose?.addEventListener("click", closeLightbox);
+    lightboxPrev?.addEventListener("click", function () { moveLightbox(-1); });
+    lightboxNext?.addEventListener("click", function () { moveLightbox(1); });
+    lightbox.addEventListener("click", function (event) {
+      if (event.target === lightbox) closeLightbox();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (!lightbox.classList.contains("open")) return;
+      if (event.key === "Escape") closeLightbox();
+      if (event.key === "ArrowLeft") moveLightbox(-1);
+      if (event.key === "ArrowRight") moveLightbox(1);
+    });
+  });
+</script>
+{% endblock %}

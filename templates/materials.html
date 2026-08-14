@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Materials</h1>
+  </div>
+  <a class="btn primary" href="{{ url_for('materials_add') }}">+ Add item</a>
+</div>
+
+<div class="tabs-bar" role="tablist" aria-label="Materials tabs">
+  <a class="tab-chip active" href="{{ url_for('materials') }}">Materials</a>
+  <a class="tab-chip" href="{{ url_for('vendors') }}">Vendors</a>
+  <a class="tab-chip" href="{{ url_for('vendors') }}?tab=purchases">Purchases</a>
+</div>
+
+<section class="card">
+  <div class="table-toolbar">
+    <div class="filter-group">
+      <input id="inventorySearchInput" class="filter-input" type="text" placeholder="Search item or code" />
+      <input id="inventoryVendorInput" class="filter-input" type="text" placeholder="Vendor name" />
+      <input id="inventoryFromDateInput" class="filter-input" type="date" />
+      <input id="inventoryToDateInput" class="filter-input" type="date" />
+    </div>
+    <div class="filter-chips">
+      <button class="filter-chip" type="button" data-range="today">Today</button>
+      <button class="filter-chip" type="button" data-range="week">Week</button>
+      <button class="filter-chip" type="button" data-range="month">Month</button>
+      <button class="filter-chip" type="button" data-range="year">Year</button>
+    </div>
+  </div>
+
+  {% if items %}
+  <div class="list-table" style="--list-cols: 1fr 1.6fr 1.2fr 0.8fr 1fr 1fr 1.2fr 1.2fr;">
+    <div class="list-row list-head">
+      <div>Item Code</div>
+      <div>Item</div>
+      <div>Vendor</div>
+      <div>Stock Quantity</div>
+      <div>Cost Price</div>
+      <div>Selling Price</div>
+      <div>Last Updated</div>
+      <div>Actions</div>
+    </div>
+    {% for item in items %}
+    <div class="list-row js-inventory-row"
+         data-search="{{ ((item.inventory_code or '') ~ ' ' ~ (item.name or ''))|lower }}"
+         data-vendor="{{ (item.supplier or '')|lower }}"
+         data-updated="{{ item.updated_at or '' }}">
+      <div>{{ item.inventory_code }}</div>
+      <div><strong>{{ item.name }}</strong></div>
+      <div>{{ item.supplier or "-" }}</div>
+      <div>{{ item.qty|fmt_qty }}</div>
+      <div>₹ {{ '%.2f'|format(item.cost_price or 0) }}</div>
+      <div>₹ {{ '%.2f'|format(item.selling_price or 0) }}</div>
+      <div>{{ item.updated_at or "-" }}</div>
+      <div class="list-actions action-menu-wrap">
+        <button class="icon-action menu-btn" type="button" aria-label="More actions">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+
+        <div class="menu-pop">
+          <a class="menu-item" href="{{ url_for('materials_edit', item_id=item.id, mode='view') }}">
+            <i class="bi bi-eye"></i> View
+          </a>
+
+          <a class="menu-item" href="{{ url_for('materials_edit', item_id=item.id) }}">
+            <i class="bi bi-pencil"></i> Edit
+          </a>
+
+          <form method="post" action="{{ url_for('materials_delete', item_id=item.id) }}">
+            <button class="menu-item danger" type="submit">
+              <i class="bi bi-trash"></i> Delete
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No items yet.</p>
+  {% endif %}
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const inventoryRows = Array.from(document.querySelectorAll(".js-inventory-row"));
+  const searchInput = document.getElementById("inventorySearchInput");
+  const vendorInput = document.getElementById("inventoryVendorInput");
+  const fromDateInput = document.getElementById("inventoryFromDateInput");
+  const toDateInput = document.getElementById("inventoryToDateInput");
+  const rangeChips = document.querySelectorAll(".filter-chip[data-range]");
+  let activeRange = "";
+
+  function formatInputDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function getRangeBounds(range) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (range === "today") {
+      return { from: today, to: today };
+    }
+    if (range === "week") {
+      const from = new Date(today);
+      const day = (from.getDay() + 6) % 7;
+      from.setDate(from.getDate() - day);
+      const to = new Date(from);
+      to.setDate(from.getDate() + 6);
+      return { from, to };
+    }
+    if (range === "month") {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { from, to };
+    }
+    if (range === "year") {
+      const from = new Date(today.getFullYear(), 0, 1);
+      const to = new Date(today.getFullYear(), 11, 31);
+      return { from, to };
+    }
+    return null;
+  }
+
+  function applyQuickRange(range, syncInputs = true) {
+    activeRange = range || "";
+    rangeChips.forEach((btn) => {
+      btn.classList.toggle("active", (btn.dataset.range || "") === activeRange && !!activeRange);
+    });
+
+    if (syncInputs) {
+      if (!activeRange) {
+        if (fromDateInput) fromDateInput.value = "";
+        if (toDateInput) toDateInput.value = "";
+      } else {
+        const bounds = getRangeBounds(activeRange);
+        if (bounds) {
+          if (fromDateInput) fromDateInput.value = formatInputDate(bounds.from);
+          if (toDateInput) toDateInput.value = formatInputDate(bounds.to);
+        }
+      }
+    }
+
+    applyInventoryFilters();
+  }
+
+  function toDateOnly(value) {
+    if (!value) return null;
+    const str = String(value).trim().slice(0, 10);
+    const parts = str.split("-");
+    if (parts.length !== 3) return null;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const d = Number(parts[2]);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return new Date(y, m - 1, d);
+  }
+
+  function inRange(dateObj, range) {
+    if (!range) return true;
+    if (!dateObj) return false;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const date = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+
+    if (range === "today") {
+      return date.getTime() === today.getTime();
+    }
+    if (range === "month") {
+      return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
+    }
+    if (range === "year") {
+      return date.getFullYear() === today.getFullYear();
+    }
+    if (range === "week") {
+      const start = new Date(today);
+      const day = (start.getDay() + 6) % 7;
+      start.setDate(start.getDate() - day);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return date >= start && date <= end;
+    }
+    return true;
+  }
+
+  function applyInventoryFilters() {
+    const text = (searchInput?.value || "").trim().toLowerCase();
+    const vendor = (vendorInput?.value || "").trim().toLowerCase();
+    const fromDate = fromDateInput?.value || "";
+    const toDate = toDateInput?.value || "";
+
+    const fromObj = toDateOnly(fromDate);
+    const toObj = toDateOnly(toDate);
+
+    inventoryRows.forEach((row) => {
+      const hay = (row.dataset.search || "").toLowerCase();
+      const vend = (row.dataset.vendor || "").toLowerCase();
+      const updated = toDateOnly((row.dataset.updated || "").slice(0, 10));
+      const okText = !text || hay.includes(text);
+      const okVendor = !vendor || vend.includes(vendor);
+      const okFrom = !fromObj || (updated && updated >= fromObj);
+      const okTo = !toObj || (updated && updated <= toObj);
+      const okRange = inRange(updated, activeRange);
+      row.style.display = okText && okVendor && okFrom && okTo && okRange ? "" : "none";
+    });
+  }
+
+  if (searchInput) searchInput.addEventListener("input", applyInventoryFilters);
+  if (vendorInput) vendorInput.addEventListener("input", applyInventoryFilters);
+  if (fromDateInput) fromDateInput.addEventListener("change", () => applyQuickRange("", false));
+  if (toDateInput) toDateInput.addEventListener("change", () => applyQuickRange("", false));
+  rangeChips.forEach((btn) => btn.addEventListener("click", () => applyQuickRange(btn.dataset.range || "")));
+
+  applyQuickRange("");
+});
+</script>
+
+{% endblock %}
+

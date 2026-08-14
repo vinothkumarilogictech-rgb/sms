@@ -1,0 +1,995 @@
+{% extends "base.html" %}
+{% block content %}
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --cream: #f6f1fb;
+    --warm-white: #fdfbff;
+    --border: #dfd2ee;
+    --border-soft: #ece3f6;
+    --brown-deep: #2f1a46;
+    --brown-mid: #4a2370;
+    --brown-light: #6c46a1;
+    --brown-muted: #9d86bf;
+    --brown-pale: #d9cceb;
+    --accent: #4a2370;
+    --accent-soft: #efe6fb;
+    --text-body: #433455;
+    --text-muted: #7b6892;
+    --green: #2d7a4f;
+    --green-bg: #edf7f2;
+    --gold: #8b6bb3;
+    --shadow-card: 0 8px 32px rgba(47, 26, 70, 0.08);
+    --shadow-hover: 0 16px 48px rgba(47, 26, 70, 0.14);
+    --radius-xl: 28px;
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--brown-deep);
+  }
+
+  /* ── BACK ── */
+  .vd-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+    padding: 0.34rem 0.68rem;
+    min-height: 30px;
+    width: fit-content;
+    justify-self: start;
+    align-self: start;
+    border-radius: 9px;
+    border: 1px solid #5a2d82;
+    background: #5a2d82;
+    color: #fff;
+  }
+  .vd-back:hover,
+  .vd-back:active,
+  .vd-back:focus-visible {
+    background: #4a2370;
+    border-color: #4a2370;
+    color: #fff;
+  }
+  .vd-back svg { width: 12px; height: 12px; }
+
+  /* ── SHELL ── */
+  .vd-shell {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+    display: grid;
+    gap: 20px;
+  }
+
+  /* ── HERO LAYOUT ── */
+  .vd-hero {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  /* ── CAROUSEL ── */
+  .vd-carousel-wrap {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .vd-carousel-stage {
+    position: relative;
+    flex: 1;
+    min-height: 300px;
+    overflow: hidden;
+    background: #ffffff;
+    cursor: grab;
+    user-select: none;
+  }
+  .vd-carousel-stage:active { cursor: grabbing; }
+
+  .vd-carousel-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+    display: grid;
+    place-items: center;
+  }
+  .vd-carousel-slide.active { opacity: 1; z-index: 1; }
+
+  .vd-carousel-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 16px;
+    drop-shadow: 0 8px 32px rgba(47, 26, 70, 0.18);
+    filter: drop-shadow(0 8px 24px rgba(47, 26, 70, 0.22));
+  }
+
+  .vd-carousel-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    color: var(--brown-muted);
+  }
+  .vd-carousel-empty svg { width: 64px; height: 64px; opacity: 0.45; }
+  .vd-carousel-empty span { font-size: 14px; font-weight: 500; }
+
+  /* Status pill */
+  .vd-status-pill {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 5;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.92);
+    color: var(--green);
+    border: 1px solid rgba(45,122,79,0.18);
+    backdrop-filter: blur(6px);
+  }
+  .vd-status-pill.in_progress { color: #92400e; border-color: rgba(146,64,14,0.2); }
+  .vd-status-pill.in_repair { color: #b45309; border-color: rgba(180,83,9,0.22); }
+  .vd-status-pill.sold { color: var(--accent); border-color: rgba(192,57,43,0.2); }
+
+  /* Arrow buttons */
+  .vd-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 4px 14px rgba(47, 26, 70, 0.16);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    color: var(--brown-deep);
+    transition: background 0.2s, transform 0.2s;
+  }
+  .vd-arrow:hover { background: #fff; transform: translateY(-50%) scale(1.06); }
+  .vd-arrow.prev { left: 14px; }
+  .vd-arrow.next { right: 14px; }
+  .vd-arrow svg { width: 18px; height: 18px; }
+  .vd-arrow.hidden { display: grid; }
+
+  /* Dots */
+  .vd-dots {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    gap: 6px;
+  }
+  .vd-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    border: 1.5px solid rgba(255,255,255,0.7);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .vd-dot.active {
+    background: #fff;
+    width: 20px;
+    border-radius: 4px;
+  }
+
+  /* Thumb strip */
+  .vd-thumb-strip {
+    display: flex;
+    gap: 10px;
+    padding: 14px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-top: 1px solid var(--border-soft);
+    flex-shrink: 0;
+  }
+  .vd-thumb-strip::-webkit-scrollbar { display: none; }
+
+  .vd-thumb {
+    flex: 0 0 68px;
+    height: 52px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.2s;
+    background: #fff;
+    display: grid;
+    place-items: center;
+  }
+  .vd-thumb.active { border-color: var(--brown-mid); transform: scale(1.04); }
+  .vd-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; filter: drop-shadow(0 2px 4px rgba(47, 26, 70, 0.12)); }
+
+  /* Document pills in thumb strip */
+  .vd-doc-pill {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--warm-white);
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brown-light);
+    white-space: nowrap;
+  }
+  .vd-doc-pill svg { width: 15px; height: 15px; color: var(--brown-muted); }
+
+  /* ── DETAIL CARD ── */
+  .vd-detail-card {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 28px 24px;
+    box-shadow: var(--shadow-card);
+    display: grid;
+    gap: 0;
+  }
+
+  .vd-kicker {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brown-muted);
+  }
+
+  .vd-head-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .vd-top-buy-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.45rem 1rem;
+    border: 1px solid #4a2370;
+    background: #4a2370;
+    color: #ffffff;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    box-shadow: 0 6px 18px rgba(74, 35, 112, 0.16);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .vd-top-buy-btn:hover,
+  .vd-top-buy-btn:active,
+  .vd-top-buy-btn:focus-visible {
+    background: #3d1d5d;
+    border-color: #3d1d5d;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(74, 35, 112, 0.22);
+  }
+
+  .vd-name {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: clamp(26px, 3.5vw, 38px);
+    font-weight: 900;
+    line-height: 1.08;
+    margin: 10px 0 6px;
+    color: var(--brown-deep);
+  }
+
+  .vd-meta-line {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  /* Price */
+  .vd-price-block {
+    margin-top: 20px;
+    padding: 18px 20px;
+    background: linear-gradient(135deg, #321a4d 0%, #5a2d82 100%);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .vd-price-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--brown-pale);
+    margin-bottom: 4px;
+  }
+  .vd-price-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 34px;
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+  }
+  .vd-buy-btn {
+    flex-shrink: 0;
+    min-height: 42px;
+    padding: 0.62rem 1.08rem;
+    border: 1px solid #4a2370;
+    background: #4a2370;
+    color: #fff;
+    border-radius: 999px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .vd-buy-btn:hover,
+  .vd-buy-btn:active,
+  .vd-buy-btn:focus-visible {
+    background: #3d1d5d;
+    border-color: #3d1d5d;
+    color: #fff;
+    transform: scale(1.04);
+    box-shadow: 0 4px 16px rgba(74, 35, 112, 0.18);
+  }
+
+  /* Quick highlights */
+  .vd-highlights {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .vd-hl {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--cream);
+    padding: 13px 14px;
+  }
+  .vd-hl-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--brown-muted);
+    margin-bottom: 5px;
+  }
+  .vd-hl-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--brown-deep);
+    line-height: 1.2;
+  }
+
+  /* Trust / Document status row */
+  .vd-trust-row {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .vd-doc-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    border: 1.5px solid;
+  }
+  .vd-doc-status svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .vd-doc-status-name {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+  }
+  .vd-doc-status-val {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .vd-doc-status.available {
+    background: #edf7f2;
+    border-color: #a7f0c6;
+    color: #1a6b40;
+  }
+  .vd-doc-status.available svg { color: #2d7a4f; }
+  .vd-doc-status.missing {
+    background: #f7f0fb;
+    border-color: #decdf1;
+    color: #6a3e96;
+  }
+  .vd-doc-status.missing svg { color: #6a3e96; }
+
+  /* ── DIVIDER ── */
+  .vd-divider {
+    border: none;
+    border-top: 1px solid var(--border-soft);
+    margin: 20px 0;
+  }
+
+  /* ── ENQUIRY ── */
+  .vd-enquiry-head h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 5px;
+  }
+  .vd-enquiry-head p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+    line-height: 1.5;
+  }
+  .vd-field {
+    display: grid;
+    gap: 5px;
+    margin-bottom: 12px;
+  }
+  .vd-field label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--brown-mid);
+    letter-spacing: 0.02em;
+  }
+  .vd-field input {
+    height: 48px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--cream);
+    padding: 0 15px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: var(--brown-deep);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .vd-field input:focus {
+    border-color: var(--brown-light);
+    box-shadow: 0 0 0 3px rgba(160, 96, 74, 0.12);
+  }
+  .vd-submit-btn {
+    width: 100%;
+    height: 50px;
+    border: 1px solid #4a2370;
+    background: #4a2370;
+    color: #fff;
+    border-radius: var(--radius-md);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: transform 0.2s;
+  }
+  .vd-submit-btn:hover,
+  .vd-submit-btn:active,
+  .vd-submit-btn:focus-visible {
+    background: #3d1d5d;
+    border-color: #3d1d5d;
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
+  .vd-alert {
+    margin-top: 12px;
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .vd-alert.success { background: var(--green-bg); color: var(--green); border: 1px solid #a7f0c6; }
+  .vd-alert.error { background: var(--accent-soft); color: var(--accent); border: 1px solid #d7c0f0; }
+
+  /* ── SPECS ── */
+  .vd-section-card {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 28px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .vd-section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--brown-deep);
+    margin: 0 0 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .vd-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-soft);
+    border-radius: 1px;
+  }
+
+  .vd-specs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .vd-spec-tile {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    background: var(--cream);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .vd-spec-tile::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg, var(--brown-mid), var(--brown-muted));
+    border-radius: 2px 0 0 2px;
+  }
+  .vd-spec-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--brown-muted);
+    margin-bottom: 6px;
+  }
+  .vd-spec-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--brown-deep);
+    line-height: 1.3;
+  }
+
+  /* ── DESCRIPTION ── */
+  .vd-description-text {
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text-body);
+    margin: 0;
+  }
+
+  /* ── DOCUMENTS ── */
+  .vd-docs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .vd-doc-tile {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    background: var(--cream);
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+  .vd-doc-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--brown-deep), var(--brown-mid));
+    display: grid;
+    place-items: center;
+  }
+  .vd-doc-icon svg { width: 22px; height: 22px; color: #fff; }
+  .vd-doc-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--brown-deep);
+  }
+  .vd-doc-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .vd-doc-chip {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--green-bg);
+    color: var(--green);
+    letter-spacing: 0.04em;
+  }
+  .vd-doc-missing .vd-doc-icon { background: #f0e8e4; }
+  .vd-doc-missing .vd-doc-icon svg { color: var(--brown-muted); }
+  .vd-doc-missing .vd-doc-chip { background: #f5ede9; color: var(--brown-muted); }
+
+  /* ── RELATED ── */
+  .vd-related-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .vd-related-link { text-decoration: none; color: inherit; display: block; }
+  .vd-related-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--warm-white);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .vd-related-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); }
+  .vd-related-img {
+    aspect-ratio: 4/3;
+    background: radial-gradient(ellipse at center, #f3edfb, #ddd0ef);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+  .vd-related-img img { width: 100%; height: 100%; object-fit: contain; padding: 10px; filter: drop-shadow(0 4px 8px rgba(47, 26, 70, 0.18)); }
+  .vd-related-body { padding: 14px; }
+  .vd-related-body h4 { margin: 0 0 4px; font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .vd-related-body p { margin: 0; font-size: 12px; color: var(--text-muted); }
+  .vd-related-price { margin-top: 8px; color: var(--accent); font-size: 16px; font-weight: 800; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1050px) {
+    .vd-hero { grid-template-columns: 1fr; align-items: start; }
+    .vd-carousel-stage { min-height: 280px; flex: none; aspect-ratio: 4/3; }
+    .vd-related-grid { grid-template-columns: repeat(2, 1fr); }
+    .vd-specs-grid { grid-template-columns: repeat(2, 1fr); }
+    .vd-docs-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  @media (max-width: 600px) {
+    .vd-shell { padding: 16px 14px 48px; }
+    .vd-head-row { flex-direction: column; align-items: flex-start; }
+    .vd-highlights { grid-template-columns: repeat(2, 1fr); }
+    .vd-specs-grid { grid-template-columns: repeat(2, 1fr); }
+    .vd-docs-grid { grid-template-columns: repeat(1, 1fr); }
+    .vd-related-grid { grid-template-columns: repeat(2, 1fr); }
+    .vd-section-card { padding: 20px 16px; }
+    .vd-detail-card { padding: 20px 16px; }
+  }
+</style>
+
+<div class="vd-shell">
+
+  <a class="btn btn-compact vd-back" href="{{ url_for('dashboard') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    Back to View Vehicle
+  </a>
+
+  <!-- ═══ HERO ═══ -->
+  <div class="vd-hero">
+
+    <!-- Carousel -->
+    <div class="vd-carousel-wrap">
+      <div class="vd-carousel-stage" id="carouselStage">
+
+        <span class="vd-status-pill {{ vehicle.status_value }}">{{ vehicle.status or "Available" }}</span>
+
+        {% if vehicle.gallery_images %}
+          {% for img in vehicle.gallery_images %}
+          <div class="vd-carousel-slide {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}">
+            <img src="{{ url_for('static', filename='uploads/vehicles/' ~ img) }}" alt="{{ vehicle.vehicle_name }}" />
+          </div>
+          {% endfor %}
+
+          <button class="vd-arrow prev" id="arrowPrev" onclick="carouselMove(-1)" aria-label="Previous">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button class="vd-arrow next" id="arrowNext" onclick="carouselMove(1)" aria-label="Next">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+
+          <div class="vd-dots" id="carouselDots">
+            {% for img in vehicle.gallery_images %}
+            <div class="vd-dot {% if loop.first %}active{% endif %}" onclick="carouselGoto({{ loop.index0 }})"></div>
+            {% endfor %}
+          </div>
+
+        {% elif vehicle.photo_filename %}
+          <div class="vd-carousel-slide active">
+            <img src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.photo_filename) }}" alt="{{ vehicle.vehicle_name }}" />
+          </div>
+        {% else %}
+          <div class="vd-carousel-slide active">
+            <div class="vd-carousel-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>
+              <span>No image available</span>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Thumb strip -->
+      <div class="vd-thumb-strip" id="thumbStrip">
+        {% for img in vehicle.gallery_images %}
+        <div class="vd-thumb {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}" onclick="carouselGoto({{ loop.index0 }})">
+          <img src="{{ url_for('static', filename='uploads/vehicles/' ~ img) }}" alt="View {{ loop.index }}" />
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Detail card -->
+    <div class="vd-detail-card">
+      <div class="vd-head-row">
+        <div class="vd-kicker">{{ vehicle.brand }} &nbsp;·&nbsp; Vehicle Details</div>
+        <a class="btn primary btn-compact vd-top-buy-btn" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}">Buy</a>
+      </div>
+      <h1 class="vd-name">{{ vehicle.vehicle_name }}</h1>
+      <p class="vd-meta-line">
+        {{ vehicle.vehicle_number or "" }}
+        {% if vehicle.registration_no or vehicle.chassis_no %} &nbsp;·&nbsp; Reg. {{ vehicle.registration_no or vehicle.chassis_no }}{% endif %}
+        {% if vehicle.model_year %} &nbsp;·&nbsp; {{ vehicle.model_year }}{% endif %}
+      </p>
+
+      <div class="vd-price-block">
+        <div>
+          <div class="vd-price-label">Selling Price</div>
+          <div class="vd-price-value">
+            {% if vehicle.selling_price %}
+            &#8377;{{ "{:,.0f}".format(vehicle.selling_price) }}
+            {% else %}
+            Contact Us
+            {% endif %}
+          </div>
+        </div>
+        <button class="btn primary vd-buy-btn" type="button" onclick="document.getElementById('enquiryForm').scrollIntoView({behavior:'smooth'})">
+          Enquire Now
+        </button>
+      </div>
+
+      <div class="vd-highlights">
+        <div class="vd-hl">
+          <div class="vd-hl-label">Brand</div>
+          <div class="vd-hl-value">{{ vehicle.brand }}</div>
+        </div>
+        <div class="vd-hl">
+          <div class="vd-hl-label">Model Year</div>
+          <div class="vd-hl-value">{{ vehicle.model_year or "—" }}</div>
+        </div>
+        <div class="vd-hl">
+          <div class="vd-hl-label">Owners</div>
+          <div class="vd-hl-value">{{ vehicle.owners or "—" }}</div>
+        </div>
+        <div class="vd-hl">
+          <div class="vd-hl-label">Status</div>
+          <div class="vd-hl-value">{{ vehicle.status or "Available" }}</div>
+        </div>
+      </div>
+
+      <div class="vd-trust-row">
+        <div class="vd-doc-status {% if vehicle.rc_book_filename %}available{% else %}missing{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div>
+            <div class="vd-doc-status-name">RC Book</div>
+            <div class="vd-doc-status-val">{% if vehicle.rc_book_filename %}Available{% else %}Not Available{% endif %}</div>
+          </div>
+        </div>
+        <div class="vd-doc-status {% if vehicle.insurance_document_filename %}available{% else %}missing{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <div>
+            <div class="vd-doc-status-name">Insurance</div>
+            <div class="vd-doc-status-val">{% if vehicle.insurance_document_filename %}Available{% else %}Not Available{% endif %}</div>
+          </div>
+        </div>
+        <div class="vd-doc-status {% if vehicle.puc_certificate_filename %}available{% else %}missing{% endif %}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <div>
+            <div class="vd-doc-status-name">PUC</div>
+            <div class="vd-doc-status-val">{% if vehicle.puc_certificate_filename %}Available{% else %}Not Available{% endif %}</div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="vd-divider" />
+
+      <!-- Enquiry Form -->
+      <div id="enquiryForm">
+        <div class="vd-enquiry-head">
+          <h3>Book an Enquiry</h3>
+          <p>Leave your details and we'll get back to you shortly.</p>
+        </div>
+        <form method="post" action="{{ url_for('vehicle_enquiry_submit', vehicle_id=vehicle.id) }}">
+          <div class="vd-field">
+            <label>Your Name</label>
+            <input type="text" name="customer_name" placeholder="Enter your full name" required />
+          </div>
+          <div class="vd-field">
+            <label>Phone Number</label>
+            <input type="tel" name="customer_phone" placeholder="Enter your phone number" required />
+          </div>
+          <button class="btn primary vd-submit-btn" type="submit">Submit Enquiry</button>
+        </form>
+        {% if enquiry_success %}
+        <div class="vd-alert success">✓ Enquiry submitted! We'll contact you soon.</div>
+        {% endif %}
+        {% if enquiry_error %}
+        <div class="vd-alert error">{{ enquiry_error }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SPECIFICATIONS ═══ -->
+  <div class="vd-section-card">
+    <h2 class="vd-section-title">Vehicle Specifications</h2>
+    <div class="vd-specs-grid">
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Registration No.</div>
+        <div class="vd-spec-value">{{ vehicle.registration_no or vehicle.chassis_no or "—" }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Vehicle Number</div>
+        <div class="vd-spec-value">{{ vehicle.vehicle_number or "—" }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Model Year</div>
+        <div class="vd-spec-value">{{ vehicle.model_year or "—" }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Brand</div>
+        <div class="vd-spec-value">{{ vehicle.brand }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">No. of Owners</div>
+        <div class="vd-spec-value">{{ vehicle.owners or "—" }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Insurance</div>
+        <div class="vd-spec-value">{{ 'Yes' if (vehicle.insurance == 'Yes' or vehicle.insurance_date or vehicle.insurance_start_date or vehicle.insurance_end_date) else 'No' }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Status</div>
+        <div class="vd-spec-value">{{ vehicle.status or "Available" }}</div>
+      </div>
+      <div class="vd-spec-tile">
+        <div class="vd-spec-label">Price Band</div>
+        <div class="vd-spec-value">{{ vehicle.price_bucket or "—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ DESCRIPTION ═══ -->
+  <div class="vd-section-card">
+    <h2 class="vd-section-title">About This Vehicle</h2>
+    <p class="vd-description-text">
+      {{ vehicle.notes or "This vehicle is well-maintained and available for immediate purchase. Contact us for more details or to schedule an enquiry." }}
+    </p>
+  </div>
+
+  <!-- ═══ RELATED ═══ -->
+  {% if related_vehicles %}
+  <div class="vd-section-card">
+    <h2 class="vd-section-title">More From Inventory</h2>
+    <div class="vd-related-grid">
+      {% for item in related_vehicles %}
+      <a class="vd-related-link" href="{{ url_for('vehicle_detail', vehicle_id=item.id) }}">
+        <div class="vd-related-card">
+          <div class="vd-related-img">
+            {% if item.photo_filename %}
+            <img src="{{ url_for('static', filename='uploads/vehicles/' ~ item.photo_filename) }}" alt="{{ item.vehicle_name }}" />
+            {% else %}
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c4967f" stroke-width="1.4"><circle cx="12" cy="12" r="10"/></svg>
+            {% endif %}
+          </div>
+          <div class="vd-related-body">
+            <h4>{{ item.vehicle_name }}</h4>
+            <p>{{ item.brand }} · {{ item.model_year or "" }}</p>
+            <div class="vd-related-price">
+              {% if item.selling_price %}&#8377;{{ "{:,.0f}".format(item.selling_price) }}{% else %}—{% endif %}
+            </div>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  (function () {
+    const slides = document.querySelectorAll('.vd-carousel-slide');
+    const dots   = document.querySelectorAll('.vd-dot');
+    const thumbs = document.querySelectorAll('.vd-thumb');
+    const prev   = document.getElementById('arrowPrev');
+    const next   = document.getElementById('arrowNext');
+    const stage  = document.getElementById('carouselStage');
+    let current  = 0;
+    const total  = slides.length;
+    let timer = null;
+
+    function goto(n) {
+      if (!total) return;
+      slides[current].classList.remove('active');
+      dots[current]?.classList.remove('active');
+      thumbs[current]?.classList.remove('active');
+      current = (n + total) % total;
+      slides[current].classList.add('active');
+      dots[current]?.classList.add('active');
+      thumbs[current]?.classList.add('active');
+    }
+
+    function stopAuto() {
+      if (timer) window.clearInterval(timer);
+      timer = null;
+    }
+
+    function startAuto() {
+      stopAuto();
+      if (total > 1) timer = window.setInterval(() => goto(current + 1), 3200);
+    }
+
+    window.carouselMove = (dir) => {
+      goto(current + dir);
+      startAuto();
+    };
+    window.carouselGoto = (n) => {
+      goto(n);
+      startAuto();
+    };
+
+    // Swipe support
+    if (stage && total > 1) {
+      let startX = 0;
+      stage.addEventListener('touchstart', e => startX = e.touches[0].clientX, { passive: true });
+      stage.addEventListener('touchend', e => {
+        const diff = startX - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 40) goto(current + (diff > 0 ? 1 : -1));
+      });
+      stage.addEventListener('mouseenter', stopAuto);
+      stage.addEventListener('mouseleave', startAuto);
+    }
+
+    if (total <= 1) {
+      prev?.classList.add('hidden');
+      next?.classList.add('hidden');
+    }
+    startAuto();
+  })();
+</script>
+
+{% endblock %}

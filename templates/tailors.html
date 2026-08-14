@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Staff</h1>
+    <!-- <p>Manage staff assignments and availability.</p> -->
+  </div>
+  {% if current_user and (current_user.is_super_admin or 'staff_add' in current_user.permissions) %}
+  <a href="{{ url_for('tailor_add') }}" class="btn primary">+ Add Staff</a>
+  {% endif %}
+</div>
+
+<section class="card">
+  <div class="table-toolbar">
+    <div class="filter-group">
+      <input class="filter-input" type="text" placeholder="Search staff or phone" id="staff-search-input" />
+    </div>
+  </div>
+
+  {% if tailors %}
+  <div class="list-table staff-table" style="--list-cols: repeat(5, minmax(0, 1fr));">
+    <div class="list-row list-head">
+      <div>Name</div>
+      <div>Phone</div>
+      <div>Assigned Orders</div>
+      <div>Status</div>
+      <div>Actions</div>
+    </div>
+    {% for t in tailors %}
+    <div
+      class="list-row"
+      data-search="{{ ((t.name or '') ~ ' ' ~ (t.phone or ''))|lower }}"
+    >
+      <div><strong>{{ t.name }}</strong></div>
+      <div>{{ t.phone }}</div>
+      <div>{{ t.order_count or 0 }}</div>
+      <div><span class="pill">{{ t.status }}</span></div>
+      <!-- <div class="list-actions">
+        <a class="icon-action" href="{{ url_for('tailor_detail', tailor_id=t.id) }}" aria-label="View">
+          <i class="bi bi-eye"></i>
+        </a>
+        <a class="icon-action primary" href="{{ url_for('tailor_edit', tailor_id=t.id) }}" aria-label="Edit">
+          <i class="bi bi-pencil"></i>
+        </a>
+        <form method="post" action="{{ url_for('tailor_delete', tailor_id=t.id) }}">
+          <button class="icon-action danger" type="submit" aria-label="Delete">
+            <i class="bi bi-trash"></i>
+          </button>
+        </form>
+      </div> -->
+      <div class="list-actions action-menu-wrap">
+  <button class="icon-action menu-btn" type="button" aria-label="More actions">
+    <i class="bi bi-three-dots-vertical"></i>
+  </button>
+
+  <div class="menu-pop">
+    <a class="menu-item" href="{{ url_for('tailor_detail', tailor_id=t.id) }}">
+      <i class="bi bi-eye"></i> View
+    </a>
+
+    {% if current_user and (current_user.is_super_admin or 'staff_edit' in current_user.permissions) %}
+    <a class="menu-item" href="{{ url_for('tailor_edit', tailor_id=t.id) }}">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+    {% endif %}
+
+    {% if current_user and (current_user.is_super_admin or 'staff_delete' in current_user.permissions) %}
+    <form method="post" action="{{ url_for('tailor_delete', tailor_id=t.id) }}">
+      <button class="menu-item danger" type="submit">
+        <i class="bi bi-trash"></i> Delete
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No staff added yet.</p>
+  {% endif %}
+</section>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const searchInput = document.getElementById("staff-search-input");
+  const staffRows = Array.from(document.querySelectorAll(".list-table .list-row[data-search]"));
+
+  function closeAllMenus() {
+    document.querySelectorAll(".menu-pop.open").forEach((menu) =>
+      menu.classList.remove("open")
+    );
+  }
+
+  function applyStaffSearch() {
+    if (!searchInput) return;
+    const query = (searchInput.value || "").trim().toLowerCase();
+    staffRows.forEach((row) => {
+      const text = (row.dataset.search || "").toLowerCase();
+      const matches = !query || text.includes(query);
+      row.classList.toggle("hidden", !matches);
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+
+    const menuBtn = event.target.closest(".menu-btn");
+    if (menuBtn) {
+      const wrap = menuBtn.closest(".action-menu-wrap");
+      const menu = wrap?.querySelector(".menu-pop");
+
+      if (menu) {
+        const isOpen = menu.classList.contains("open");
+        closeAllMenus();
+
+        if (!isOpen) {
+          menu.classList.add("open");
+
+          // detect viewport overflow (bottom rows)
+          const rect = menu.getBoundingClientRect();
+          const spaceBelow = window.innerHeight - rect.bottom;
+
+          if (spaceBelow < 150) {
+            menu.classList.add("up");
+          } else {
+            menu.classList.remove("up");
+          }
+        }
+      }
+      return;
+    }
+
+    // click outside → close all
+    closeAllMenus();
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener("input", applyStaffSearch);
+    searchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        applyStaffSearch();
+      }
+    });
+    applyStaffSearch();
+  }
+});
+</script>
+  
+{% endblock %}

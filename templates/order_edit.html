@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p>{{ customer.name }} · {{ customer.phone }}</p>
+  </div>
+  <a class="btn ghost"
+     href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">
+     Back
+  </a>
+</div>
+
+<div class="customer-detail-grid clean-detail">
+
+  <!-- LEFT SIDE : CUSTOMER INFO -->
+  <section class="card customer-info-card">
+    <h3>Customer Info</h3>
+    <div class="info-list">
+      <div><span>Name</span><strong>{{ customer.name }}</strong></div>
+      <div><span>Mobile</span><strong>{{ customer.phone }}</strong></div>
+      <!-- <div><span>Address</span><strong>{{ customer.address or "-" }}</strong></div> -->
+    </div>
+  </section>
+
+  <!-- RIGHT SIDE : EDIT ORDER -->
+  <section class="card customer-order-card">
+    <form method="post">
+
+      <!-- <h3>Edit Order {{ order.id|fmt_order_id(order.order_type) }}</h3> -->
+       <!-- <h3>Edit Order {{ order.order_no }}</h3> -->
+
+      <!-- ORDER STATUS -->
+      <div class="form-row">
+        <label>
+          <span>Status</span>
+          <select name="order_status">
+            {% for s in ["In-Progress", "Completed", "Delivered", "Cancelled"] %}
+              <option value="{{ s }}" {% if order.status == s %}selected{% endif %}>
+                {{ s }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <!-- DELIVERY DATE -->
+      {% if order.order_type == "Tailoring" %}
+      <div class="form-row">
+        <label>
+          <span>Delivery Date</span>
+          <input type="date"
+                 name="due_date"
+                 value="{{ order.due_date[:10] if order.due_date else '' }}">
+        </label>
+      </div>
+      {% endif %}
+
+      <!-- PAYMENT -->
+      <div class="detail-section">
+        <h4>Payment</h4>
+
+        <label>
+          <span>Advance Amount</span>
+          <input type="number" step="0.01"
+                 name="advance_amount"
+                 value="{{ order.advance_amount or 0 }}">
+        </label>
+
+        <label>
+          <span>Paid Amount</span>
+          <input type="number" step="0.01"
+                 name="paid_amount"
+                 value="{{ order.paid_amount or 0 }}">
+        </label>
+      </div>
+
+      <!-- ORDER ITEMS (EDITABLE QTY) -->
+      <div class="detail-section">
+        <h4>Order Items</h4>
+
+        {% for item in order_items %}
+          <div class="order-item-row">
+            <input type="hidden" name="item_id[]" value="{{ item.id }}">
+            <span>{{ item.item_type }}</span>
+            <input type="number"
+                   name="item_qty[]"
+                   value="{{ item.qty }}"
+                   min="1">
+          </div>
+        {% endfor %}
+      </div>
+
+      <!-- SAVE -->
+      <div class="detail-actions">
+        <button class="btn primary">Update Order</button>
+        <a class="btn ghost"
+           href="{{ url_for('customer_detail', customer_id=customer.id, order_id=order.id) }}">
+           Cancel
+        </a>
+      </div>
+
+    </form>
+  </section>
+
+</div>
+{% endblock %}

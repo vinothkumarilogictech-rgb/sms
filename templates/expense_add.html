@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    background: #f7f1ea !important;
+  }
+  .expense-card {
+    border: 1px solid #dcc4ef !important;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48), 0 12px 24px rgba(62, 11, 99, 0.08) !important;
+  }
+  .expense-form {
+    gap: 18px;
+  }
+  .expense-form label {
+    display: grid;
+    gap: 8px;
+    color: #3f2265;
+    font-weight: 700;
+  }
+  .expense-form input,
+  .expense-form select {
+    min-height: 42px;
+    border: 1px solid #d7c1ee;
+    border-radius: 10px;
+    background: #fffdfd;
+    color: #34224f;
+    padding: 0 12px;
+    box-shadow: none;
+  }
+  .expense-form input:focus,
+  .expense-form select:focus {
+    outline: none;
+    border-color: #9dc3ff;
+    box-shadow: 0 0 0 3px rgba(157, 195, 255, 0.28);
+  }
+  .expense-inline-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+  }
+  .expense-inline-box > select {
+    flex: 1;
+  }
+  .expense-inline-box > select:disabled {
+    background: #f1ebf7;
+    color: #8b7ca5;
+    cursor: not-allowed;
+  }
+  .is-hidden {
+    display: none !important;
+  }
+  .salary-toggle {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700 !important;
+    color: #3f2265;
+    white-space: nowrap;
+  }
+  .salary-toggle input {
+    min-height: auto;
+    width: 16px;
+    height: 16px;
+    accent-color: #2457d6;
+  }
+  .expense-search {
+    position: relative;
+    width: 100%;
+  }
+  .expense-search input {
+    width: 100%;
+  }
+  .expense-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fffdfd;
+    border: 1px solid #d7c1ee;
+    border-radius: 10px;
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 6px 0;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 999;
+    box-shadow: 0 10px 20px rgba(62, 11, 99, 0.08);
+  }
+  .expense-dropdown li {
+    padding: 8px 12px;
+  }
+  .expense-actions .btn.primary {
+    background: #2457d6;
+    border-color: #2457d6;
+  }
+  .expense-actions .btn.primary:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+  }
+  .expense-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .expense-actions .btn.icon-btn {
+    min-width: 46px;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  @media (max-width: 768px) {
+    .expense-inline-box {
+      flex-direction: column;
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+    .salary-toggle {
+      white-space: normal;
+    }
+  }
+</style>
+<div class="page-head">
+  <div>
+    <h1>Add expense</h1>
+    <p>Expense, salary payment, or repair</p>
+    <div class="tabs-bar" style="margin-top:10px;">
+      <a href="{{ url_for('expense_add') }}" class="tab-chip {{ 'active' if active_kind == 'expense' else '' }}">Expense</a>
+      <a href="{{ url_for('expense_add', kind='salary') }}" class="tab-chip {{ 'active' if active_kind == 'salary' else '' }}">Salary</a>
+      <a href="{{ url_for('expense_repair_add') }}" class="tab-chip">Repair</a>
+    </div>
+  </div>
+  <a class="btn ghost js-back-button" href="{{ url_for('expense_dashboard', type=back_type) }}" data-fallback="{{ url_for('expense_dashboard', type=back_type) }}">Back</a>
+</div>
+
+<section class="card expense-card">
+  <form class="stack expense-form" method="post">
+    {% if error %}
+    <div class="alert">{{ error }}</div>
+    {% endif %}
+
+    <div class="grid two">
+
+      <!-- Row 1: Expense no | Staff -->
+      <label>
+        Expense no
+        <input type="text" value="{{ expense_no }}" readonly>
+      </label>
+
+      <label>
+        Staff
+        <div class="expense-inline-box">
+          <select name="staff_no"
+                  id="staffNo"
+                  {% if form_data.get('is_salary') != '1' %}disabled{% endif %}
+                  onchange="loadStaffInfo()">
+            <option value="">-- Select Staff --</option>
+            {% for s in staffs %}
+              <option value="{{ s.tailor_code }}" {% if form_data.get('staff_no') == s.tailor_code %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <label class="salary-toggle">
+            <input type="checkbox"
+                   name="is_salary"
+                   value="1"
+                   id="salaryCheck"
+                   {% if form_data.get('is_salary') == '1' %}checked{% endif %}
+                   onchange="toggleSalary()">
+            Salary Payment
+          </label>
+        </div>
+      </label>
+
+      <!-- Row 2: Description (normal) | empty  OR  Staff name | Phone (salary) -->
+      <label id="descLabel">
+        Description
+        <input type="text"
+               name="expense_name"
+               id="nameInput"
+               autocomplete="off"
+               placeholder="Enter description"
+               value="{{ form_data.get('expense_name', '') }}"
+               required>
+      </label>
+
+      <!-- Salary row 2 left: Staff name search -->
+      <label id="searchLabel" class="{% if form_data.get('is_salary') != '1' %}is-hidden{% endif %}">
+        Staff name
+        <div class="expense-search">
+          <input type="text"
+                 id="staffSearchInput"
+                 placeholder="Type staff name..."
+                 value=""
+                 autocomplete="off"
+                 oninput="filterStaff()"
+                 onfocus="showDropdown()"
+                 onblur="hideDropdown()">
+          <ul id="staffDropdown" class="expense-dropdown"></ul>
+        </div>
+      </label>
+
+      <!-- Salary row 2 right: Phone -->
+      <label id="phoneLabel" class="{% if form_data.get('is_salary') != '1' %}is-hidden{% endif %}">
+        Phone
+        <input type="text" id="staffPhoneView" readonly>
+      </label>
+
+      <!-- Salary row 3: Role | Status -->
+      <label id="roleLabel" class="{% if form_data.get('is_salary') != '1' %}is-hidden{% endif %}">
+        Role
+        <input type="text" id="staffRoleView" readonly>
+      </label>
+
+      <label id="statusLabel" class="{% if form_data.get('is_salary') != '1' %}is-hidden{% endif %}">
+        Status
+        <input type="text" id="staffStatusView" readonly>
+      </label>
+
+      <!-- Last row: Expense/Salary amount -->
+      <label id="amountLabel">
+        <span id="amountText">Expense amount</span>
+        <input type="number"
+               step="0.01"
+               name="{% if form_data.get('is_salary') == '1' %}salary_amount{% else %}expense_amount{% endif %}"
+               id="amountInput"
+               value="{% if form_data.get('is_salary') == '1' %}{{ form_data.get('salary_amount', '') }}{% else %}{{ form_data.get('expense_amount', '') }}{% endif %}"
+               required>
+      </label>
+
+    </div>
+
+    <div class="actions expense-actions">
+      <button class="btn primary" type="submit" name="submit_action" value="save">Save</button>
+      <button class="btn ghost icon-btn" type="submit" name="submit_action" value="print" title="Save and print" aria-label="Save and print">
+        <i class="bi bi-printer"></i>
+      </button>
+    </div>
+  </form>
+</section>
+
+<script>
+  const staffList = [
+    {% for s in staffs %}
+    { code: "{{ s.tailor_code }}", name: "{{ s.name }}" },
+    {% endfor %}
+  ];
+
+  function fillInfoBox(data) {
+    document.getElementById("staffPhoneView").value  = data.phone  || "";
+    document.getElementById("staffRoleView").value   = data.role   || "";
+    document.getElementById("staffStatusView").value = data.status || "";
+  }
+
+  function clearInfoBox() {
+    document.getElementById("staffPhoneView").value  = "";
+    document.getElementById("staffRoleView").value   = "";
+    document.getElementById("staffStatusView").value = "";
+  }
+
+  function loadStaffInfo() {
+    const staffCode = document.getElementById("staffNo").value;
+    if (!staffCode) { clearInfoBox(); return; }
+
+    fetch(`/api/staff/${staffCode}`)
+      .then(res => res.json())
+      .then(data => {
+        fillInfoBox(data);
+        if (!document.getElementById("searchLabel").classList.contains("is-hidden")) {
+          document.getElementById("staffSearchInput").value = data.name || "";
+        }
+      })
+      .catch(() => clearInfoBox());
+  }
+
+  function toggleSalary() {
+    const salary      = document.getElementById("salaryCheck").checked;
+    const staffNo     = document.getElementById("staffNo");
+    const nameInput   = document.getElementById("nameInput");
+    const amountInput = document.getElementById("amountInput");
+    const amountText  = document.getElementById("amountText");
+    const descLabel   = document.getElementById("descLabel");
+    const searchLabel = document.getElementById("searchLabel");
+    const searchInput = document.getElementById("staffSearchInput");
+
+    if (salary) {
+      staffNo.disabled          = false;
+      descLabel.classList.add("is-hidden");
+      searchLabel.classList.remove("is-hidden");
+      document.getElementById("phoneLabel").classList.remove("is-hidden");
+      document.getElementById("roleLabel").classList.remove("is-hidden");
+      document.getElementById("statusLabel").classList.remove("is-hidden");
+      nameInput.required        = false;
+
+      amountText.innerText = "Salary amount";
+      amountInput.name     = "salary_amount";
+
+      if (staffNo.value) loadStaffInfo();
+
+    } else {
+      staffNo.disabled          = true;
+      staffNo.value             = "";
+      descLabel.classList.remove("is-hidden");
+      searchLabel.classList.add("is-hidden");
+      document.getElementById("phoneLabel").classList.add("is-hidden");
+      document.getElementById("roleLabel").classList.add("is-hidden");
+      document.getElementById("statusLabel").classList.add("is-hidden");
+      nameInput.required        = true;
+      amountText.innerText = "Expense amount";
+      amountInput.name     = "expense_amount";
+      document.getElementById("staffSearchInput").value = "";
+
+      clearInfoBox();
+    }
+  }
+
+  function filterStaff() {
+    const query    = document.getElementById("staffSearchInput").value.toLowerCase();
+    const dropdown = document.getElementById("staffDropdown");
+    dropdown.innerHTML = "";
+
+    const filtered = staffList.filter(s => s.name.toLowerCase().includes(query));
+
+    if (filtered.length === 0) {
+      dropdown.innerHTML = `<li style="padding:8px 12px;color:#999;">No staff found</li>`;
+    } else {
+      filtered.forEach(s => {
+        const li = document.createElement("li");
+        li.textContent = `${s.name} (${s.code})`;
+        li.style.cssText = "padding:8px 12px; cursor:pointer;";
+        li.addEventListener("mouseover", () => li.style.background = "#f0e4fb");
+        li.addEventListener("mouseout",  () => li.style.background = "");
+        li.addEventListener("mousedown", () => selectStaff(s));
+        dropdown.appendChild(li);
+      });
+    }
+    dropdown.style.display = "block";
+  }
+
+  function selectStaff(s) {
+    document.getElementById("staffNo").value          = s.code;
+    document.getElementById("staffSearchInput").value = s.name;
+    loadStaffInfo();
+    hideDropdown();
+  }
+
+  function showDropdown() { filterStaff(); }
+
+  function hideDropdown() {
+    setTimeout(() => {
+      document.getElementById("staffDropdown").style.display = "none";
+    }, 150);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    toggleSalary();
+    if (document.getElementById("staffNo").value) {
+      loadStaffInfo();
+    }
+  });
+</script>
+
+{% endblock %}

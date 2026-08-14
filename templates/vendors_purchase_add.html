@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .add-form-card {
+    background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%);
+    border: 1px solid #dcbef0;
+    border-radius: 22px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 16px 30px rgba(62, 11, 99, 0.08);
+  }
+  .add-form-grid label {
+    gap: 8px;
+    color: #3f2265;
+    font-weight: 700;
+  }
+  .add-form-grid input,
+  .add-form-grid select,
+  .add-form-stack textarea {
+    background: #fffdfd;
+  }
+  .add-form-header h3 {
+    color: #3f2265;
+  }
+  .add-form-table,
+  .add-form-table .material-row {
+    border-color: #dcc4ef;
+  }
+  .add-form-table {
+    background: #fffdfd;
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  .add-form-table .material-row.material-head {
+    background: #f3eafb;
+    color: #5f4f75;
+  }
+  .add-form-actions {
+    justify-content: flex-end;
+  }
+</style>
+<div class="page-head">
+  <div>
+    <h1>Add purchase</h1>
+    <!-- <p>Record materials purchased from a vendor and update inventory.</p> -->
+  </div>
+  <a class="btn ghost js-back-button" href="{{ url_for('vendors') }}" data-fallback="{{ url_for('vendors') }}">Back</a>
+</div>
+
+{% if error %}
+  <div class="alert">{{ error }}</div>
+{% endif %}
+
+<<<<<<< HEAD
+<!--form class="stack" method="post" enctype="multipart/form-data" id="vendor-purchase-form">
+  <section class="card">
+    <div class="grid two">
+=======
+<form class="stack add-form-stack" method="post" enctype="multipart/form-data" id="vendor-purchase-form">
+  <section class="card add-form-card">
+    <div class="grid two add-form-grid">
+>>>>>>> cace07530d68aa9a173bbe59e9cc3c19b94342dc
+      <label>
+        Purchase ID
+        <input type="text" value="{{ next_purchase_no or 'M0001' }}" readonly />
+      </label>
+      <label>
+        Vendor
+        <select name="vendor_id" required>
+          <option value="">Select vendor</option>
+          {% for v in vendors %}
+          <option value="{{ v.id }}">{{ v.vendor_code }} - {{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </section>-->
+
+  <section class="card add-form-card">
+    <div class="card-header add-form-header">
+      <h3>Purchase items</h3>
+      <div class="actions">
+        <a class="btn ghost btn-compact hover-red-fill" href="{{ url_for('materials_add') }}">New item</a>
+        <button type="button" class="btn ghost btn-compact hover-red-fill" id="add-purchase-item">+ Add item</button>
+      </div>
+    </div>
+    <div class="material-table add-form-table" id="purchase-items">
+      <div class="material-row material-head">
+        <div>Item</div>
+        <div>Qty</div>
+        <div>UOM</div>
+        <div>Unit Price</div>
+        <div>Selling Price</div>
+        <div>Line Total</div>
+        <div></div>
+      </div>
+      <div class="material-row">
+        <div>
+          <select name="purchase_item_id" class="purchase-item-select">
+            <option value="">Select item</option>
+            {% for item in inventory %}
+              <option value="{{ item.id }}" data-uom="{{ item.uom_name or '' }}">{{ item.name }} (Stock: {{ item.qty }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div><input type="number" step="0.01" name="purchase_qty" value="1" min="0" /></div>
+        <div class="material-uom">-</div>
+        <div><input type="number" step="0.01" name="purchase_unit_price" value="0" min="0" /></div>
+        <div><input type="number" step="0.01" name="purchase_selling_price" value="0" min="0" /></div>
+        <div class="material-line-total">₹ 0.00</div>
+        <div><button type="button" class="btn ghost material-remove">x</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card add-form-card">
+    <div class="grid three add-form-grid">
+      <label>
+        Paid amount
+        <input type="number" step="0.01" name="paid_amount" value="0" min="0" />
+      </label>
+      <label>
+        Payment Mode
+        <select name="payment_mode">
+          {% for mode in ["Cash", "GPay", "Card"] %}
+          <option value="{{ mode }}" {% if mode == "Cash" %}selected{% endif %}>{{ mode }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Total amount
+        <input type="text" id="purchase-total" readonly value="₹ 0.00" />
+      </label>
+    </div>
+    <label>
+      Notes
+      <textarea name="notes" rows="2"></textarea>
+    </label>
+    <label>
+      Bill images
+      <input type="file" name="bill_images" accept="image/*" multiple />
+    </label>
+  </section>
+
+  <div class="actions add-form-actions">
+    <button class="btn primary" type="submit">Save purchase</button>
+    <a class="btn ghost" href="{{ url_for('vendors') }}">Cancel</a>
+  </div>
+</form>
+
+<template id="purchase-item-template">
+  <div class="material-row">
+    <div>
+      <select name="purchase_item_id" class="purchase-item-select">
+        <option value="">Select item</option>
+        {% for item in inventory %}
+          <option value="{{ item.id }}" data-uom="{{ item.uom_name or '' }}">{{ item.name }} (Stock: {{ item.qty }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div><input type="number" step="0.01" name="purchase_qty" value="1" min="0" /></div>
+    <div class="material-uom">-</div>
+    <div><input type="number" step="0.01" name="purchase_unit_price" value="0" min="0" /></div>
+    <div><input type="number" step="0.01" name="purchase_selling_price" value="0" min="0" /></div>
+    <div class="material-line-total">₹ 0.00</div>
+    <div><button type="button" class="btn ghost material-remove">x</button></div>
+  </div>
+</template>
+
+<script>
+  const addBtn = document.getElementById("add-purchase-item");
+  const purchaseList = document.getElementById("purchase-items");
+  const purchaseTemplate = document.getElementById("purchase-item-template");
+  const totalField = document.getElementById("purchase-total");
+
+  function parseNumber(value) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function formatMoney(value) {
+    return `₹ ${value.toFixed(2)}`;
+  }
+
+  function updateRow(row) {
+    const select = row.querySelector(".purchase-item-select");
+    const uomCell = row.querySelector(".material-uom");
+    const qtyInput = row.querySelector('input[name="purchase_qty"]');
+    const priceInput = row.querySelector('input[name="purchase_unit_price"]');
+    const lineTotal = row.querySelector(".material-line-total");
+    const uom = select?.selectedOptions?.[0]?.dataset?.uom || "-";
+    if (uomCell) uomCell.textContent = uom || "-";
+    const qty = parseNumber(qtyInput?.value);
+    const price = parseNumber(priceInput?.value);
+    const total = qty * price;
+    if (lineTotal) lineTotal.textContent = formatMoney(total);
+    return total;
+  }
+
+  function recalcTotals() {
+    let total = 0;
+    purchaseList.querySelectorAll(".material-row").forEach((row) => {
+      if (row.classList.contains("material-head")) return;
+      total += updateRow(row);
+    });
+    if (totalField) totalField.value = formatMoney(total);
+  }
+
+  function wireRow(row) {
+    row.querySelectorAll("select, input").forEach((el) => {
+      el.addEventListener("input", recalcTotals);
+      el.addEventListener("change", recalcTotals);
+    });
+    const remove = row.querySelector(".material-remove");
+    if (remove) {
+      remove.addEventListener("click", () => {
+        row.remove();
+        recalcTotals();
+      });
+    }
+  }
+
+  if (addBtn && purchaseList && purchaseTemplate) {
+    addBtn.addEventListener("click", () => {
+      const clone = purchaseTemplate.content.cloneNode(true);
+      const row = clone.querySelector(".material-row");
+      if (row) wireRow(row);
+      purchaseList.appendChild(clone);
+      recalcTotals();
+    });
+  }
+
+  document.querySelectorAll(".material-row").forEach((row) => {
+    if (row.classList.contains("material-head")) return;
+    wireRow(row);
+  });
+
+  recalcTotals();
+</script>
+{% endblock %}

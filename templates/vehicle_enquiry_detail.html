@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .enquiry-shell {
+    display: grid;
+    gap: 16px;
+  }
+
+  .enquiry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .enquiry-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+    gap: 16px;
+  }
+
+  .enquiry-card {
+    border: 1px solid #ead7cf;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(122, 60, 42, 0.06);
+    padding: 18px;
+  }
+
+  .enquiry-card h2 {
+    margin: 0 0 14px;
+    font-size: 22px;
+    line-height: 1.1;
+  }
+
+  .enquiry-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .enquiry-info-box {
+    border: 1px solid #f0dfd9;
+    border-radius: 16px;
+    background: #fffaf8;
+    padding: 12px 13px;
+  }
+
+  .enquiry-info-box span {
+    display: block;
+    color: #8b6b60;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+
+  .enquiry-info-box strong {
+    display: block;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+
+  .enquiry-bike-photo {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 18px;
+    background: #f8f4f1;
+    border: 1px solid #efe1db;
+    margin-bottom: 14px;
+  }
+
+  .enquiry-bike-placeholder {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    display: grid;
+    place-items: center;
+    border-radius: 18px;
+    background: #f8f4f1;
+    border: 1px solid #efe1db;
+    color: #c8b7b0;
+    margin-bottom: 14px;
+  }
+
+  @media (max-width: 900px) {
+    .enquiry-layout,
+    .enquiry-info-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<section class="enquiry-shell">
+  <div class="enquiry-head">
+    <div>
+      <h1 style="margin:0;">Bike Enquiry Detail</h1>
+      <p class="muted" style="margin:6px 0 0;">Customer enquiry and bike information in one place.</p>
+    </div>
+    <a class="btn ghost js-back-button" href="{{ url_for('dashboard') }}" data-fallback="{{ url_for('dashboard') }}">Back to Dashboard</a>
+  </div>
+
+  <section class="enquiry-layout">
+    <article class="enquiry-card">
+      <h2>Customer Enquiry</h2>
+      <div class="enquiry-info-grid">
+        <div class="enquiry-info-box">
+          <span>Customer Name</span>
+          <strong>{{ enquiry.customer_name }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Phone Number</span>
+          <strong>{{ enquiry.customer_phone }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Branch</span>
+          <strong>{{ enquiry.branch_name or "-" }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Enquiry Time</span>
+          <strong>{{ enquiry.created_at|datetime_display if enquiry.created_at else "-" }}</strong>
+        </div>
+      </div>
+    </article>
+
+    <article class="enquiry-card">
+      <h2>Bike Details</h2>
+      {% if enquiry.photo_filename %}
+      <img class="enquiry-bike-photo" src="{{ url_for('static', filename='uploads/vehicles/' ~ enquiry.photo_filename) }}" alt="{{ enquiry.vehicle_name }}" />
+      {% else %}
+      <div class="enquiry-bike-placeholder"><i class="icon-motorbike" style="font-size:42px;"></i></div>
+      {% endif %}
+      <div class="enquiry-info-grid">
+        <div class="enquiry-info-box">
+          <span>Bike Name</span>
+          <strong>{{ enquiry.vehicle_name }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Vehicle Number</span>
+          <strong>{{ enquiry.vehicle_number or "-" }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Chassis No</span>
+          <strong>{{ enquiry.registration_no or "-" }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Status</span>
+          <strong>{{ enquiry.status or "-" }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Model Year</span>
+          <strong>{{ enquiry.model_year or "-" }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Purchase Type</span>
+          <strong>{{ (enquiry.purchase_mode or "-")|capitalize }}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Selling Price</span>
+          <strong>{% if enquiry.selling_price %}&#8377;{{ "{:,.0f}".format(enquiry.selling_price) }}{% else %}-{% endif %}</strong>
+        </div>
+        <div class="enquiry-info-box">
+          <span>Price Band</span>
+          <strong>{{ enquiry.price_bucket }}</strong>
+        </div>
+      </div>
+      {% if enquiry.notes %}
+      <div class="enquiry-info-box" style="margin-top:10px;">
+        <span>Bike Notes</span>
+        <strong>{{ enquiry.notes }}</strong>
+      </div>
+      {% endif %}
+    </article>
+  </section>
+</section>
+{% endblock %}

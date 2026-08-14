@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .vendor-detail-layout {
+    display: grid;
+    gap: 14px;
+  }
+  .vendor-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .vendor-title {
+    margin: 0;
+  }
+  .vendor-subtitle {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+  .vendor-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .vendor-chip {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.86rem;
+    background: #fff;
+  }
+  .vendor-summary {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .vendor-summary-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    padding: 12px;
+  }
+  .vendor-summary-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+  }
+  .vendor-summary-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+  @media (max-width: 1100px) {
+    .vendor-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 700px) {
+    .vendor-summary {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+{% set totals = namespace(total=0, paid=0, balance=0) %}
+{% for p in purchases %}
+  {% set row_total = p.total_amount or 0 %}
+  {% set row_paid = p.paid_amount or 0 %}
+  {% set totals.total = totals.total + row_total %}
+  {% set totals.paid = totals.paid + row_paid %}
+  {% set totals.balance = totals.balance + (row_total - row_paid) %}
+{% endfor %}
+
+<div class="vendor-detail-layout">
+  <div class="vendor-topbar">
+    <div>
+      <h1 class="vendor-title">Vendor Details</h1>
+      <p class="vendor-subtitle">{{ vendor.vendor_code }} - {{ vendor.name }}</p>
+      <div class="vendor-meta">
+        <span class="vendor-chip">Phone: {{ vendor.phone or "-" }}</span>
+        <span class="vendor-chip">Email: {{ vendor.email or "-" }}</span>
+        <span class="vendor-chip">Created: {{ vendor.created_at|date_only if vendor.created_at else "-" }}</span>
+      </div>
+    </div>
+    <a class="btn ghost hover-red-fill js-back-button" href="{{ url_for('vendors') }}" data-fallback="{{ url_for('vendors') }}">Back</a>
+  </div>
+
+  <section class="vendor-summary">
+    <article class="vendor-summary-card">
+      <div class="vendor-summary-label">Recent Purchases</div>
+      <div class="vendor-summary-value">{{ purchases|length if purchases else 0 }}</div>
+    </article>
+    <article class="vendor-summary-card">
+      <div class="vendor-summary-label">Total Amount</div>
+      <div class="vendor-summary-value">&#8377; {{ "%.2f"|format(totals.total) }}</div>
+    </article>
+    <article class="vendor-summary-card">
+      <div class="vendor-summary-label">Paid Amount</div>
+      <div class="vendor-summary-value">&#8377; {{ "%.2f"|format(totals.paid) }}</div>
+    </article>
+    <article class="vendor-summary-card">
+      <div class="vendor-summary-label">Balance Amount</div>
+      <div class="vendor-summary-value">&#8377; {{ "%.2f"|format(totals.balance) }}</div>
+    </article>
+  </section>
+
+  <section class="card">
+    <h3>Vendor Information</h3>
+    <div class="info-list">
+      <div><span>Vendor Code</span><strong>{{ vendor.vendor_code or "-" }}</strong></div>
+      <div><span>Name</span><strong>{{ vendor.name or "-" }}</strong></div>
+      <div><span>Phone</span><strong>{{ vendor.phone or "-" }}</strong></div>
+      <div><span>Email</span><strong>{{ vendor.email or "-" }}</strong></div>
+      <div><span>Address</span><strong>{{ vendor.address or "-" }}</strong></div>
+      <div><span>Created</span><strong>{{ vendor.created_at|date_only if vendor.created_at else "-" }}</strong></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Recent Purchases</h3>
+    {% if purchases %}
+    <div class="list-table compact" style="--list-cols: 1fr 1fr 1fr 1fr 1fr 1.2fr 0.8fr;">
+      <div class="list-row list-head">
+        <div>Purchase No</div>
+        <div>Total</div>
+        <div>Paid</div>
+        <div>Balance</div>
+        <div>Status</div>
+        <div>Purchased At</div>
+        <div>Action</div>
+      </div>
+      {% for p in purchases %}
+      <div class="list-row">
+        <div>{{ p.purchase_no or ("M" ~ p.id) }}</div>
+        <div>&#8377; {{ "%.2f"|format(p.total_amount or 0) }}</div>
+        <div>&#8377; {{ "%.2f"|format(p.paid_amount or 0) }}</div>
+        <div>&#8377; {{ "%.2f"|format((p.total_amount or 0) - (p.paid_amount or 0)) }}</div>
+        <div>{{ p.status or "-" }}</div>
+        <div>{{ p.purchased_at|datetime_display if p.purchased_at else "-" }}</div>
+        <div><a class="link" href="{{ url_for('vendors_purchase_detail', purchase_id=p.id) }}">Open</a></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No purchases found for this vendor.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

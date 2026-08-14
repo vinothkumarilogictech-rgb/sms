@@ -1,0 +1,211 @@
+USE [tailor];
+GO
+
+-- Set this to your actual main branch code.
+DECLARE @DefaultBranchCode NVARCHAR(100) = N'premier_tailors';
+PRINT 'Default branch code: ' + @DefaultBranchCode;
+GO
+
+-- 1. Add branch_code columns where needed.
+IF COL_LENGTH('app_users', 'branch_code') IS NULL
+    ALTER TABLE app_users ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('app_settings', 'branch_code') IS NULL
+    ALTER TABLE app_settings ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('staff_roles', 'branch_code') IS NULL
+    ALTER TABLE staff_roles ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('customers', 'branch_code') IS NULL
+    ALTER TABLE customers ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('orders', 'branch_code') IS NULL
+    ALTER TABLE orders ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('expenses', 'branch_code') IS NULL
+    ALTER TABLE expenses ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('tailors', 'branch_code') IS NULL
+    ALTER TABLE tailors ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('vehicles', 'branch_code') IS NULL
+    ALTER TABLE vehicles ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('vehicle_repairs', 'branch_code') IS NULL
+    ALTER TABLE vehicle_repairs ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('vendors', 'branch_code') IS NULL
+    ALTER TABLE vendors ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('vendor_purchase_orders', 'branch_code') IS NULL
+    ALTER TABLE vendor_purchase_orders ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('customer_sell_requests', 'branch_code') IS NULL
+    ALTER TABLE customer_sell_requests ADD branch_code NVARCHAR(100) NULL;
+GO
+IF COL_LENGTH('vehicle_sale_orders', 'branch_code') IS NULL
+    ALTER TABLE vehicle_sale_orders ADD branch_code NVARCHAR(100) NULL;
+GO
+IF OBJECT_ID('dashboard_widgets', 'U') IS NOT NULL AND COL_LENGTH('dashboard_widgets', 'branch_code') IS NULL
+    ALTER TABLE dashboard_widgets ADD branch_code NVARCHAR(100) NULL;
+GO
+IF OBJECT_ID('app_roles', 'U') IS NOT NULL AND COL_LENGTH('app_roles', 'branch_code') IS NULL
+    ALTER TABLE app_roles ADD branch_code NVARCHAR(100) NULL;
+GO
+IF OBJECT_ID('role_permissions', 'U') IS NOT NULL AND COL_LENGTH('role_permissions', 'branch_code') IS NULL
+    ALTER TABLE role_permissions ADD branch_code NVARCHAR(100) NULL;
+GO
+
+-- 2. Backfill old rows.
+DECLARE @DefaultBranchCode NVARCHAR(100) = N'premier_tailors';
+
+UPDATE app_users
+SET branch_code = CASE
+    WHEN LOWER(COALESCE(role, '')) = 'super_admin' THEN NULL
+    ELSE @DefaultBranchCode
+END
+WHERE branch_code IS NULL;
+
+UPDATE app_settings SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE staff_roles SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE customers SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE orders SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE expenses SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE tailors SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE vehicles SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE vehicle_repairs SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE vendors SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE vendor_purchase_orders SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE customer_sell_requests SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+UPDATE vehicle_sale_orders SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+IF OBJECT_ID('dashboard_widgets', 'U') IS NOT NULL
+    UPDATE dashboard_widgets SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+IF OBJECT_ID('app_roles', 'U') IS NOT NULL
+    UPDATE app_roles SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL AND ISNULL(is_super_admin, 0) = 0;
+IF OBJECT_ID('role_permissions', 'U') IS NOT NULL
+    UPDATE role_permissions SET branch_code = @DefaultBranchCode WHERE branch_code IS NULL;
+GO
+
+-- 3. Add defaults.
+IF OBJECT_ID('DF_app_users_branch_code', 'D') IS NULL
+    ALTER TABLE app_users ADD CONSTRAINT DF_app_users_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_app_settings_branch_code', 'D') IS NULL
+    ALTER TABLE app_settings ADD CONSTRAINT DF_app_settings_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_staff_roles_branch_code', 'D') IS NULL
+    ALTER TABLE staff_roles ADD CONSTRAINT DF_staff_roles_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_customers_branch_code', 'D') IS NULL
+    ALTER TABLE customers ADD CONSTRAINT DF_customers_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_orders_branch_code', 'D') IS NULL
+    ALTER TABLE orders ADD CONSTRAINT DF_orders_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_expenses_branch_code', 'D') IS NULL
+    ALTER TABLE expenses ADD CONSTRAINT DF_expenses_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_tailors_branch_code', 'D') IS NULL
+    ALTER TABLE tailors ADD CONSTRAINT DF_tailors_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_vehicles_branch_code', 'D') IS NULL
+    ALTER TABLE vehicles ADD CONSTRAINT DF_vehicles_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_vehicle_repairs_branch_code', 'D') IS NULL
+    ALTER TABLE vehicle_repairs ADD CONSTRAINT DF_vehicle_repairs_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_vendors_branch_code', 'D') IS NULL
+    ALTER TABLE vendors ADD CONSTRAINT DF_vendors_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_vendor_purchase_orders_branch_code', 'D') IS NULL
+    ALTER TABLE vendor_purchase_orders ADD CONSTRAINT DF_vendor_purchase_orders_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_customer_sell_requests_branch_code', 'D') IS NULL
+    ALTER TABLE customer_sell_requests ADD CONSTRAINT DF_customer_sell_requests_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('DF_vehicle_sale_orders_branch_code', 'D') IS NULL
+    ALTER TABLE vehicle_sale_orders ADD CONSTRAINT DF_vehicle_sale_orders_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+IF OBJECT_ID('dashboard_widgets', 'U') IS NOT NULL AND OBJECT_ID('DF_dashboard_widgets_branch_code', 'D') IS NULL
+    ALTER TABLE dashboard_widgets ADD CONSTRAINT DF_dashboard_widgets_branch_code DEFAULT (CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'))) FOR branch_code;
+GO
+
+-- 4. Helpful indexes.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_app_users_branch_code' AND object_id = OBJECT_ID('app_users'))
+    CREATE INDEX IX_app_users_branch_code ON app_users(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_customers_branch_code' AND object_id = OBJECT_ID('customers'))
+    CREATE INDEX IX_customers_branch_code ON customers(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_orders_branch_code' AND object_id = OBJECT_ID('orders'))
+    CREATE INDEX IX_orders_branch_code ON orders(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_expenses_branch_code' AND object_id = OBJECT_ID('expenses'))
+    CREATE INDEX IX_expenses_branch_code ON expenses(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tailors_branch_code' AND object_id = OBJECT_ID('tailors'))
+    CREATE INDEX IX_tailors_branch_code ON tailors(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_vehicles_branch_code' AND object_id = OBJECT_ID('vehicles'))
+    CREATE INDEX IX_vehicles_branch_code ON vehicles(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_vehicle_repairs_branch_code' AND object_id = OBJECT_ID('vehicle_repairs'))
+    CREATE INDEX IX_vehicle_repairs_branch_code ON vehicle_repairs(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_vendors_branch_code' AND object_id = OBJECT_ID('vendors'))
+    CREATE INDEX IX_vendors_branch_code ON vendors(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_vendor_purchase_orders_branch_code' AND object_id = OBJECT_ID('vendor_purchase_orders'))
+    CREATE INDEX IX_vendor_purchase_orders_branch_code ON vendor_purchase_orders(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_customer_sell_requests_branch_code' AND object_id = OBJECT_ID('customer_sell_requests'))
+    CREATE INDEX IX_customer_sell_requests_branch_code ON customer_sell_requests(branch_code);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_vehicle_sale_orders_branch_code' AND object_id = OBJECT_ID('vehicle_sale_orders'))
+    CREATE INDEX IX_vehicle_sale_orders_branch_code ON vehicle_sale_orders(branch_code);
+GO
+
+-- 5. Recreate branch RLS objects safely.
+IF EXISTS (SELECT 1 FROM sys.security_policies WHERE name = 'BranchIsolationPolicy' AND schema_id = SCHEMA_ID('dbo'))
+    DROP SECURITY POLICY dbo.BranchIsolationPolicy;
+GO
+IF OBJECT_ID('dbo.fn_branch_access', 'IF') IS NOT NULL
+    DROP FUNCTION dbo.fn_branch_access;
+GO
+CREATE FUNCTION dbo.fn_branch_access(@branch_code NVARCHAR(100))
+RETURNS TABLE
+WITH SCHEMABINDING
+AS
+RETURN
+    SELECT 1 AS fn_result
+    WHERE @branch_code IS NULL
+       OR @branch_code = CONVERT(NVARCHAR(100), SESSION_CONTEXT(N'branch_code'));
+GO
+CREATE SECURITY POLICY dbo.BranchIsolationPolicy
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.app_users,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.app_settings,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.staff_roles,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.customers,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.orders,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.expenses,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.tailors,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.vehicles,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.vehicle_repairs,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.vendors,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.vendor_purchase_orders,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.customer_sell_requests,
+ADD FILTER PREDICATE dbo.fn_branch_access(branch_code) ON dbo.vehicle_sale_orders
+WITH (STATE = ON);
+GO
+
+-- 6. Check result.
+SELECT id, code, name, database_name, is_default, created_at
+FROM branch_catalog
+ORDER BY id;
+GO
+
+SELECT branch_code, COUNT(*) AS total_vehicles
+FROM vehicles
+GROUP BY branch_code
+ORDER BY branch_code;
+GO

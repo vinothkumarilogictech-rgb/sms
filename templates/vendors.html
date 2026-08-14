@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Vendors</h1>
+      <!-- <p>Manage vendor details and recent orders.</p> -->
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('vendors_add_purchase') }}">+ Add purchase</a>
+      <a class="btn primary" href="{{ url_for('vendors_add') }}">+ Add vendor</a>
+    </div>
+  </div>
+
+  <div class="tabs-bar" role="tablist" aria-label="Inventory tabs">
+    <a class="tab-chip" href="{{ url_for('inventory', tab='vehicles') }}">Inventory</a>
+    <button class="tab-chip active" type="button" data-tab="vendors">Vendors</button>
+    <button class="tab-chip" type="button" data-tab="purchases">Purchases</button>
+  </div>
+
+  <section class="card">
+    <div class="tab-panel active" data-panel="vendors">
+      <div class="table-toolbar" data-filter-scope="vendors">
+        <div class="filter-group">
+          <input id="vendorSearchInput" class="filter-input" type="text" placeholder="Search vendor or phone" />
+          <input id="vendorDateInput" class="filter-input" type="date" />
+        </div>
+        <div class="filter-chips">
+          <button class="filter-chip" type="button" data-range="today">Today</button>
+          <button class="filter-chip" type="button" data-range="week">Week</button>
+          <button class="filter-chip" type="button" data-range="month">Month</button>
+          <button class="filter-chip" type="button" data-range="year">Year</button>
+        </div>
+      </div>
+
+      {% if vendors %}
+      <div class="list-table" style="--list-cols: 1fr 1.6fr 1fr 1fr 1.2fr 0.9fr 1.4fr;">
+        <div class="list-row list-head">
+          <div>Vendor ID</div>
+          <div>Vendor Name</div>
+          <div>Phone</div>
+          <div>Created</div>
+          <div>Recent Order</div>
+          <div>Spent</div>
+          <div>Actions</div>
+        </div>
+        {% for v in vendors %}
+        <div class="list-row js-vendor-row"
+             data-search="{{ ((v.vendor_code or '') ~ ' ' ~ (v.name or '') ~ ' ' ~ (v.phone or ''))|lower }}"
+             data-created="{{ v.created_at|date_only if v.created_at else '' }}"
+             data-last-order="{{ v.last_order_at or '' }}">
+          <div>{{ v.vendor_code }}</div>
+          <div><strong>{{ v.name }}</strong></div>
+          <div>{{ v.phone or "-" }}</div>
+          <div>{{ v.created_at|date_only }}</div>
+          <div>{{ v.last_order_at or "-" }}</div>
+          <div>₹ {{ '%.2f'|format(v.spent or 0) }}</div>
+          <!-- <div class="list-actions">
+            <a class="icon-action" href="{{ url_for('vendors_edit', vendor_id=v.id) }}" aria-label="View">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a class="icon-action primary" href="{{ url_for('vendors_edit', vendor_id=v.id) }}" aria-label="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="post" action="{{ url_for('vendors_delete', vendor_id=v.id) }}">
+              <button class="icon-action danger" type="submit" aria-label="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div> -->
+          <div class="list-actions action-menu-wrap">
+  <button class="icon-action menu-btn" type="button" aria-label="More actions">
+    <i class="bi bi-three-dots-vertical"></i>
+  </button>
+
+  <div class="menu-pop">
+    <a class="menu-item" href="{{ url_for('vendors_detail', vendor_id=v.id) }}">
+      <i class="bi bi-eye"></i> View
+    </a>
+
+    <a class="menu-item" href="{{ url_for('vendors_edit', vendor_id=v.id) }}">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+
+    <form method="post" action="{{ url_for('vendors_delete', vendor_id=v.id) }}">
+      <button class="menu-item danger" type="submit">
+        <i class="bi bi-trash"></i> Delete
+      </button>
+    </form>
+  </div>
+</div>
+
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">No vendors yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="tab-panel" data-panel="purchases">
+      <div class="table-toolbar" data-filter-scope="purchases">
+        <div class="filter-group">
+          <input id="purchaseSearchInput" class="filter-input" type="text" placeholder="Search vendor" />
+          <input id="purchaseDateInput" class="filter-input" type="date" />
+        </div>
+        <div class="filter-chips">
+          <button class="filter-chip" type="button" data-range="today">Today</button>
+          <button class="filter-chip" type="button" data-range="week">Week</button>
+          <button class="filter-chip" type="button" data-range="month">Month</button>
+          <button class="filter-chip" type="button" data-range="year">Year</button>
+        </div>
+      </div>
+
+      {% if purchases %}
+      <div class="list-table" style="--list-cols: 1.4fr 0.9fr 0.9fr 0.9fr 0.9fr 1fr 1.2fr;">
+        <div class="list-row list-head">
+          <div>Vendor</div>
+          <div>Total</div>
+          <div>Paid</div>
+          <div>Balance</div>
+          <div>Status</div>
+          <div>Purchased At</div>
+          <div>Actions</div>
+        </div>
+        {% for p in purchases %}
+        <div class="list-row js-purchase-row"
+             data-search="{{ ((p.vendor_code or '') ~ ' ' ~ (p.vendor_name or ''))|lower }}"
+             data-purchased="{{ p.purchased_at or '' }}">
+          <div>{{ p.vendor_code }} - {{ p.vendor_name }}</div>
+          <div>₹ {{ '%.2f'|format(p.total_amount or 0) }}</div>
+          <div>₹ {{ '%.2f'|format(p.paid_amount or 0) }}</div>
+          <div>₹ {{ '%.2f'|format((p.total_amount or 0) - (p.paid_amount or 0)) }}</div>
+          <div>{{ p.status }}</div>
+          <div>{{ p.purchased_at|datetime_display if p.purchased_at else "-" }}</div>
+          <!-- <div class="list-actions">
+            <a class="icon-action" href="{{ url_for('vendors_purchase_detail', purchase_id=p.id) }}" aria-label="View">
+              <i class="bi bi-eye"></i>
+            </a>
+            <a class="icon-action primary" href="{{ url_for('vendors_purchase_detail', purchase_id=p.id) }}" aria-label="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="post" action="{{ url_for('vendors_purchase_delete', purchase_id=p.id) }}">
+              <button class="icon-action danger" type="submit" aria-label="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div> -->
+        <div class="list-actions action-menu-wrap">
+  <button class="icon-action menu-btn" type="button" aria-label="More actions">
+    <i class="bi bi-three-dots-vertical"></i>
+  </button>
+
+  <div class="menu-pop">
+    <a class="menu-item" href="{{ url_for('vendors_purchase_detail', purchase_id=p.id) }}">
+      <i class="bi bi-eye"></i> View
+    </a>
+
+    <a class="menu-item" href="{{ url_for('vendors_purchase_detail', purchase_id=p.id) }}">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+
+    <form method="post" action="{{ url_for('vendors_purchase_delete', purchase_id=p.id) }}">
+      <button class="menu-item danger" type="submit">
+        <i class="bi bi-trash"></i> Delete
+      </button>
+    </form>
+  </div>
+</div>
+
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">No purchases recorded yet.</p>
+      {% endif %}
+    </div>
+  </section>
+
+ <script>
+document.addEventListener("DOMContentLoaded", function () {
+
+  /* ==========================
+     TAB SWITCHING (Vendors)
+     ========================== */
+  const tabs = document.querySelectorAll("[data-tab]");
+  const panels = document.querySelectorAll("[data-panel]");
+
+  function setActiveTab(target) {
+    tabs.forEach((btn) =>
+      btn.classList.toggle("active", btn.dataset.tab === target)
+    );
+
+    panels.forEach((panel) =>
+      panel.classList.toggle("active", panel.dataset.panel === target)
+    );
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.tab;
+      setActiveTab(target);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", target);
+      history.replaceState({}, "", url);
+    });
+  });
+
+  const initialTab = new URLSearchParams(window.location.search).get("tab");
+  if (initialTab && document.querySelector(`[data-panel="${initialTab}"]`)) {
+    setActiveTab(initialTab);
+  }
+
+  /* ==========================
+     TABLE FILTERS
+     ========================== */
+  const vendorRows = Array.from(document.querySelectorAll(".js-vendor-row"));
+  const purchaseRows = Array.from(document.querySelectorAll(".js-purchase-row"));
+
+  const vendorSearchInput = document.getElementById("vendorSearchInput");
+  const vendorDateInput = document.getElementById("vendorDateInput");
+  const purchaseSearchInput = document.getElementById("purchaseSearchInput");
+  const purchaseDateInput = document.getElementById("purchaseDateInput");
+
+  const vendorChips = document.querySelectorAll('[data-filter-scope="vendors"] .filter-chip');
+  const purchaseChips = document.querySelectorAll('[data-filter-scope="purchases"] .filter-chip');
+
+  let vendorRange = "";
+  let purchaseRange = "";
+
+  function toDateOnly(value) {
+    if (!value) return null;
+    const str = String(value).trim().slice(0, 10);
+    const parts = str.split("-");
+    if (parts.length !== 3) return null;
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const d = Number(parts[2]);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return new Date(y, m - 1, d);
+  }
+
+  function sameDate(a, b) {
+    return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  function inRange(dateObj, range) {
+    if (!range) return true;
+    if (!dateObj) return false;
+
+    const today = new Date();
+    const date = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    const now = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (range === "today") return sameDate(date, now);
+    if (range === "month") return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    if (range === "year") return date.getFullYear() === now.getFullYear();
+    if (range === "week") {
+      const start = new Date(now);
+      const day = (start.getDay() + 6) % 7;
+      start.setDate(start.getDate() - day);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return date >= start && date <= end;
+    }
+    return true;
+  }
+
+  function applyVendorFilters() {
+    const text = (vendorSearchInput?.value || "").trim().toLowerCase();
+    const selectedDate = vendorDateInput?.value || "";
+
+    vendorRows.forEach((row) => {
+      const rowText = (row.dataset.search || "").toLowerCase();
+      const rowCreatedDateText = String(row.dataset.created || "").trim().slice(0, 10);
+      const rowCreatedDate = toDateOnly(rowCreatedDateText);
+
+      const textMatch = !text || rowText.includes(text);
+      const dateMatch = !selectedDate || rowCreatedDateText === selectedDate;
+      const rangeMatch = inRange(rowCreatedDate, vendorRange);
+
+      row.style.display = textMatch && dateMatch && rangeMatch ? "" : "none";
+    });
+  }
+
+  function applyPurchaseFilters() {
+    const text = (purchaseSearchInput?.value || "").trim().toLowerCase();
+    const selectedDate = purchaseDateInput?.value || "";
+
+    purchaseRows.forEach((row) => {
+      const rowText = (row.dataset.search || "").toLowerCase();
+      const rowDateText = String(row.dataset.purchased || "").trim().slice(0, 10);
+      const rowDate = toDateOnly(rowDateText);
+
+      const textMatch = !text || rowText.includes(text);
+      const dateMatch = !selectedDate || rowDateText === selectedDate;
+      const rangeMatch = inRange(rowDate, purchaseRange);
+
+      row.style.display = textMatch && dateMatch && rangeMatch ? "" : "none";
+    });
+  }
+
+  function bindRangeChips(chips, onRangeChange) {
+    chips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const nextRange = chip.dataset.range || "";
+        const isActive = chip.classList.contains("active");
+
+        chips.forEach((btn) => btn.classList.remove("active"));
+        onRangeChange(isActive ? "" : nextRange);
+
+        if (!isActive) {
+          chip.classList.add("active");
+        }
+      });
+    });
+  }
+
+  vendorSearchInput?.addEventListener("input", applyVendorFilters);
+  vendorDateInput?.addEventListener("change", applyVendorFilters);
+  purchaseSearchInput?.addEventListener("input", applyPurchaseFilters);
+  purchaseDateInput?.addEventListener("change", applyPurchaseFilters);
+
+  bindRangeChips(vendorChips, (value) => {
+    vendorRange = value;
+    applyVendorFilters();
+  });
+
+  bindRangeChips(purchaseChips, (value) => {
+    purchaseRange = value;
+    applyPurchaseFilters();
+  });
+
+  applyVendorFilters();
+  applyPurchaseFilters();
+
+
+  /* ==========================
+     ACTION MENU (3 DOTS)
+     ========================== */
+  function closeAllMenus() {
+    document.querySelectorAll(".menu-pop.open").forEach((menu) => {
+      menu.classList.remove("open", "up");
+    });
+  }
+
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".menu-btn");
+
+    if (btn) {
+      const wrap = btn.closest(".action-menu-wrap");
+      const menu = wrap.querySelector(".menu-pop");
+      const isOpen = menu.classList.contains("open");
+
+      closeAllMenus();
+
+      if (!isOpen) {
+        menu.classList.add("open");
+
+        // Open upward if near bottom of screen
+        const rect = menu.getBoundingClientRect();
+        if (window.innerHeight - rect.bottom < 160) {
+          menu.classList.add("up");
+        }
+      }
+      return;
+    }
+
+    // Click outside → close menus
+    closeAllMenus();
+  });
+
+});
+</script>
+
+{% endblock %}

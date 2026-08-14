@@ -1,0 +1,915 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --maroon: #4a2370;
+  --maroon-light: rgba(74,35,112,0.08);
+  --maroon-glow: rgba(74,35,112,0.18);
+  --text-primary: #222;
+  --text-secondary: #888;
+  --text-muted: #aaa;
+  --border: #c4a8df;
+  --bg-page: #f6f0e8;
+  --bg-card: #dcc4ef;
+  --bg-spec: #faf6f2;
+  --green-bg: #eaf3de; --green-fg: #3b6d11;
+  --amber-bg: #faeeda; --amber-fg: #854f0b;
+  --red-bg: #fcebeb;   --red-fg: #a32d2d;
+  --r: 12px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.10);
+  --shadow-lg: 0 16px 40px rgba(0,0,0,0.13);
+}
+
+/* ── PAGE ── */
+.page {
+  padding: 1.8rem;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(74,35,112,0.08), transparent 55%),
+    radial-gradient(900px 420px at 100% 0%, rgba(120,53,15,0.06), transparent 60%),
+    linear-gradient(180deg, #faf6f1 0%, #f2ebe3 100%);
+}
+
+/* ── TOP TOOLBAR: search + chips on ONE LINE ── */
+.top-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+  margin-bottom: 0.9rem;
+}
+
+.title-search-wrap {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.inline-search-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-search {
+  flex: 1;
+  height: 44px;
+  border: 1px solid rgba(74,35,112,0.16);
+  border-radius: 10px;
+  background: #fffaf5;
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 0;
+}
+.title-search:focus {
+  border-color: var(--maroon);
+  box-shadow: 0 0 0 4px rgba(74,35,112,0.12);
+}
+.title-search::placeholder { color: var(--text-secondary); }
+
+.search-btn {
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--maroon);
+  border-radius: 10px;
+  background: var(--maroon);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.15s;
+}
+.search-btn:hover { background: #3d1d5d; transform: translateY(-1px); }
+
+/* summary */
+.summary-card {
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, rgba(122,26,26,0.98), rgba(92,15,15,0.94));
+  color: #fff;
+  border-radius: 18px;
+  padding: 18px 20px;
+  box-shadow: 0 18px 36px rgba(122,26,26,0.18);
+  overflow: hidden;
+  position: relative;
+}
+.summary-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -60px -70px auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 68%);
+  pointer-events: none;
+}
+.summary-head,
+.summary-rows {
+  position: relative;
+  z-index: 1;
+}
+.summary-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.summary-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 6px;
+}
+.summary-copy {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255,255,255,0.8);
+  max-width: 520px;
+}
+.summary-rows {
+  display: grid;
+  gap: 12px;
+}
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.summary-stat {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 14px 16px;
+  backdrop-filter: blur(6px);
+}
+.summary-stat-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.72);
+  margin-bottom: 8px;
+}
+.summary-stat-value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.summary-stat-note {
+  display: block;
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+}
+
+/* chip group — sits right of search on same row */
+.chip-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.chip {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid #e7dada;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #666;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.chip:hover { border-color: #cdb8d7; color: var(--maroon); background: #f3ebe3; }
+.chip.active { background: var(--maroon); color: #fff; border-color: var(--maroon); box-shadow: 0 6px 16px rgba(74,35,112,0.25); }
+.chip-cnt { font-size: 11px; line-height: 1; background: rgba(0,0,0,0.08); border-radius: 999px; padding: 4px 7px; }
+.chip.active .chip-cnt { background: rgba(255,255,255,0.25); }
+
+/* ── CONTROLS ROW: filter card + action button, same height ── */
+.controls-wrap {
+  display: flex;
+  align-items: stretch;   /* key: equal height */
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+
+.controls-card {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 26px rgba(0,0,0,0.08);
+}
+
+/* filter bar */
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: rgba(255, 255, 255, 0.34);
+  height: 100%;
+}
+.filter-cell {
+  padding: 12px 18px 13px;
+  border-right: 1px solid rgba(196, 168, 223, 0.65);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.filter-cell:last-child { border-right: none; }
+.filter-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #8b7676;
+  margin-bottom: 6px;
+}
+.filter-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.filter-select-row span { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.filter-arrow { font-size: 10px; color: var(--text-muted); }
+.filter-cell select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+/* action button — stretches to match filter card height */
+.sell-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 24px;
+  background: rgba(255, 253, 250, 0.92);
+  border: 1px solid var(--maroon);
+  color: var(--maroon);
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 10px 22px rgba(74,35,112,0.08);
+  transition: all 0.15s;
+  /* NO fixed height — stretches via align-items: stretch on parent */
+}
+.sell-btn:hover, .sell-btn.active {
+  background: #3d1d5d;
+  color: #fff;
+  border-color: #3d1d5d;
+  box-shadow: 0 12px 26px rgba(74,35,112,0.18);
+}
+
+/* ── GRID ── */
+.gal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+/* ── VEHICLE CARD ── */
+.vcard-link { text-decoration: none; color: inherit; display: block; animation: slideUp 0.35s ease both; }
+.vcard-link:nth-child(1){animation-delay:.04s}
+.vcard-link:nth-child(2){animation-delay:.08s}
+.vcard-link:nth-child(3){animation-delay:.12s}
+.vcard-link:nth-child(4){animation-delay:.16s}
+.vcard-link:nth-child(5){animation-delay:.20s}
+.vcard-link:nth-child(6){animation-delay:.24s}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.vcard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.vcard:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(0,0,0,0.14); border-color: rgba(74,35,112,0.35); }
+
+.vcard-media {
+  position: relative;
+  aspect-ratio: 16/10;
+  overflow: hidden;
+  background: #eee;
+  isolation: isolate;
+  border-bottom: 1px solid #f1ecec;
+}
+.vcard-img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s ease; }
+.vcard:hover .vcard-img { transform: scale(1.05); }
+.vcard-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.vcard-status {
+  position: absolute; top: 8px; left: 8px;
+  padding: 5px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.01em;
+  z-index: 2;
+}
+.vcard-status.available { background: var(--green-bg); color: var(--green-fg); }
+.vcard-status.hold      { background: var(--amber-bg); color: var(--amber-fg); }
+.vcard-status.sold      { background: var(--red-bg);   color: var(--red-fg); }
+.vcard-status.default   { background: #efefef; color: var(--text-secondary); }
+
+/* compare toggle */
+.vcard-cmp-toggle {
+  position: absolute; top: 8px; right: 8px;
+  display: none;
+  align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.96);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 600; color: var(--text-primary);
+  cursor: pointer; z-index: 10;
+  pointer-events: all; user-select: none;
+  transition: all 0.15s;
+}
+.gallery-compare-mode .vcard-cmp-toggle { display: flex; }
+.gallery-compare-mode .vcard-cmp-toggle.checked { background: var(--maroon); border-color: var(--maroon); color: #fff; }
+.vcard-cmp-toggle input[type="checkbox"] { margin: 0; accent-color: var(--maroon); width: 13px; height: 13px; cursor: pointer; }
+.gallery-compare-mode .vcard-link.compare-selected .vcard { border-color: var(--maroon); box-shadow: 0 0 0 2px var(--maroon-glow); }
+
+/* card body */
+.vcard-body { padding: 14px 15px 15px; }
+.vcard-name { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+.vcard-sub  { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+
+.vcard-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.vcard-price { font-size: 18px; font-weight: 600; color: var(--maroon); white-space: nowrap; }
+
+.specs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.spec {
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(196, 168, 223, 0.6);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.spec-k { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px; }
+.spec-v { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+
+.vcard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid rgba(196, 168, 223, 0.55);
+}
+.vcard-bucket { font-size: 11px; color: var(--text-secondary); font-weight: 500; }
+.vcard-cta { font-size: 12px; font-weight: 600; color: var(--text-secondary); transition: color 0.15s, gap 0.15s; display: flex; align-items: center; gap: 4px; }
+.vcard-cta::after { content: '→'; }
+.vcard:hover .vcard-cta { color: var(--maroon); gap: 8px; }
+
+/* ── EMPTY ── */
+.gal-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  border: 1px dashed rgba(196, 168, 223, 0.9);
+  border-radius: var(--r);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+.gal-empty i { font-size: 40px; display: block; margin-bottom: 12px; color: var(--border); }
+.gal-empty h3 { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.gal-empty p { font-size: 14px; }
+
+/* ── COMPARE BAR ── */
+.compare-bar {
+  position: sticky; bottom: 16px; z-index: 50;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 14px 20px;
+  background: #1a1a1a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--r);
+  box-shadow: 0 20px 48px rgba(0,0,0,0.3);
+  margin-top: 20px;
+}
+.compare-bar.visible { display: flex; }
+.cmp-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cmp-badge { background: var(--maroon); color: #fff; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+.cmp-names { font-size: 13px; color: rgba(255,255,255,0.5); }
+.cmp-actions { display: flex; gap: 10px; }
+.cmp-clear {
+  border: 0.5px solid rgba(255,255,255,0.2); border-radius: 8px;
+  background: transparent; color: rgba(255,255,255,0.65);
+  padding: 8px 16px; font-size: 13px; cursor: pointer; transition: all 0.15s;
+}
+.cmp-clear:hover { border-color: #cdb8d7; color: #ffffff; background: rgba(74,35,112,0.22); }
+.cmp-go {
+  background: var(--maroon); color: #fff;
+  border: none; border-radius: 8px;
+  padding: 8px 20px; font-size: 13px; font-weight: 600;
+  text-decoration: none; display: inline-block;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(74,35,112,0.35);
+  transition: background 0.15s;
+}
+.cmp-go:hover { background: #3d1d5d; }
+.cmp-go.disabled { opacity: 0.4; pointer-events: none; }
+
+/* note */
+.note {
+  font-size: 12px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 1rem; padding: 10px 14px;
+  background: linear-gradient(180deg, #fff 0%, #fbf7f7 100%);
+  border-radius: 10px;
+  border: 1px solid #e9dddd;
+}
+
+/* util */
+.gal-hidden { display: none !important; }
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .page { padding: 1.2rem; }
+  .summary-head { align-items: flex-start; flex-direction: column; }
+  .summary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .top-toolbar { flex-wrap: wrap; }
+  .chip-group { flex-wrap: wrap; }
+  .filter-bar { grid-template-columns: repeat(2, 1fr); }
+  .gal-grid { grid-template-columns: repeat(2,1fr); }
+  .controls-wrap { flex-direction: column; }
+  .sell-btn { width: 100%; justify-content: center; padding: 14px 24px; }
+}
+@media(max-width:560px){
+  .top-toolbar { flex-wrap: wrap; }
+  .title-search-wrap { width: 100%; }
+  .chip-group { width: 100%; flex-wrap: wrap; }
+  .gal-grid { grid-template-columns: 1fr; }
+  .filter-bar { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="page">
+  {% set total_c = vehicles|length %}
+  {% set avail_c = vehicles | selectattr('status_value','equalto','available') | list | length %}
+  {% set hold_c  = vehicles | selectattr('status_value','equalto','hold')      | list | length %}
+  {% set sold_c  = vehicles | selectattr('status_value','equalto','sold')      | list | length %}
+
+  
+  <!-- ═══ TOP TOOLBAR: search + chips on same line ═══ -->
+  <div class="top-toolbar">
+    <div class="title-search-wrap">
+      <form class="inline-search-form" id="gallerySearchForm">
+        <input
+          id="gallerySearchInput"
+          class="title-search"
+          type="search"
+          placeholder="Search bikes by name, brand, number..."
+          aria-label="Search gallery"
+        />
+        <button class="search-btn" type="submit">Search</button>
+      </form>
+    </div>
+    <div class="chip-group" id="chipGroup">
+      <button class="chip active" type="button" data-status-chip="">All <span class="chip-cnt" id="cnt-all">{{ total_c }}</span></button>
+      <button class="chip" type="button" data-status-chip="available">Available <span class="chip-cnt">{{ avail_c }}</span></button>
+      <button class="chip" type="button" data-status-chip="hold">In Progress <span class="chip-cnt">{{ hold_c }}</span></button>
+      <button class="chip" type="button" data-status-chip="sold">Sold <span class="chip-cnt">{{ sold_c }}</span></button>
+      <button class="chip" type="button" id="galleryShareBtn">Share</button>
+    </div>
+  </div>
+
+  <!-- ═══ CONTROLS ROW: filter card + action button ═══ -->
+  <div class="controls-wrap">
+    <div class="controls-card">
+      <div class="filter-bar">
+        <div class="filter-cell">
+          <div class="filter-label">Brand</div>
+          <div class="filter-select-row">
+            <span id="brandLabel">All Brands</span>
+            <span class="filter-arrow">&#9662;</span>
+          </div>
+          <select id="galleryBrandInput" onchange="document.getElementById('brandLabel').textContent=this.options[this.selectedIndex].text">
+            <option value="">All Brands</option>
+            {% for brand in brands %}
+            <option value="{{ brand|lower }}">{{ brand }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-cell">
+          <div class="filter-label">Budget</div>
+          <div class="filter-select-row">
+            <span id="budgetLabel">All Budgets</span>
+            <span class="filter-arrow">&#9662;</span>
+          </div>
+          <select id="galleryBudgetInput" onchange="document.getElementById('budgetLabel').textContent=this.options[this.selectedIndex].text">
+            <option value="">All Budgets</option>
+            <option value="0-50000">Up to &#8377;50,000</option>
+            <option value="50001-100000">&#8377;50,001 - &#8377;1,00,000</option>
+            <option value="100001-150000">&#8377;1,00,001 - &#8377;1,50,000</option>
+            <option value="150001-200000">&#8377;1,50,001 - &#8377;2,00,000</option>
+            <option value="200001-99999999">Above &#8377;2,00,000</option>
+          </select>
+        </div>
+        <div class="filter-cell">
+          <div class="filter-label">Purchase Type</div>
+          <div class="filter-select-row">
+            <span id="purchaseTypeLabel">All Types</span>
+            <span class="filter-arrow">&#9662;</span>
+          </div>
+          <select id="galleryPurchaseTypeInput" onchange="document.getElementById('purchaseTypeLabel').textContent=this.options[this.selectedIndex].text">
+            <option value="">All Types</option>
+            {% for purchase_type in purchase_types %}
+            <option value="{{ purchase_type|lower }}">{{ purchase_type }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-cell">
+          <div class="filter-label">Sort By</div>
+          <div class="filter-select-row">
+            <span id="sortLabel">Latest First</span>
+            <span class="filter-arrow">&#9662;</span>
+          </div>
+          <select id="gallerySortInput" onchange="document.getElementById('sortLabel').textContent=this.options[this.selectedIndex].text">
+            <option value="recent">Latest First</option>
+            <option value="price_low">Price: Low &#8594; High</option>
+            <option value="price_high">Price: High &#8594; Low</option>
+            <option value="year_high">Year: Newest</option>
+          </select>
+        </div>
+      </div>
+    </div>
+ <a class="sell-btn" href="{{ url_for('customer_sell_page') }}">+ Sell Your Bike</a>
+  </div>
+
+  <!-- ═══ GRID ═══ -->
+  {% if vehicles %}
+  <div class="gal-grid" id="galleryGrid">
+    {% for v in vehicles %}
+    <a
+      class="vcard-link"
+      href="{{ url_for('vehicle_detail', vehicle_id=v['id']) }}"
+      data-gallery-card
+      data-name="{{ (v.vehicle_name or '')|lower }}"
+      data-brand="{{ (v.brand or '')|lower }}"
+      data-status="{{ (v.status_value or '')|lower }}"
+      data-mode="{{ (v.purchase_mode or '')|lower }}"
+      data-bucket="{{ (v.price_bucket or '')|lower }}"
+      data-search="{{ v.search_blob | replace('"', '') }}"
+      data-price="{{ v.selling_price or 0 }}"
+      data-year="{{ v.model_year or 0 }}"
+      data-order="{{ loop.index0 }}"
+    >
+      <article class="vcard">
+        <div class="vcard-media">
+          {% set st = (v.status_value or 'default')|lower %}
+          <span class="vcard-status {{ st }}">{{ v.status or 'Available' }}</span>
+
+          <!-- Compare toggle -->
+          <div class="vcard-cmp-toggle" data-compare-toggle>
+            <input type="checkbox" value="{{ v.id }}" data-compare-checkbox />
+            <span>Select</span>
+          </div>
+
+          {% if v.photo_filename %}
+            <img class="vcard-img"
+                 src="{{ url_for('static', filename='uploads/vehicles/' ~ v.photo_filename) }}"
+                 alt="{{ v.vehicle_name }}" loading="lazy">
+          {% else %}
+            <div class="vcard-placeholder" style="background:linear-gradient(135deg,#e8e8e8,#d4d4d4);">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.5">
+                <circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/>
+                <path d="M15 6h2l2 4.5M8 6l-2 6H3m5-6h7M6 12h10"/>
+              </svg>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="vcard-body">
+          <div class="vcard-top">
+            <div>
+              <div class="vcard-name">{{ v.vehicle_name }}</div>
+              <div class="vcard-sub">Model {{ v.model_year or '—' }}</div>
+            </div>
+            <div class="vcard-price">
+              {% if v.selling_price %}&#8377;{{ "{:,.0f}".format(v.selling_price) }}{% else %}—{% endif %}
+            </div>
+          </div>
+
+          <div class="specs">
+            <div class="spec"><span class="spec-k">Number</span><span class="spec-v">{{ v.vehicle_number or '—' }}</span></div>
+            <div class="spec"><span class="spec-k">Owners</span><span class="spec-v">{{ v.owners or '—' }}</span></div>
+            <div class="spec"><span class="spec-k">Chassis No</span><span class="spec-v">{{ v.registration_no or '—' }}</span></div>
+            <div class="spec"><span class="spec-k">Purchase</span><span class="spec-v">{{ (v.purchase_mode or '—')|capitalize }}</span></div>
+          </div>
+
+          <div class="vcard-footer">
+            <div class="vcard-bucket">{{ v.price_bucket or '' }}</div>
+            <div class="vcard-cta">View details</div>
+          </div>
+        </div>
+      </article>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="gal-grid">
+    <div class="gal-empty">
+      <i class="icon-motorbike"></i>
+      <h3>No Vehicles Yet</h3>
+      <p>Add your first vehicle to get started.</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="gal-grid gal-hidden" id="galleryEmptyState" style="margin-top:0;">
+    <div class="gal-empty">
+      <i class="bi bi-search"></i>
+      <h3>No Matches Found</h3>
+      <p>Try a different filter.</p>
+    </div>
+  </div>
+
+  <!-- ═══ COMPARE BAR ═══ -->
+  <div class="compare-bar" id="compareBar">
+    <div class="cmp-left">
+      <span class="cmp-badge"><span id="compareCount">0</span> selected</span>
+      <span class="cmp-names" id="compareSelectedList">Select at least 2 bikes.</span>
+    </div>
+    <div class="cmp-actions">
+      <button class="cmp-clear" type="button" id="clearCompareBtn">Clear</button>
+      <a class="cmp-go disabled" href="#" id="openCompareBtn">Compare</a>
+    </div>
+  </div>
+
+  <div class="note gal-hidden" id="roleNote">
+    🔒 Some vehicles are on hold or sold — only available bikes are shown in full detail.
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const shareBtn = document.getElementById("galleryShareBtn");
+  const cards        = Array.from(document.querySelectorAll("[data-gallery-card]"));
+  const statusChips  = Array.from(document.querySelectorAll("[data-status-chip]"));
+  const emptyState   = document.getElementById("galleryEmptyState");
+  const galleryGrid  = document.getElementById("galleryGrid");
+  const compareBar   = document.getElementById("compareBar");
+  const compareCount = document.getElementById("compareCount");
+  const compareNames = document.getElementById("compareSelectedList");
+  const openCmpBtn   = document.getElementById("openCompareBtn");
+  const clearCmpBtn  = document.getElementById("clearCompareBtn");
+  const cmpTrigger   = document.getElementById("galleryCompareTrigger");
+  const searchInput  = document.getElementById("gallerySearchInput");
+  const searchForm   = document.getElementById("gallerySearchForm");
+
+  let chipStatus  = "";
+  let compareMode = false;
+  let appliedSearch = "";
+  const selectedIds = new Set();
+  const MAX_SELL_PHOTOS = 4;
+  const MAX_SELL_TOTAL_BYTES = 5 * 1024 * 1024;
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (shareBtn) {
+    shareBtn.addEventListener("click", async () => {
+      const url = window.location.href;
+      if (navigator.share) {
+        try {
+          await navigator.share({ url });
+          return;
+        } catch (e) {
+          // ignore and fallback to copy
+        }
+      }
+      const ok = await copyText(url);
+      if (!ok) return;
+      shareBtn.textContent = "Copied";
+      window.setTimeout(() => {
+        shareBtn.textContent = "Share";
+      }, 900);
+    });
+  }
+
+  // ── STATUS CHIPS ──
+  function setStatus(val) {
+    chipStatus = val;
+    statusChips.forEach(c => c.classList.toggle("active", (c.dataset.statusChip || "") === val));
+    applyFilters();
+  }
+  statusChips.forEach(c => c.addEventListener("click", () => setStatus(c.dataset.statusChip || "")));
+
+  // ── FILTERS ──
+  function getValue(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim().toLowerCase() : "";
+  }
+
+  function applyFilters() {
+    const brand        = getValue("galleryBrandInput");
+    const budgetV      = getValue("galleryBudgetInput");
+    const purchaseType = getValue("galleryPurchaseTypeInput");
+    const sortV        = getValue("gallerySortInput");
+    const search       = appliedSearch;
+    let shown = 0;
+
+    cards.forEach(card => {
+      const haystack = ((card.dataset.search || "") + " " + (card.dataset.name || "")).toLowerCase();
+      const price = parseFloat(card.dataset.price || 0);
+      let budgetOk = true;
+      if (budgetV) {
+        const parts = budgetV.split("-");
+        const min = parseFloat(parts[0] || 0);
+        const max = parseFloat(parts[1] || Number.MAX_SAFE_INTEGER);
+        budgetOk = price >= min && price <= max;
+      }
+      const ok = (!brand        || card.dataset.brand  === brand)
+               && (!chipStatus   || card.dataset.status === chipStatus)
+               && (!purchaseType || card.dataset.mode   === purchaseType)
+               && budgetOk
+               && (!search       || haystack.includes(search));
+      card.classList.toggle("gal-hidden", !ok);
+      if (ok) shown++;
+    });
+
+    const sorted = cards.slice().sort((a, b) => {
+      const pA = parseFloat(a.dataset.price || 0), pB = parseFloat(b.dataset.price || 0);
+      const yA = parseInt(a.dataset.year   || 0),  yB = parseInt(b.dataset.year   || 0);
+      const oA = parseInt(a.dataset.order  || 0),  oB = parseInt(b.dataset.order  || 0);
+      if (sortV === "price_low")  return pA - pB;
+      if (sortV === "price_high") return pB - pA;
+      if (sortV === "year_high")  return yB - yA || oA - oB;
+      return oA - oB;
+    });
+    if (galleryGrid) sorted.forEach(c => galleryGrid.appendChild(c));
+    if (emptyState)  emptyState.classList.toggle("gal-hidden", shown !== 0);
+  }
+
+  ["galleryBrandInput","galleryBudgetInput","galleryPurchaseTypeInput","gallerySortInput"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", applyFilters);
+  });
+
+  function submitSearch() {
+    appliedSearch = searchInput ? searchInput.value.trim().toLowerCase() : "";
+    applyFilters();
+  }
+  if (searchForm) {
+    searchForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      submitSearch();
+    });
+  }
+
+  // ── COMPARE ──
+  function syncCompare() {
+    if (!compareMode) { if (compareBar) compareBar.classList.remove("visible"); return; }
+    const checked = cards.filter(c => c.querySelector("[data-compare-checkbox]")?.checked);
+    selectedIds.clear();
+    checked.forEach(c => {
+      const cb = c.querySelector("[data-compare-checkbox]");
+      if (cb) selectedIds.add(cb.value);
+    });
+    cards.forEach(c => {
+      const cb     = c.querySelector("[data-compare-checkbox]");
+      const toggle = c.querySelector("[data-compare-toggle]");
+      const sel    = cb?.checked || false;
+      c.classList.toggle("compare-selected", sel);
+      if (toggle) toggle.classList.toggle("checked", sel);
+    });
+    const cnt = selectedIds.size;
+    if (compareCount) compareCount.textContent = cnt;
+    if (compareNames) compareNames.textContent = cnt >= 2
+      ? checked.map(c => c.querySelector(".vcard-name")?.textContent?.trim()).filter(Boolean).join(", ")
+      : "Select at least 2 bikes.";
+    if (compareBar) compareBar.classList.toggle("visible", cnt > 0);
+    if (openCmpBtn) {
+      openCmpBtn.classList.toggle("disabled", cnt < 2);
+      openCmpBtn.href = cnt >= 2 ? `/gallery/compare?ids=${[...selectedIds].join(",")}` : "#";
+    }
+  }
+
+  function setCompare(on) {
+    compareMode = on;
+    if (galleryGrid) galleryGrid.classList.toggle("gallery-compare-mode", on);
+    if (cmpTrigger) {
+      cmpTrigger.classList.toggle("active", on);
+      cmpTrigger.textContent = on ? "Done" : "Compare";
+    }
+    if (!on) {
+      document.querySelectorAll("[data-compare-checkbox]").forEach(cb => cb.checked = false);
+      cards.forEach(c => {
+        c.classList.remove("compare-selected");
+        const toggle = c.querySelector("[data-compare-toggle]");
+        if (toggle) toggle.classList.remove("checked");
+      });
+      selectedIds.clear();
+      if (compareBar) compareBar.classList.remove("visible");
+    }
+    syncCompare();
+  }
+
+  if (cmpTrigger) cmpTrigger.addEventListener("click", () => setCompare(!compareMode));
+
+  document.querySelectorAll("[data-compare-toggle]").forEach(toggle => {
+    toggle.addEventListener("click", function (e) {
+      e.preventDefault(); e.stopPropagation();
+      const cb = this.querySelector("[data-compare-checkbox]");
+      if (cb) { cb.checked = !cb.checked; syncCompare(); }
+    });
+  });
+
+  if (clearCmpBtn) clearCmpBtn.addEventListener("click", () => {
+    document.querySelectorAll("[data-compare-checkbox]").forEach(cb => cb.checked = false);
+    cards.forEach(c => {
+      c.classList.remove("compare-selected");
+      const toggle = c.querySelector("[data-compare-toggle]");
+      if (toggle) toggle.classList.remove("checked");
+    });
+    syncCompare();
+  });
+
+  if (openCmpBtn) openCmpBtn.addEventListener("click", e => { if (selectedIds.size < 2) e.preventDefault(); });
+
+  // ── INIT ──
+  applyFilters();
+  setCompare(false);
+});
+</script>
+<!-- Sell Your Bike Modal -->
+<div id="sellModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:20px; padding:32px; width:100%; max-width:480px; margin:16px; position:relative; max-height:90vh; overflow-y:auto;">
+    <button onclick="document.getElementById('sellModal').style.display='none'"
+      style="position:absolute; top:14px; right:16px; background:none; border:none; font-size:22px; cursor:pointer; color:#888;">✕</button>
+    <h2 style="margin:0 0 6px; font-size:22px;">Sell Your Bike</h2>
+    <p style="margin:0 0 20px; color:#888; font-size:13px;">Fill in the details and we'll get back to you.</p>
+    <form method="POST" action="{{ url_for('customer_sell_submit') }}" enctype="multipart/form-data">
+      <div style="display:grid; gap:12px;">
+        <input name="bike_name" placeholder="Bike Name *" required style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="kms_driven" placeholder="KMs Driven *" required style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="ownership_text" placeholder="Ownership (e.g. 1st Owner) *" required style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="city" placeholder="City *" required style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="expected_price" placeholder="Expected Price (optional)" style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="customer_name" placeholder="Your Name *" required style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="customer_phone" placeholder="Phone Number *" required style="height:44px; border:1px solid #ddd; border-radius:10px; padding:0 14px; font-size:14px;">
+        <input name="sell_photos" type="file" accept="image/*" multiple style="font-size:13px; padding:8px 0;">
+        <button type="submit" style="height:48px; background:linear-gradient(135deg,#3d1f0f,#7c3a1e); color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer;">Submit Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

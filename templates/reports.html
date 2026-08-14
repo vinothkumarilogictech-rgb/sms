@@ -1,0 +1,670 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+main.container {
+  overflow-x: clip;
+}
+
+.report-filter-card,
+.report-data {
+  background: #dcc4ef;
+  border-color: #c4a8df;
+  box-shadow: 0 18px 34px rgba(102, 73, 143, 0.10);
+}
+
+.report-tabs {
+  padding: 6px;
+  border: 1px solid #c4a8df;
+  border-radius: 18px;
+  background: #dcc4ef;
+}
+
+.report-tabs .tab-chip.active {
+  background: rgba(255, 255, 255, 0.34);
+  border-color: #c4a8df;
+  box-shadow: 0 10px 20px rgba(102, 73, 143, 0.10);
+}
+
+.report-filter-card .filter-input,
+.report-filter-card select,
+.report-filter-card input[type="date"] {
+  min-height: 38px;
+  border: 1px solid #d8b8ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.report-filter-card .report-filter-row {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+  gap: 0.5rem !important;
+  align-items: center !important;
+}
+
+.report-filter-card #paymentModeWrap,
+.report-filter-card #reportDefaultPrinter {
+  min-width: 0;
+}
+
+.report-filter-card #paymentModeWrap .filter-input,
+.report-filter-card #reportDefaultPrinter {
+  width: 100%;
+  max-width: 100%;
+}
+
+.report-filter-card #reportDefaultPrinter {
+  overflow: hidden;
+}
+
+.report-filter-card .report-preview-btn,
+.report-filter-card #reportPrintBtn,
+.report-filter-card #reportPrintExcelBtn {
+  width: 100%;
+  justify-self: stretch;
+}
+
+.report-filter-card #reportPrintExcelBtn {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  background: rgba(255, 253, 250, 0.92);
+  border-color: #d9cbbb;
+  color: #4a2370;
+}
+
+.report-filter-card #reportPrintExcelBtn:hover {
+  background-color: #f3ebe3;
+  color: #4a2370;
+  border-color: #cdb8d7;
+}
+
+.report-filter-card #reportPrintExcelBtn:focus-visible {
+  background-color: #efe6fb;
+  color: #4a2370;
+  border-color: #b9a1d7;
+}
+
+.report-filter-card {
+  overflow-x: clip;
+}
+
+.report-data {
+  overflow-x: hidden;
+}
+
+.report-actions {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.report-action-btn {
+  min-width: 72px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid #4a2370;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+
+.report-open-btn {
+  background: #4a2370;
+}
+
+.report-print-btn {
+  background: #fffaf5;
+  color: #4a2370;
+  border-color: #d9cbbb;
+}
+
+.report-action-btn:hover {
+  background-color: #3d1d5d;
+  border-color: #3d1d5d;
+  transform: translateY(-1px);
+}
+
+.report-print-btn:hover {
+  background-color: #f3ebe3;
+  border-color: #cdb8d7;
+  color: #4a2370;
+}
+
+.report-action-btn:focus-visible {
+  outline: 2px solid rgba(74, 35, 112, 0.28);
+  outline-offset: 2px;
+}
+
+/* ── FIX: Right-align currency columns ── */
+.report-panel[data-type="sales"] .list-table .list-row > div:nth-child(5),
+.report-panel[data-type="sales"] .list-table .list-head > div:nth-child(5),
+.report-panel[data-type="sales"] .list-table .list-row > div:nth-child(6),
+.report-panel[data-type="sales"] .list-table .list-head > div:nth-child(6),
+.report-panel[data-type="sales"] .list-table .list-row > div:nth-child(7),
+.report-panel[data-type="sales"] .list-table .list-head > div:nth-child(7),
+.report-panel[data-type="expenses"] .list-table .list-row > div:nth-child(4),
+.report-panel[data-type="expenses"] .list-table .list-head > div:nth-child(4) {
+  text-align: right;
+  padding-right: 16px;
+}
+
+@media (max-width: 900px) {
+  .report-filter-card .report-filter-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media print {
+  .page-head,
+  .report-filter-card,
+  .print-modal {
+    display: none !important;
+  }
+
+  .report-data {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .report-data .list-row > div:last-child,
+  .report-data .list-head > div:last-child {
+    display: none !important;
+  }
+}
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>Reports</h1>
+  </div>
+  <a class="btn ghost js-back-button" href="{{ url_for('dashboard') }}" data-fallback="{{ url_for('dashboard') }}">Back</a>
+</div>
+
+<!-- REPORT FILTER -->
+<section class="card report-filter-card">
+  <!-- REPORT TYPE TABS -->
+  <div class="tabs-bar report-tabs" role="tablist" aria-label="Report types">
+    <button class="tab-chip active" type="button" data-type="vehicles">Vehicles</button>
+    <button class="tab-chip" type="button" data-type="expenses">Expenses</button>
+    <button class="tab-chip" type="button" data-type="sales">Sales</button>
+  </div>
+
+  <form method="post" action="{{ url_for('reports') }}" id="reportFilterForm">
+
+    <input type="hidden" name="type" id="reportType" value="{{ form_data.get('type', 'vehicles') if form_data else 'vehicles' }}">
+    <input type="hidden" name="download_format" id="downloadFormat" value="pdf">
+
+    <div class="report-filter-row">
+
+      <select class="filter-input report-range-select" name="range" onchange="quickRange(this.value, this.form)">
+        <option value="today" {% if selected_range == 'today' %}selected{% endif %}>Today</option>
+        <option value="week"  {% if selected_range == 'week'  %}selected{% endif %}>This week</option>
+        <option value="month" {% if selected_range == 'month' %}selected{% endif %}>This month</option>
+        <option value="year"  {% if selected_range == 'year'  %}selected{% endif %}>This year</option>
+        <option value="">Custom</option>
+      </select>
+
+      <input class="filter-input" type="date" name="from_date" id="fromDate" value="{{ form_data.get('from_date', '') if form_data else '' }}" required>
+      <input class="filter-input" type="date" name="to_date"   id="toDate"   value="{{ form_data.get('to_date',   '') if form_data else '' }}" required>
+
+      <input class="filter-input" type="text" name="q" id="reportQ" placeholder="Search" value="{{ form_data.get('q', '') if form_data else '' }}">
+
+      <div id="statusWrap">
+        <select class="filter-input" name="status" id="reportStatus" data-initial="{{ form_data.get('status', '') if form_data else '' }}">
+          <option value="" {% if not form_data or not form_data.get('status') %}selected{% endif %}>All Status</option>
+        </select>
+      </div>
+
+      <div id="paymentModeWrap">
+        <select class="filter-input" name="payment_mode">
+          <option value=""     {% if not form_data or not form_data.get('payment_mode') %}selected{% endif %}>All Payment</option>
+          {% for mode in ["Cash", "UPI", "Bank", "GPay", "Card"] %}
+          <option value="{{ mode }}" {% if form_data and form_data.get('payment_mode') == mode %}selected{% endif %}>{{ mode }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <input class="btn ghost report-preview-btn" type="submit" value="View">
+
+      <select class="filter-input" id="reportDefaultPrinter" aria-label="Default Printer Name">
+        <option value="">Select printer</option>
+        {% if default_printer_name and default_printer_name not in installed_printers %}
+        <option value="{{ default_printer_name }}" selected>{{ default_printer_name }} (Unavailable)</option>
+        {% endif %}
+        {% for printer_name in installed_printers %}
+        <option value="{{ printer_name }}" {% if default_printer_name == printer_name %}selected{% endif %}>{{ printer_name }}</option>
+        {% endfor %}
+      </select>
+
+      <button class="btn primary" type="button" id="reportPrintBtn">Print</button>
+      <button class="btn ghost"   type="button" id="reportPrintExcelBtn">Print Excel</button>
+    </div>
+
+  </form>
+</section>
+
+<!-- DATA TABLES -->
+<section class="card report-data">
+
+  <!-- VEHICLES -->
+  <div class="report-panel is-active" data-type="vehicles">
+    <div class="card-header">
+      <h3>Vehicles</h3>
+    </div>
+    {% if vehicle_list %}
+    <div class="list-table compact" style="--list-cols: 1fr 1.4fr 1.6fr 1fr 0.9fr 0.8fr;">
+      <div class="list-row list-head">
+        <div>Date</div>
+        <div>Vehicle No</div>
+        <div>Vehicle</div>
+        <div>Purchase</div>
+        <div>Status</div>
+        <div style="text-align:center;">Action</div>
+      </div>
+      {% for v in vehicle_list %}
+      <div class="list-row">
+        <div>{{ (v.purchase_date or v.created_at)|date_only }}</div>
+        <div><strong>{{ v.vehicle_number or '-' }}</strong></div>
+        <div><strong>{{ v.vehicle_name or '-' }}</strong></div>
+        <div>&#8377; {{ "%.2f"|format(v.purchase_price|float) }}</div>
+        <div>{{ v.status or '-' }}</div>
+        <div class="report-actions" style="display:flex; justify-content:center;">
+          <a class="report-action-btn report-open-btn"
+             href="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Open</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No vehicles found.</p>
+    {% endif %}
+  </div>
+
+  <!-- EXPENSES -->
+  <div class="report-panel" data-type="expenses">
+    <div class="card-header">
+      <h3>Expenses</h3>
+    </div>
+    {% if expense_items %}
+    <div class="list-table compact" style="--list-cols: 0.9fr 1fr 1.8fr 0.9fr 1.1fr 0.8fr;">
+      <div class="list-row list-head">
+        <div>Type</div>
+        <div>Ref</div>
+        <div>Description</div>
+        <div>Amount</div>
+        <div>Date</div>
+        <div style="text-align:center;">Action</div>
+      </div>
+      {% for e in expense_items %}
+      <div class="list-row">
+        <div>{{ e.kind or 'Expense' }}</div>
+        <div><strong>{{ e.ref_no or '-' }}</strong></div>
+        <div><strong>{{ e.description or '-' }}</strong></div>
+        <div>&#8377; {{ "%.2f"|format(e.amount|float) }}</div>
+        <div>{{ e.created_at|date_only }}</div>
+        <div class="report-actions" style="display:flex; justify-content:center;">
+          {% if e.open_href %}
+          <a class="report-action-btn report-open-btn" href="{{ e.open_href }}">Open</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No expenses found.</p>
+    {% endif %}
+  </div>
+
+  <!-- SALES -->
+  <div class="report-panel" data-type="sales">
+    <div class="card-header">
+      <h3>Sales</h3>
+    </div>
+    {% if vehicle_sales_list %}
+    <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+    <div class="list-table compact" style="--list-cols: 90px 100px 110px 150px 90px 90px 90px 100px 90px 80px; min-width: 990px; width: max-content;">
+      <div class="list-row list-head">
+        <div>Sale</div>
+        <div>Date</div>
+        <div>Vehicle No</div>
+        <div>Buyer</div>
+        <div>Total</div>
+        <div>Paid</div>
+        <div>Due</div>
+        <div>Paymode</div>
+        <div>Status</div>
+        <div style="text-align:center;">Action</div>
+      </div>
+      {% for s in vehicle_sales_list %}
+      <div class="list-row">
+        <div>{{ s.sale_code or ('%06d'|format(s.id or 0)) }}</div>
+        <div>{{ s.created_at|date_only }}</div>
+        <div><strong>{{ s.vehicle_number or '-' }}</strong></div>
+        <div><strong>{{ s.customer_name or '-' }}</strong></div>
+        <div>&#8377; {{ "%.2f"|format(s.total_amount|float) }}</div>
+        <div>&#8377; {{ "%.2f"|format(s.paid_total|float) }}</div>
+        <div>&#8377; {{ "%.2f"|format(s.due_amount|float) }}</div>
+        <div>{{ s.payment_method or '-' }}</div>
+        <div>{{ s.settlement_status or '-' }}</div>
+        <div class="report-actions" style="display:flex; justify-content:center;">
+          <a class="report-action-btn report-open-btn"
+             href="{% if s.order_id %}{{ url_for('order_detail', order_id=s.order_id, sale_id=s.id, source='orders') }}{% else %}{{ url_for('order_new', sale_id=s.id) }}{% endif %}">Open</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    </div>
+    {% else %}
+    <p class="muted">No sales found.</p>
+    {% endif %}
+  </div>
+
+</section>
+
+<iframe
+  id="reportPrintFrame"
+  title="Report Print Frame"
+  style="position:absolute; width:0; height:0; border:0; opacity:0; pointer-events:none;"
+></iframe>
+
+<div class="print-modal hidden" id="report-download-modal">
+  <div class="print-backdrop" id="report-download-backdrop"></div>
+  <div class="print-card">
+    <button class="print-close" type="button" id="report-download-close">&times;</button>
+    <h3>Select Download Format</h3>
+    <div class="print-grid">
+      <div class="print-tile active" data-download-type="pdf">
+        <div class="print-icon"><i class="bi bi-file-earmark-pdf"></i></div>
+        <div>PDF</div>
+      </div>
+      <div class="print-tile" data-download-type="excel">
+        <div class="print-icon"><i class="bi bi-file-earmark-excel"></i></div>
+        <div>Excel</div>
+      </div>
+    </div>
+    <button class="btn primary print-action" type="button" id="report-download-action">Download</button>
+    <button class="btn ghost btn-compact print-all" type="button" id="report-download-all">Print All</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const tabs = document.querySelectorAll(".report-tabs [data-type]");
+  const reportTypeInput = document.getElementById("reportType");
+  const reportForm = document.getElementById("reportFilterForm");
+  const reportPrintFrame = document.getElementById("reportPrintFrame");
+  const reportDefaultPrinter = document.getElementById("reportDefaultPrinter");
+  const panels = document.querySelectorAll(".report-panel");
+  const rowPrintButtons = document.querySelectorAll(".js-row-print");
+  const paymentModeWrap = document.getElementById("paymentModeWrap");
+  const statusWrap = document.getElementById("statusWrap");
+  const statusSelect = document.getElementById("reportStatus");
+  const downloadFormatInput = document.getElementById("downloadFormat");
+  const reportDownloadBtn = document.getElementById("reportDownloadBtn");
+  const reportPrintBtn = document.getElementById("reportPrintBtn");
+  const reportPrintExcelBtn = document.getElementById("reportPrintExcelBtn");
+  const downloadModal = document.getElementById("report-download-modal");
+  const downloadClose = document.getElementById("report-download-close");
+  const downloadBackdrop = document.getElementById("report-download-backdrop");
+  const downloadTiles = document.querySelectorAll("[data-download-type]");
+  const downloadAction = document.getElementById("report-download-action");
+  const downloadAllAction = document.getElementById("report-download-all");
+  const pdfActionUrl = "{{ url_for('report_generate') }}";
+  const excelActionUrl = "{{ url_for('reports_export_excel') }}";
+  let selectedDownloadType = "pdf";
+
+  const syncPanels = (type) => {
+    panels.forEach((panel) => {
+      panel.classList.toggle("is-active", panel.dataset.type === type);
+    });
+    if (paymentModeWrap) {
+      paymentModeWrap.style.display = (type === "sales") ? "" : "none";
+    }
+    if (statusWrap) {
+      statusWrap.style.display = (type === "vehicles" || type === "sales") ? "" : "none";
+    }
+    if (statusSelect) {
+      const initial = statusSelect.dataset.initial || "";
+      const current = statusSelect.value || initial || "";
+      const optionsMap = {
+        vehicles: ["Available", "In Progress", "In Repair", "Sold"],
+        sales: ["Paid", "Partial", "Unpaid"],
+      };
+      const opts = optionsMap[type] || [];
+      statusSelect.innerHTML = "";
+      const first = document.createElement("option");
+      first.value = "";
+      first.textContent = "All Status";
+      statusSelect.appendChild(first);
+      opts.forEach((value) => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = value;
+        statusSelect.appendChild(opt);
+      });
+      const isStillValid = current === "" || opts.includes(current);
+      statusSelect.value = isStillValid ? current : "";
+    }
+  };
+
+  tabs.forEach(tab => {
+    tab.addEventListener("click", function () {
+      tabs.forEach(t => t.classList.remove("active"));
+      this.classList.add("active");
+      reportTypeInput.value = this.dataset.type;
+      syncPanels(this.dataset.type);
+    });
+  });
+
+  const validTypes = new Set(["vehicles", "expenses", "sales"]);
+  const requestedType = (reportTypeInput?.value || "vehicles").toLowerCase();
+  const activeType = validTypes.has(requestedType) ? requestedType : "vehicles";
+
+  if (reportTypeInput) reportTypeInput.value = activeType;
+
+  const selectedTab = Array.from(tabs).find(t => t.dataset.type === activeType);
+  if (selectedTab) {
+    tabs.forEach(t => t.classList.remove("active"));
+    selectedTab.classList.add("active");
+  }
+
+  syncPanels(activeType);
+
+  const closeDownloadModal = () => {
+    if (downloadModal) downloadModal.classList.add("hidden");
+  };
+
+  const setDownloadType = (type) => {
+    selectedDownloadType = type === "excel" ? "excel" : "pdf";
+    if (downloadFormatInput) downloadFormatInput.value = selectedDownloadType;
+    downloadTiles.forEach((tile) => {
+      tile.classList.toggle("active", tile.dataset.downloadType === selectedDownloadType);
+    });
+  };
+
+  const submitDownload = (actionUrl, targetName = "") => {
+    if (!reportForm) return;
+    const data = new FormData(reportForm);
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = actionUrl;
+    if (targetName) form.target = targetName;
+    form.style.display = "none";
+    data.forEach((value, key) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = String(value);
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+  };
+
+  const filenameFromHeaders = (response, fallbackName) => {
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i);
+    const raw = match ? (match[1] || match[2] || "").trim() : "";
+    if (!raw) return fallbackName;
+    try { return decodeURIComponent(raw); } catch (_) { return raw; }
+  };
+
+  const downloadViaFetch = async (actionUrl, fallbackName) => {
+    if (!reportForm) return;
+    const payload = new URLSearchParams();
+    const data = new FormData(reportForm);
+    data.forEach((value, key) => payload.append(key, String(value)));
+
+    const response = await fetch(actionUrl, {
+      method: "POST",
+      body: payload,
+      credentials: "same-origin",
+      redirect: "follow",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    });
+
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+    const blob = await response.blob();
+    const filename = filenameFromHeaders(response, fallbackName);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  };
+
+  if (reportDownloadBtn) {
+    reportDownloadBtn.addEventListener("click", () => {
+      setDownloadType("pdf");
+      if (downloadModal) downloadModal.classList.remove("hidden");
+    });
+  }
+
+  if (reportPrintBtn) {
+    reportPrintBtn.addEventListener("click", () => {
+  reportPrintBtn.disabled = true;
+  reportPrintBtn.textContent = "Preparing...";
+  setTimeout(() => {
+    window.print();
+    reportPrintBtn.disabled = false;
+    reportPrintBtn.textContent = "Print";
+  }, 1200);
+});
+  }
+
+  if (reportPrintExcelBtn) {
+    reportPrintExcelBtn.addEventListener("click", async () => {
+      setDownloadType("excel");
+      try { await downloadViaFetch(excelActionUrl, "report.xls"); }
+      catch (_) { submitDownload(excelActionUrl); }
+    });
+  }
+
+  if (reportDefaultPrinter) {
+    reportDefaultPrinter.addEventListener("change", async () => {
+      const payload = new URLSearchParams();
+      payload.append("action", "printer_settings");
+      payload.append("default_printer_name", reportDefaultPrinter.value);
+      try {
+        await fetch("{{ url_for('settings') }}", {
+          method: "POST",
+          body: payload,
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        });
+      } catch (_) {}
+    });
+  }
+
+  if (downloadClose)   downloadClose.addEventListener("click", closeDownloadModal);
+  if (downloadBackdrop) downloadBackdrop.addEventListener("click", closeDownloadModal);
+
+  downloadTiles.forEach((tile) => {
+    tile.addEventListener("click", () => setDownloadType(tile.dataset.downloadType || "pdf"));
+  });
+
+  if (downloadAction) {
+    downloadAction.addEventListener("click", async () => {
+      const actionUrl = selectedDownloadType === "excel" ? excelActionUrl : pdfActionUrl;
+      const fallbackName = selectedDownloadType === "excel" ? "report.xls" : "report.pdf";
+      try { await downloadViaFetch(actionUrl, fallbackName); }
+      catch (_) { submitDownload(actionUrl); }
+      closeDownloadModal();
+    });
+  }
+
+  if (downloadAllAction) {
+    downloadAllAction.addEventListener("click", async () => {
+      setDownloadType("pdf");
+      try { await downloadViaFetch(pdfActionUrl, "report.pdf"); }
+      catch (_) { submitDownload(pdfActionUrl); }
+      setDownloadType("excel");
+      try { await downloadViaFetch(excelActionUrl, "report.xls"); }
+      catch (_) { submitDownload(excelActionUrl); }
+      closeDownloadModal();
+    });
+  }
+
+  const openAndPrint = (url) => {
+    if (!url || !reportPrintFrame) return;
+    const printUrl = `${url}${url.includes("?") ? "&" : "?"}_print_ts=${Date.now()}`;
+    reportPrintFrame.onload = () => {
+      const frameWindow = reportPrintFrame.contentWindow;
+      if (!frameWindow) return;
+      setTimeout(() => {
+        try { frameWindow.focus(); frameWindow.print(); } catch (_) {}
+      }, 300);
+    };
+    reportPrintFrame.src = printUrl;
+  };
+
+  rowPrintButtons.forEach((btn) => {
+    btn.addEventListener("click", () => openAndPrint(btn.dataset.printUrl || ""));
+  });
+});
+
+function quickRange(type, form) {
+  const from = document.getElementById("fromDate");
+  const to   = document.getElementById("toDate");
+  const now  = new Date();
+  if (!from || !to) return;
+
+  if (type === "today") {
+    const d = now.toISOString().split("T")[0];
+    from.value = d; to.value = d;
+  }
+  if (type === "month") {
+    from.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    to.value   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  }
+  if (type === "year") {
+    from.value = `${now.getFullYear()}-01-01`;
+    to.value   = `${now.getFullYear()}-12-31`;
+  }
+  if (type === "week") {
+    const start = new Date(now);
+    const day = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - day);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    from.value = start.toISOString().split("T")[0];
+    to.value   = end.toISOString().split("T")[0];
+  }
+  if (type && form) form.submit();
+}
+</script>
+
+{% endblock %}

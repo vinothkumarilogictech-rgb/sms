@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .staff-add-shell {
+    width: min(100%, 1020px);
+    margin: 0 auto;
+  }
+  .staff-add-card {
+    background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%);
+    border: 1px solid #dcbef0;
+    border-radius: 18px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 14px 24px rgba(62, 11, 99, 0.08);
+    padding: 14px 16px !important;
+  }
+  .staff-add-form {
+    gap: 14px;
+  }
+  .staff-add-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+    align-items: start;
+  }
+  .staff-add-grid label {
+    display: grid;
+    gap: 8px;
+    color: #43295f;
+    font-weight: 700;
+    min-width: 0;
+  }
+  .staff-add-grid input,
+  .staff-add-grid select {
+    background: #fffdfd;
+    min-height: 38px;
+    height: 38px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid #dcc4ef;
+    border-radius: 10px;
+    font-size: 0.95rem;
+  }
+  .staff-add-grid input:focus,
+  .staff-add-grid select:focus {
+    outline: none;
+    border-color: #9dc3ff;
+    box-shadow: 0 0 0 3px rgba(157, 195, 255, 0.22);
+  }
+  .staff-add-note {
+    margin-top: 2px !important;
+    font-size: 0.86rem;
+  }
+  .staff-status-label {
+    font-weight: 800;
+    color: #43295f;
+    margin-bottom: 0.1rem;
+  }
+  .staff-radio-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border: 1px solid #dcc4ef;
+    border-radius: 14px;
+    background: #fffdfd;
+    align-items: center;
+  }
+  .staff-radio-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 1px solid #d7c1ee;
+    border-radius: 12px;
+    background: #fffdfd;
+    color: #43295f;
+    font-weight: 700;
+    margin: 0;
+  }
+  .staff-radio-group input[type="radio"] {
+    margin: 0;
+  }
+  .staff-actions {
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 2px;
+  }
+  .staff-actions .btn {
+    min-height: 40px;
+    padding: 0 18px;
+    border-radius: 12px;
+  }
+  @media (max-width: 760px) {
+    .staff-add-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+  }
+</style>
+<div class="page-head staff-add-shell">
+  <div>
+    <h1>Add staff</h1>
+    <!-- <p>Create a new staff profile.</p> -->
+  </div>
+  <a class="btn ghost js-back-button" href="{{ url_for('tailors') }}" data-fallback="{{ url_for('tailors') }}">Back</a>
+</div>
+
+<section class="card staff-add-card staff-add-shell">
+  <form class="stack staff-add-form" method="post">
+    {% if error %}
+    <div class="alert">{{ error }}</div>
+    {% endif %}
+    <div class="staff-add-grid">
+      <label>
+        Staff name
+        <input type="text" name="name" value="{{ form_data.get('name', '') if form_data else '' }}" required>
+      </label>
+      <label>
+        Staff role
+        <select name="role" required>
+          <option value="">-- Select role --</option>
+          {% for r in staff_roles or [] %}
+            <option value="{{ r.name }}" {% if form_data and form_data.get('role') == r.name %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+        {% if not staff_roles %}
+          <div class="muted" style="margin-top:6px;">Add roles in Categories → Staff Role.</div>
+        {% endif %}
+      </label>
+      <label>
+        Phone number
+        <input type="text" name="phone" value="{{ form_data.get('phone', '') if form_data else '' }}" inputmode="tel" pattern="^\+?[0-9]+$" oninput="this.value=this.value.replace(/[^0-9+]/g,'').replace(/(?!^)\+/g,'');" required>
+      </label>
+    </div>
+
+    <label class="staff-status-label">Status</label>
+    <div class="radio-group staff-radio-group">
+      <label>
+        <input type="radio" name="status" value="Active" {% if not form_data or form_data.get('status', 'Active') == 'Active' %}checked{% endif %}> Active
+      </label>
+      <label>
+        <input type="radio" name="status" value="Working" {% if form_data and form_data.get('status') == 'Working' %}checked{% endif %}> Working
+      </label>
+      <label>
+        <input type="radio" name="status" value="Inactive" {% if form_data and form_data.get('status') == 'Inactive' %}checked{% endif %}> Inactive
+      </label>
+    </div>
+
+    <div class="actions staff-actions">
+      <button type="submit" class="btn primary">Save staff</button>
+      <a href="{{ url_for('tailors') }}" class="btn ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
