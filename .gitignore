@@ -99,3 +99,5 @@ yarn-error.log
 dist1/
 dist2/
 dist_updated_with_online/
+build/
+build - Copy/
