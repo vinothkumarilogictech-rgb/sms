@@ -361,7 +361,7 @@
           </label>
           <div class="sale-proof">
             <label>
-              Customer ID Proof
+              Customer ID Proof (Aadhar)
               <input type="file" name="customer_id_proof_file" accept="image/*,.pdf">
             </label>
             {% if sale_record and sale_record.customer_id_proof_url %}
@@ -371,6 +371,37 @@
             </a>
             {% else %}
             <p class="summary-note">Upload Aadhaar, PAN, or another ID proof.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <div class="sale-proof">
+            <label>
+              Customer Photo
+              <input type="file" name="customer_photo_file" accept="image/*">
+            </label>
+            {% if sale_record and sale_record.customer_photo_url %}
+            <a class="sale-proof-link" href="{{ sale_record.customer_photo_url }}" target="_blank" rel="noopener">
+              <i class="bi bi-paperclip"></i>
+              <span>{{ sale_record.customer_photo_filename }}</span>
+            </a>
+            {% else %}
+            <p class="summary-note">Upload a photo of the customer.</p>
+            {% endif %}
+          </div>
+          <div class="sale-proof">
+            <label>
+              Customer With Bike (Sale Proof)
+              <input type="file" name="customer_with_bike_photo_file" accept="image/*">
+            </label>
+            {% if sale_record and sale_record.customer_with_bike_photo_url %}
+            <a class="sale-proof-link" href="{{ sale_record.customer_with_bike_photo_url }}" target="_blank" rel="noopener">
+              <i class="bi bi-paperclip"></i>
+              <span>{{ sale_record.customer_with_bike_photo_filename }}</span>
+            </a>
+            {% else %}
+            <p class="summary-note">Upload a photo of the customer with the bike at handover, as sale proof.</p>
             {% endif %}
           </div>
         </div>
@@ -438,9 +469,9 @@
             </strong>
           </div>
           <div class="vehicle-box">
-            <span>PUC Certificate</span>
-            <strong id="doc-puc">
-              {% if selected_vehicle and selected_vehicle.puc_certificate_url %}<a href="{{ selected_vehicle.puc_certificate_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
+            <span>RC Book (Back)</span>
+            <strong id="doc-rc-back">
+              {% if selected_vehicle and selected_vehicle.rc_book_back_url %}<a href="{{ selected_vehicle.rc_book_back_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
             </strong>
           </div>
           <div class="vehicle-box">
@@ -524,11 +555,19 @@
           </label>
           <label>
             Payment Method
-            <select name="payment_method" required>
-              {% for option in ["Cash", "UPI", "Bank", "GPay", "Card"] %}
+            <select name="payment_method" id="payment-method" required>
+              {% for option in ["Cash", "UPI", "Bank", "GPay", "Card", "Finance"] %}
               <option value="{{ option }}" {% if (form_data.payment_method or 'Cash') == option %}selected{% endif %}>{{ option }}</option>
               {% endfor %}
             </select>
+          </label>
+          <label data-finance-payment-field hidden>
+            Finance Name
+            <input type="text" name="payment_finance_name" value="{{ form_data.payment_finance_name or '' }}" placeholder="Finance name" disabled>
+          </label>
+          <label data-finance-payment-field hidden>
+            Commission Amount
+            <input type="number" step="0.01" min="0" name="payment_commission_amount" value="{{ form_data.payment_commission_amount or '' }}" placeholder="0.00" disabled>
           </label>
 
         </div>
@@ -575,7 +614,7 @@
   const galleryEl = document.getElementById("vehicle-gallery");
   const docRcEl = document.getElementById("doc-rc");
   const docInsuranceEl = document.getElementById("doc-insurance");
-  const docPucEl = document.getElementById("doc-puc");
+  const docRcBackEl = document.getElementById("doc-rc-back");
   const summarySellingEl = document.getElementById("summary-selling-price");
   const summaryRepairEl = document.getElementById("summary-repair-cost");
   const summarySubtotalEl = document.getElementById("summary-subtotal");
@@ -584,7 +623,20 @@
   const gstPercentInput = document.getElementById("gst-percent");
   const gstAmountEl = document.getElementById("gst-amount");
   const summaryTotalEl = document.getElementById("summary-total");
+  const paymentMethodInput = document.getElementById("payment-method");
+  const financePaymentFields = document.querySelectorAll("[data-finance-payment-field]");
   let gstMode = "percent"; // percent | amount
+
+  function syncFinancePaymentFields() {
+    const isFinance = paymentMethodInput.value === "Finance";
+    financePaymentFields.forEach((field) => {
+      const input = field.querySelector("input");
+      field.hidden = !isFinance;
+      input.disabled = !isFinance;
+      input.required = isFinance;
+      if (!isFinance) input.value = "";
+    });
+  }
 
   function asMoney(value) {
     const num = Number.parseFloat(value || 0);
@@ -638,7 +690,7 @@
       gstPercentInput.value = "0.00";
       if (docRcEl) docRcEl.textContent = "-";
       if (docInsuranceEl) docInsuranceEl.textContent = "-";
-      if (docPucEl) docPucEl.textContent = "-";
+      if (docRcBackEl) docRcBackEl.textContent = "-";
       galleryEl.innerHTML = "";
       for (let i = 0; i < 4; i += 1) {
         const placeholder = document.createElement("div");
@@ -682,7 +734,7 @@
     }
     if (docRcEl) docRcEl.innerHTML = vehicle.rc_book_url ? `<a href="${vehicle.rc_book_url}" target="_blank" rel="noopener">View document</a>` : "-";
     if (docInsuranceEl) docInsuranceEl.innerHTML = vehicle.insurance_document_url ? `<a href="${vehicle.insurance_document_url}" target="_blank" rel="noopener">View document</a>` : "-";
-    if (docPucEl) docPucEl.innerHTML = vehicle.puc_certificate_url ? `<a href="${vehicle.puc_certificate_url}" target="_blank" rel="noopener">View document</a>` : "-";
+    if (docRcBackEl) docRcBackEl.innerHTML = vehicle.rc_book_back_url ? `<a href="${vehicle.rc_book_back_url}" target="_blank" rel="noopener">View document</a>` : "-";
 
     galleryEl.innerHTML = "";
     const images = Array.isArray(vehicle.image_urls) ? vehicle.image_urls.slice(0, 4) : [];
@@ -765,6 +817,8 @@ function recalcSubtotal() {
     gstMode = "amount";
     updateSummary();
   });
+  paymentMethodInput.addEventListener("change", syncFinancePaymentFields);
+  syncFinancePaymentFields();
 
   const initialVehicle = findVehicleById(vehicleIdInput.value)
     || findVehicleByField("vehicle_number", vehicleNumberInput.value)

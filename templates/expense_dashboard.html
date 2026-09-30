@@ -63,7 +63,7 @@
       padding-bottom: 2px;
     }
     .expense-list-table {
-      --list-cols: minmax(110px, 1fr) minmax(180px, 1.7fr) minmax(120px, 1fr) minmax(120px, 1fr) 88px;
+      --list-cols: minmax(100px, 0.9fr) minmax(150px, 1.4fr) minmax(100px, 0.8fr) minmax(110px, 0.9fr) minmax(110px, 0.9fr) 88px;
     }
     .expense-list-table .list-row > div:last-child {
       justify-self: center;
@@ -91,7 +91,7 @@
     }
     .quick-expense-row {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr)) 160px;
+      grid-template-columns: repeat(5, minmax(0, 1fr)) 160px;
       gap: 12px;
       align-items: end;
     }
@@ -165,9 +165,12 @@
       <h1>Expense </h1>
       <!-- <p>Overall expenses and salary records.</p> -->
     </div>
+    <button class="btn primary" type="button" id="openQuickAddBtn">
+      <i class="bi bi-plus-lg"></i> Add New
+    </button>
   </div>
 
-  <section class="card quick-expense-card" style="margin-bottom:16px;">
+  <section class="card quick-expense-card" id="quickAddCard" style="margin-bottom:16px;">
     <form method="post" class="stack" autocomplete="off">
       {% if quick_error %}
       <div class="alert">{{ quick_error }}</div>
@@ -188,6 +191,22 @@
         <label>
           Expense no
           <input type="text" value="{{ quick_expense_no or '' }}" readonly>
+        </label>
+
+        <label id="quickCategoryLabel" class="{% if quick_form and quick_form.get('is_repair') == '1' %}is-hidden{% endif %}">
+          Category
+          <input type="text"
+                 name="category"
+                 id="quickCategoryInput"
+                 list="categoryOptions"
+                 placeholder="e.g. Tea, EB, Rent"
+                 autocomplete="off"
+                 value="{{ (quick_form.get('category') if quick_form else '') or '' }}">
+          <datalist id="categoryOptions">
+            {% for cat in category_tabs %}
+            <option value="{{ cat }}"></option>
+            {% endfor %}
+          </datalist>
         </label>
 
         <label>
@@ -222,6 +241,26 @@
       </div>
     </form>
   </section>
+
+  <div class="modal-overlay" id="category-modal">
+    <div class="modal-card" style="max-width:360px;">
+      <div class="modal-head">
+        <div class="modal-title">Add New Category</div>
+        <button class="modal-close" type="button" id="category-modal-close">×</button>
+      </div>
+      <div style="padding:16px;">
+        <label style="display:flex; flex-direction:column; gap:6px;">
+          Category name
+          <input type="text" id="newCategoryNameInput" placeholder="e.g. Tea, EB, Rent" autocomplete="off">
+        </label>
+        <div id="categoryModalError" class="alert is-hidden" style="margin-top:10px;"></div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+          <button type="button" class="btn ghost" id="categoryModalCancel">Cancel</button>
+          <button type="button" class="btn primary" id="categoryModalSave">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <section class="card expense-summary">
     <div class="expense-summary-head">
@@ -279,7 +318,11 @@
 
     <div class="tabs-bar" role="tablist" aria-label="Expense tabs">
       <a href="{{ url_for('expense_dashboard', type='expense') }}"
-        class="tab-chip {{ 'active' if filter_type == 'expense' else '' }}">Expense</a>
+        class="tab-chip {{ 'active' if filter_type == 'expense' and not category_filter else '' }}">All</a>
+      {% for cat in category_tabs %}
+      <a href="{{ url_for('expense_dashboard', type='expense', category=cat) }}"
+        class="tab-chip {{ 'active' if filter_type == 'expense' and category_filter|lower == cat|lower else '' }}">{{ cat }}</a>
+      {% endfor %}
       <a href="{{ url_for('expense_dashboard', type='repair') }}"
         class="tab-chip {{ 'active' if filter_type == 'repair' else '' }}">Repair</a>
     </div>
@@ -351,6 +394,7 @@
       <div class="list-row list-head">
         <div>Expense No</div>
         <div>Name</div>
+        <div>Category</div>
         <div>Amount</div>
         <div>Date</div>
         <div>Actions</div>
@@ -359,6 +403,7 @@
       <div class="list-row">
         <div>{{ e.expense_no }}</div>
         <div><strong>{{ e.expense_name }}</strong></div>
+        <div>{{ e.category or "-" }}</div>
         <div>₹ {{ e.amount }}</div>
         <div>{{ e.created_at|date_dmy }}</div>
         <!-- <div class="list-actions">
@@ -496,15 +541,118 @@
     const repairCheck = document.getElementById("quickRepairCheck");
     const vehicleLabel = document.getElementById("quickVehicleLabel");
     const vehicleInput = document.getElementById("quickVehicleNumber");
+    const categoryLabel = document.getElementById("quickCategoryLabel");
+    const categoryInput = document.getElementById("quickCategoryInput");
     function syncQuickRepair() {
       if (!repairCheck || !vehicleLabel || !vehicleInput) return;
       const on = !!repairCheck.checked;
       vehicleLabel.classList.toggle("is-hidden", !on);
       vehicleInput.required = on;
       if (!on) vehicleInput.value = "";
+      if (categoryLabel && categoryInput) {
+        categoryLabel.classList.toggle("is-hidden", on);
+        categoryInput.required = !on;
+        if (on) categoryInput.value = "";
+      }
     }
     if (repairCheck) repairCheck.addEventListener("change", syncQuickRepair);
     syncQuickRepair();
+
+    const openQuickAddBtn = document.getElementById("openQuickAddBtn");
+    // ---- Add-category popup ----
+    const categoryModal = document.getElementById("category-modal");
+    const openCategoryPopupBtn = document.getElementById("openCategoryPopupBtn");
+    const categoryModalClose = document.getElementById("category-modal-close");
+    const categoryModalCancel = document.getElementById("categoryModalCancel");
+    const categoryModalSave = document.getElementById("categoryModalSave");
+    const newCategoryNameInput = document.getElementById("newCategoryNameInput");
+    const categoryModalError = document.getElementById("categoryModalError");
+    const categoryOptionsList = document.getElementById("categoryOptions");
+    const tabsBar = document.querySelector(".tabs-bar");
+
+    function openCategoryModal() {
+      if (!categoryModal) return;
+      if (categoryModalError) {
+        categoryModalError.classList.add("is-hidden");
+        categoryModalError.textContent = "";
+      }
+      if (newCategoryNameInput) newCategoryNameInput.value = "";
+      categoryModal.classList.add("open");
+      if (newCategoryNameInput) newCategoryNameInput.focus();
+    }
+    function closeCategoryModal() {
+      if (categoryModal) categoryModal.classList.remove("open");
+    }
+    if (openCategoryPopupBtn) openCategoryPopupBtn.addEventListener("click", openCategoryModal);
+    if (openQuickAddBtn) openQuickAddBtn.addEventListener("click", openCategoryModal);
+    if (categoryModalClose) categoryModalClose.addEventListener("click", closeCategoryModal);
+    if (categoryModalCancel) categoryModalCancel.addEventListener("click", closeCategoryModal);
+    if (categoryModal) {
+      categoryModal.addEventListener("click", (event) => {
+        if (event.target === categoryModal) closeCategoryModal();
+      });
+    }
+
+    async function saveNewCategory() {
+      const name = (newCategoryNameInput ? newCategoryNameInput.value : "").trim();
+      if (!name) {
+        if (categoryModalError) {
+          categoryModalError.textContent = "Please enter a category name.";
+          categoryModalError.classList.remove("is-hidden");
+        }
+        return;
+      }
+      try {
+        const resp = await fetch("{{ url_for('expense_category_add') }}", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "name=" + encodeURIComponent(name),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.error || "Unable to add category.");
+        }
+
+        const savedName = data.name || name;
+
+        // Add to the datalist so it shows up as soon as the user types.
+        if (categoryOptionsList && !Array.from(categoryOptionsList.options).some((o) => o.value.toLowerCase() === savedName.toLowerCase())) {
+          const opt = document.createElement("option");
+          opt.value = savedName;
+          categoryOptionsList.appendChild(opt);
+        }
+
+        // Add a tab chip immediately (before the Repair tab) if it's not already there.
+        if (tabsBar) {
+          const repairTab = Array.from(tabsBar.querySelectorAll(".tab-chip")).find((a) => a.textContent.trim() === "Repair");
+          const already = Array.from(tabsBar.querySelectorAll(".tab-chip")).some((a) => a.textContent.trim().toLowerCase() === savedName.toLowerCase());
+          if (!already && repairTab) {
+            const a = document.createElement("a");
+            a.className = "tab-chip";
+            a.textContent = savedName;
+            a.href = "{{ url_for('expense_dashboard', type='expense') }}&category=" + encodeURIComponent(savedName);
+            tabsBar.insertBefore(a, repairTab);
+          }
+        }
+
+        if (categoryInput) categoryInput.value = savedName;
+        closeCategoryModal();
+      } catch (err) {
+        if (categoryModalError) {
+          categoryModalError.textContent = err.message || "Unable to add category.";
+          categoryModalError.classList.remove("is-hidden");
+        }
+      }
+    }
+    if (categoryModalSave) categoryModalSave.addEventListener("click", saveNewCategory);
+    if (newCategoryNameInput) {
+      newCategoryNameInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          saveNewCategory();
+        }
+      });
+    }
 
     const incomeModal = document.getElementById("income-modal");
     const incomeOpen = document.querySelector('[data-income="advance"]');

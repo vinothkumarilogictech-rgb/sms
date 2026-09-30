@@ -1,0 +1,2156 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    background: #eef6ff;
+  }
+  .veh-pane.is-lavender-card,
+  .veh-proof-card.is-lavender-card {
+    background: linear-gradient(135deg, #f1e6ff 0%, #e4d2fb 100%);
+    border-color: #d3b9ef;
+    box-shadow: 0 12px 26px rgba(107, 79, 158, 0.10);
+  }
+  .veh-pane.is-lavender-card .veh-pane-title strong,
+  .veh-pane.is-lavender-card .veh-pane-title span,
+  .veh-pane.is-lavender-card .seller-form-grid label > span,
+  .veh-pane.is-lavender-card .vehicle-form-grid label > span,
+  .veh-proof-card.is-lavender-card strong {
+    color: #4c2f73;
+  }
+  .veh-shell {
+    display: grid;
+    gap: 12px;
+  }
+  .veh-head-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .veh-photo-box {
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: start;
+    min-height: 0;
+    justify-items: center;
+  }
+  .veh-photo-box .veh-photo-icon {
+    width: 100%;
+    height: 180px;
+    border-radius: 12px;
+    border: 1px dashed #dbc7ef;
+    display: grid;
+    place-items: center;
+    color: #3d66e0;
+    background: #f2ebff;
+    font-size: 2.5rem;
+  }
+  .veh-photo-box input[type="file"] {
+    display: none;
+  }
+  .veh-photo-slider {
+    display: none;
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    min-height: 240px;
+    width: 100%;
+    max-width: 100%;          /* Fixed: Stops slide wrapper from stretching outward */
+    box-sizing: border-box;   /* Fixed: includes borders and padding in width */
+    grid-column: auto;
+  }
+  .veh-photo-slider.has-items {
+    display: block;
+  }
+  .veh-photo-track {
+    display: flex;
+    width: 100%;              /* Fixed: track stays within layout bounds */
+    transition: transform 0.25s ease;
+    will-change: transform;
+    height: 100%;
+  }
+  .veh-photo-preview-card {
+    position: relative;
+    flex: 0 0 100%;           /* Fixed: slide remains exactly 100% of viewport width */
+    width: 100%;
+    max-width: 100%;
+    background: #fffdfd;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+  .veh-photo-preview-card img {
+    width: 100%;
+    height: 200px;
+    object-fit: contain;
+    display: block;
+    background: #fffdfd;
+    padding: 10px;
+  }
+  .veh-photo-preview-name {
+    padding: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #3f2265;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: #f8fafc;
+    border-top: 1px solid rgba(148, 163, 184, 0.15);
+    text-align: center;
+  }
+  .veh-photo-remove {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.78);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    z-index: 5;
+  }
+  .veh-photo-remove:hover {
+    background: #dc2626;
+  }
+  .veh-photo-nav {
+    position: absolute;
+    top: 45%;
+    transform: translateY(-50%);
+    width: 38px;
+    height: 38px;
+    border: 1px solid #d7c1ee;
+    border-radius: 999px;
+    background: #fffdfd;
+    color: #34224f;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    z-index: 3;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  }
+  .veh-photo-nav:hover {
+    background: #f0e4fb;
+    color: #4a2370;
+  }
+  .veh-photo-nav.prev {
+    left: 10px;
+  }
+  .veh-photo-nav.next {
+    right: 10px;
+  }
+  .veh-photo-dots {
+    position: absolute;
+    bottom: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 4;
+  }
+  .veh-photo-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    transition: background 0.2s;
+  }
+  .veh-photo-dot.active {
+    background: #3f2265;
+  }
+  .veh-two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .pi-box .veh-two-col {
+    grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+  }
+  .veh-two-col.reverse {
+    grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr);
+  }
+  .veh-pane {
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 18px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    padding: 14px;
+    min-width: 0;
+    height: 100%;
+  }
+  .pi-box .veh-pane {
+    padding: 10px 12px;
+  }
+  .veh-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 14px;
+    align-items: start;
+  }
+  .veh-form-grid label {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+  }
+  .veh-form-grid .span-2 {
+    grid-column: span 2;
+  }
+  .veh-form-grid.single-col {
+    grid-template-columns: 1fr;
+  }
+  .seller-form-grid {
+    gap: 12px;
+  }
+  .pi-box .seller-form-grid {
+    gap: 8px;
+  }
+  .seller-form-grid label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 50px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .seller-form-grid label > span {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex: 0 0 128px;
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .pi-box .seller-form-grid label {
+    min-height: 42px;
+  }
+  .seller-form-grid label > span::after {
+    content: ":";
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 8px;
+  }
+  .seller-form-grid label > input {
+    border: 1px solid var(--line);
+    outline: 0;
+    box-shadow: none;
+    background: #fff;
+    padding: 0 14px;
+    min-height: 42px;
+    width: min(100%, 320px);
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    border-radius: 10px;
+  }
+  .seller-form-grid label > select {
+    border: 1px solid var(--line);
+    outline: 0;
+    box-shadow: none;
+    background: #fff;
+    padding: 0 14px;
+    min-height: 42px;
+    width: min(100%, 320px);
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    border-radius: 10px;
+  }
+
+  .seller-form-grid label.veh-toggle {
+    gap: 10px;
+  }
+
+  .seller-form-grid label.veh-toggle > input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    accent-color: var(--accent);
+    flex: 0 0 auto;
+  }
+
+  .seller-form-grid label.veh-toggle .veh-toggle-text {
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #0f172a;
+    white-space: nowrap;
+  }
+  .seller-form-grid label > input:focus {
+    border-color: #94a3b8;
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+  }
+  .seller-form-grid label > select:focus {
+    border-color: #94a3b8;
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+  }
+  .seller-form-grid label > input::placeholder {
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .inventory-repair-card .remove-inventory-expense-row {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+  }
+
+  .inventory-repair-card .remove-inventory-expense-row:hover {
+    background: rgba(220, 38, 38, 0.12);
+  }
+  .veh-pane-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .veh-pane-title i {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: #eff6ff;
+    color: #2563eb;
+  }
+  .veh-pane-title strong {
+    display: block;
+    color: #0f172a;
+    font-size: 1rem;
+  }
+  .veh-pane-title span {
+    color: #64748b;
+    font-size: 0.86rem;
+  }
+  .veh-photo-box.tight {
+    min-height: 0;
+    justify-content: start;
+    text-align: left;
+    padding: 0;
+    width: 100%;
+  }
+  .veh-photo-trigger {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    display: block;
+    width: 100%;
+    cursor: pointer;
+  }
+  .veh-photo-trigger:hover .veh-photo-icon {
+    border-color: #3d66e0;
+    box-shadow: 0 0 0 3px rgba(61, 102, 224, 0.14);
+  }
+  .veh-doc-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 15px;
+  }
+  .veh-doc-item {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 10px;
+    border: 1px dashed rgba(148, 163, 184, 0.38);
+    border-radius: 12px;
+    background: #fff;
+  }
+  .veh-doc-item label {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    justify-items: stretch;
+    cursor: pointer;
+  }
+  .veh-doc-item strong {
+    font-size: 0.8rem;
+    color: #0f172a;
+  }
+  .veh-doc-item input[type="file"] {
+    display: none;
+  }
+  .veh-doc-upload-card {
+    height: 102px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 12px;
+    background: linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 10px;
+    gap: 6px;
+    color: #475569;
+    font-size: 0.75rem;
+    font-weight: 700;
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
+  }
+  .veh-doc-upload-card i {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: #fff;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #2563eb;
+    font-size: 1rem;
+  }
+  .veh-doc-upload-card img {
+    width: 100%;
+    height: 80px;
+    object-fit: contain;
+    border-radius: 10px;
+    display: block;
+    background: #f8fafc;
+  }
+  .veh-doc-upload-card .veh-doc-card-copy {
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+  }
+  .veh-doc-upload-card .veh-doc-card-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #334155;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .veh-doc-upload-card[data-has-image="1"] {
+    padding: 6px;
+    display: block;
+  }
+  .veh-doc-upload-card[data-has-image="1"] .veh-doc-card-copy {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.85) 100%);
+  }
+  .veh-doc-upload-card[data-has-image="1"] .veh-doc-card-name {
+    color: #fff;
+  }
+  .veh-doc-preview {
+    display: none !important;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    padding: 5px;
+    border-radius: 6px;
+    background: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    min-height: 78px;
+  }
+  .veh-doc-item.compact-upload input[type="file"] {
+    display: none;
+  }
+  .gst-inline::after {
+    content: none !important;
+  }
+  .veh-doc-thumb,
+  .veh-doc-icon {
+    width: 100%;
+    height: 68px;
+    border-radius: 5px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: #fff;
+    flex: 0 0 auto;
+  }
+  .veh-doc-thumb {
+    display: none;
+    object-fit: cover;
+    cursor: pointer;
+  }
+  .veh-doc-preview[data-is-image="1"] .veh-doc-thumb {
+    display: block;
+  }
+  .veh-doc-preview[data-is-image="1"] .veh-doc-icon {
+    display: none;
+  }
+  .veh-doc-icon {
+    display: grid;
+    place-items: center;
+    color: #2563eb;
+  }
+  .veh-doc-name {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #334155;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  .vehicle-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 0.9rem;
+    gap: 14px 18px;
+  }
+  .vehicle-form-grid:first-of-type {
+    margin-top: 0;
+  }
+  .vehicle-form-grid label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 46px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .vehicle-form-grid .span-2 {
+    grid-column: span 2;
+  }
+  .vehicle-form-grid label > span {
+    flex: 0 0 155px;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: var(--ink);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+  }
+  .vehicle-form-grid label:not(.veh-kv) > span::after {
+    content: ":";
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 8px;
+  }
+  .vehicle-form-grid label > span.gst-inline::after {
+    content: none !important;
+    padding-left: 0;
+    margin-left: 0;
+  }
+  .vehicle-form-grid label > input,
+  .vehicle-form-grid label > select,
+  .vehicle-form-grid label > textarea {
+    width: min(100%, 320px);
+    min-height: 42px;
+    padding: 0 10px;
+    font-size: 0.92rem;
+    border-radius: 10px;
+  }
+  .vehicle-form-grid label > textarea {
+    min-height: 78px;
+    padding: 10px 10px;
+    resize: vertical;
+  }
+
+  /* Vehicle details layout (label : control like screenshot) */
+  .vehicle-form-grid label.veh-kv {
+    display: grid;
+    grid-template-columns: 150px 14px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+  }
+  .vehicle-form-grid label.veh-kv > span {
+    flex: unset;
+    width: auto;
+  }
+  .vehicle-form-grid label.veh-kv > span::after {
+    content: none !important;
+  }
+  .vehicle-form-grid label.veh-kv > .sep {
+    text-align: center;
+    font-weight: 900;
+    color: rgba(15, 23, 42, 0.55);
+  }
+  .vehicle-form-grid label.veh-kv > input,
+  .vehicle-form-grid label.veh-kv > select,
+  .vehicle-form-grid label.veh-kv > textarea,
+  .vehicle-form-grid label.veh-kv > .gst-inline,
+  .vehicle-form-grid label.veh-kv > .veh-kv-toggle {
+    width: 100%;
+    max-width: none;
+  }
+  .vehicle-form-grid label.veh-kv > .veh-kv-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    min-height: 42px;
+  }
+  .vehicle-form-grid label.veh-kv > .veh-kv-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+  .vehicle-form-grid label.veh-kv > .veh-kv-toggle .veh-toggle-text {
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #0f172a;
+    white-space: nowrap;
+  }
+  .veh-proof-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  .veh-proof-card {
+    border: 1px solid #dcc4ef !important;
+    border-radius: 14px;
+    background: #fffdfd !important;
+    padding: 20px !important; /* Adds breathing room inside the white card */
+    display: grid;
+    gap: 16px !important;    /* Pushes the upload box down so it doesn't touch the text */
+  }
+  .veh-proof-card strong {
+    font-size: 0.88rem;
+    color: #0f172a;
+    padding-left: 20px;
+  }
+  .veh-proof-wrap {
+    display: grid;
+    gap: 12px;
+    margin-top: 20px !important;
+  }
+  .veh-proof-wrap > label {
+    display: grid;
+    gap: 8px;
+  }
+  .veh-field-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 14px;
+  }
+  .pi-tabs {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.25rem 0 0.35rem;
+  }
+  .pi-tabs .tab-btn {
+    background: transparent;
+    border-color: transparent;
+    color: #475569;
+    box-shadow: none;
+  }
+  .pi-tabs .tab-btn:hover,
+  .pi-tabs .tab-btn:active,
+  .pi-tabs .tab-btn:focus-visible {
+    background: transparent;
+    border-color: transparent;
+    color: #475569;
+    box-shadow: none;
+  }
+  .pi-tabs .tab-btn.active {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+  }
+  .pi-box {
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 0 0;
+    background: transparent;
+  }
+
+  .pi-proof {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.45rem;
+    justify-items: center;
+  }
+  .pi-proof .pi-proof-row {
+    display: block;
+    width: 100%;
+  }
+  .pi-proof input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .pi-proof .pi-proof-btn {
+    display: grid;
+    place-items: center;
+    gap: 0.5rem;
+    height: 150px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
+    cursor: pointer;
+    font-weight: 700;
+    color: #475569;
+    text-align: center;
+    padding: 10px;
+    width: 260px;
+    max-width: 100%;
+    margin-inline: auto;
+    box-sizing: border-box;
+  }
+  
+  @media (max-width: 768px) {
+    .pi-proof .pi-proof-btn {
+        width: 100%;
+    }
+  }
+  
+  .pi-proof .pi-proof-btn:hover {
+    background: var(--panel);
+  }
+  .pi-proof .pi-proof-btn i {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: #fff;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #2563eb;
+    font-size: 1rem;
+  }
+  .pi-proof .pi-proof-preview {
+    display: none;
+    position: relative;
+    align-items: center;
+    gap: 0;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    width: 100%;
+    max-width: 100%;
+    height: 150px;
+    margin-left: 0;
+    box-shadow: none;
+    justify-items: center;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .pi-proof[data-has-file="1"] .pi-proof-row {
+    display: none;
+  }
+  .pi-proof[data-has-file="1"] .pi-proof-preview {
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+  }
+  .pi-proof[data-has-file="1"] .pi-proof-preview[data-clickable="1"] {
+    cursor: pointer;
+  }
+  .pi-proof-thumb {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    border-radius: 10px;
+    border: 0;
+    object-fit: contain;
+    background: #f8fafc;
+    cursor: pointer;
+    display: block;
+  }
+  .pi-proof-name {
+    display: none;
+  }
+  .pi-proof-remove {
+    border: 0;
+    background: rgba(15, 23, 42, 0.78);
+    color: #fff;
+    border-radius: 999px;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    justify-self: end;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  .tab-panel .veh-pane:last-child .pi-proof {
+    justify-items: start;
+  }
+  .pi-proof-remove:hover {
+    background: #ef4444;
+  }
+
+  .img-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+    z-index: 9999;
+  }
+  .img-modal.open {
+    display: flex;
+  }
+  .img-modal-card {
+    background: #fff;
+    border-radius: 16px;
+    max-width: min(980px, 96vw);
+    max-height: min(740px, 86vh);
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+  .img-modal-head {
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+  }
+  .img-modal-title {
+    font-weight: 800;
+    font-size: 0.95rem;
+    margin: 0;
+  }
+  .img-modal-close {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 999px;
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .img-modal-close:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+  .img-modal-body {
+    padding: 0.85rem;
+    display: grid;
+    place-items: center;
+    background: #0b1220;
+  }
+  .img-modal-body img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    background: #111827;
+  }
+  .is-hidden {
+    display: none !important;
+  }
+  @media (max-width: 960px) {
+    .veh-two-col,
+    .veh-two-col.reverse,
+    .veh-form-grid,
+    .veh-doc-stack,
+    .veh-proof-grid {
+      grid-template-columns: 1fr;
+    }
+    .veh-field-pair {
+      grid-template-columns: 1fr;
+    }
+    .veh-form-grid .span-2 {
+      grid-column: auto;
+    }
+    .seller-form-grid label {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .seller-form-grid label > span {
+      flex: 0 0 auto;
+      width: 100%;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+    .seller-form-grid label > input,
+    .seller-form-grid label > select {
+      width: 100%;
+    }
+    .vehicle-form-grid label {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .vehicle-form-grid label > span {
+      flex: 0 0 auto;
+      width: 100%;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+    .vehicle-form-grid label > input,
+    .vehicle-form-grid label > select,
+    .vehicle-form-grid label > textarea {
+      width: 100%;
+    }
+    .vehicle-form-grid label.veh-kv {
+      grid-template-columns: 1fr;
+    }
+    .vehicle-form-grid label.veh-kv > .sep {
+      display: none;
+    }
+    .veh-doc-item {
+      grid-template-columns: 1fr;
+    }
+    .veh-doc-preview {
+      min-width: 0;
+      width: 100%;
+    }
+    .pi-proof .pi-proof-preview {
+      margin-left: 0;
+      width: 100%;
+    }
+  }
+
+  @media screen and (max-width: 768px) {
+    .veh-two-col,
+    .veh-two-col.reverse,
+    .pi-box .veh-two-col {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+    }
+    .veh-pane {
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>Add New Vehicle</h1>
+  </div>
+  <div class="veh-head-actions">
+    <a class="btn ghost js-back-button" href="{{ url_for('inventory') }}" data-fallback="{{ url_for('inventory') }}">Back</a>
+    <button class="btn primary" type="submit" form="vehicle-add-form"><i class="bi bi-check2-square"></i> Save Vehicle</button>
+  </div>
+</div>
+
+<form method="post" id="vehicle-add-form" class="veh-shell" enctype="multipart/form-data">
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="card seller-details-card">
+    <div class="section-title">
+      <i class="bi bi-person-vcard" aria-hidden="true"></i>
+      <span>Purchase Details</span>
+    </div>
+    <div class="pi-tabs" role="tablist" aria-label="Purchase information tabs">
+      <button type="button" class="tab-btn active" data-tab="purchase_direct" data-purchase-mode="direct">Direct</button>
+      <button type="button" class="tab-btn" data-tab="purchase_agent" data-purchase-mode="agent">Agent</button>
+      <button type="button" class="tab-btn" data-tab="purchase_finance" data-purchase-mode="finance">Finance</button>
+      <button type="button" class="tab-btn" data-tab="purchase_branch" data-purchase-mode="branch">Consultant</button>
+    </div>
+
+    <input type="hidden" name="purchase_mode" id="purchase_mode" value="direct" />
+    <input type="hidden" name="pi_has_co" id="pi_has_co_hidden" value="0" />
+
+    <div class="pi-box">
+      <div class="tab-panel active" data-panel="purchase_direct" role="tabpanel">
+        <div class="veh-two-col">
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-person-lines-fill"></i>
+              <div>
+                <strong>Seller Information</strong>
+              </div>
+            </div>
+            <div class="veh-form-grid single-col seller-form-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" name="pi_direct_customer_name" placeholder="Full name" data-vehicle-req="seller_name" />
+              </label>
+              <label>
+                <span>Address</span>
+                <input type="text" name="pi_direct_customer_address" placeholder="Seller address" data-vehicle-req="seller_address" />
+              </label>
+              <label>
+                <span>Mobile</span>
+                <input type="text" name="pi_direct_customer_phone" placeholder="Mobile number" data-vehicle-req="seller_phone" />
+              </label>
+              <label>
+                <span>ID</span>
+                <input type="text" name="pi_direct_customer_id" placeholder="ID number" data-vehicle-req="seller_id" />
+              </label>
+              <label>
+                <span>Reference</span>
+                <input type="text" name="pi_direct_reference" placeholder="Reference" />
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" name="pi_direct_id_proof_ref" data-default-today data-vehicle-req="seller_id_date" />
+              </label>
+            </div>
+          </div>
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-image"></i>
+              <div>
+                <strong>ID Proof Image</strong>
+              </div>
+            </div>
+            <div class="veh-proof-wrap">
+              <div class="veh-proof-card">
+                <strong>ID Proof Image</strong>
+                <div class="pi-proof" data-proof>
+                  <div class="pi-proof-row">
+                    <label class="pi-proof-btn" for="pi_direct_id_proof_file"><i class="bi bi-person-vcard"></i><span>Click to upload ID Proof</span></label>
+                    <input id="pi_direct_id_proof_file" type="file" name="pi_direct_id_proof_file" accept="image/*" data-proof-file />
+                  </div>
+                  <div class="pi-proof-preview" data-proof-preview>
+                    <img class="pi-proof-thumb" alt="ID proof preview" data-proof-thumb />
+                    <span class="pi-proof-name" data-proof-name></span>
+                    <button class="pi-proof-remove" type="button" aria-label="Remove attachment" data-proof-remove>
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="purchase_agent" role="tabpanel">
+        <div class="veh-two-col">
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-person-lines-fill"></i>
+              <div>
+                <strong>Seller Information</strong>
+              </div>
+            </div>
+            <div class="veh-form-grid single-col seller-form-grid">
+              <label>
+                <span>Agent Name</span>
+                <input type="text" name="pi_agent_customer_name" placeholder="Agent name" data-vehicle-req="seller_name" />
+              </label>
+              <label>
+                <span>Address</span>
+                <input type="text" name="pi_agent_address" placeholder="Agent address" data-vehicle-req="seller_address" />
+              </label>
+              <label>
+                <span>Mobile</span>
+                <input type="text" name="pi_agent_customer_phone" placeholder="Mobile number" data-vehicle-req="seller_phone" />
+              </label>
+              <label>
+                <span>ID</span>
+                <input type="text" name="pi_agent_customer_id" placeholder="ID number" data-vehicle-req="seller_id" />
+              </label>
+              <label>
+                <span>Reference</span>
+                <input type="text" name="pi_agent_reference" placeholder="Reference" />
+              </label>
+              <label>
+                <span>Commission</span>
+                <input type="number" step="0.01" min="0" name="pi_agent_commission" placeholder="Commission amount" />
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" name="pi_agent_id_proof_ref" data-default-today data-vehicle-req="seller_id_date" />
+              </label>
+            </div>
+          </div>
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-image"></i>
+              <div>
+                <strong>ID Proof Image</strong>
+              </div>
+            </div>
+            <div class="veh-proof-wrap">
+              <div class="veh-proof-card">
+                <strong>ID Proof Image</strong>
+                <div class="pi-proof" data-proof>
+                  <div class="pi-proof-row">
+                    <label class="pi-proof-btn" for="pi_agent_id_proof_file"><i class="bi bi-person-vcard"></i><span>Click to upload ID Proof</span></label>
+                    <input id="pi_agent_id_proof_file" type="file" name="pi_agent_id_proof_file" accept="image/*" data-proof-file />
+                  </div>
+                  <div class="pi-proof-preview" data-proof-preview>
+                    <img class="pi-proof-thumb" alt="ID proof preview" data-proof-thumb />
+                    <span class="pi-proof-name" data-proof-name></span>
+                    <button class="pi-proof-remove" type="button" aria-label="Remove attachment" data-proof-remove>
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="purchase_finance" role="tabpanel">
+        <div class="veh-two-col">
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-person-lines-fill"></i>
+              <div>
+                <strong>Seller Information</strong>
+              </div>
+            </div>
+            <div class="veh-form-grid single-col seller-form-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" name="pi_finance_customer_name" placeholder="Finance name" data-vehicle-req="seller_name" />
+              </label>
+              <label>
+                <span>Address</span>
+                <input type="text" name="pi_finance_address" placeholder="Finance address" data-vehicle-req="seller_address" />
+              </label>
+              <label>
+                <span>Mobile</span>
+                <input type="text" name="pi_finance_customer_phone" placeholder="Mobile number" data-vehicle-req="seller_phone" />
+              </label>
+              <label>
+                <span>ID</span>
+                <input type="text" name="pi_finance_customer_id" placeholder="ID number" data-vehicle-req="seller_id" />
+              </label>
+              <label>
+                <span>Reference</span>
+                <input type="text" name="pi_finance_reference" placeholder="Reference" />
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" name="pi_finance_id_proof_ref" data-default-today data-vehicle-req="seller_id_date" />
+              </label>
+            </div>
+          </div>
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-image"></i>
+              <div>
+                <strong>ID Proof Image</strong>
+              </div>
+            </div>
+            <div class="veh-proof-wrap">
+              <div class="veh-proof-card">
+                <strong>ID Proof Image</strong>
+                <div class="pi-proof" data-proof>
+                  <div class="pi-proof-row">
+                    <label class="pi-proof-btn" for="pi_finance_id_proof_file"><i class="bi bi-person-vcard"></i><span>Click to upload ID Proof</span></label>
+                    <input id="pi_finance_id_proof_file" type="file" name="pi_finance_id_proof_file" accept="image/*" data-proof-file />
+                  </div>
+                  <div class="pi-proof-preview" data-proof-preview>
+                    <img class="pi-proof-thumb" alt="ID proof preview" data-proof-thumb />
+                    <span class="pi-proof-name" data-proof-name></span>
+                    <button class="pi-proof-remove" type="button" aria-label="Remove attachment" data-proof-remove>
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="purchase_branch" role="tabpanel">
+        <div class="veh-two-col">
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-person-lines-fill"></i>
+              <div>
+                <strong>Seller Information</strong>
+              </div>
+            </div>
+            <div class="veh-form-grid single-col seller-form-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" name="pi_branch_customer_name" placeholder="Consultant name" data-vehicle-req="seller_name" />
+              </label>
+              <label>
+                <span>Address</span>
+                <input type="text" name="pi_branch_address" placeholder="Consultant address" data-vehicle-req="seller_address" />
+              </label>
+              <label>
+                <span>Mobile</span>
+                <input type="text" name="pi_branch_customer_phone" placeholder="Mobile number" data-vehicle-req="seller_phone" />
+              </label>
+              <label>
+                <span>ID</span>
+                <input type="text" name="pi_branch_customer_id" placeholder="ID number" data-vehicle-req="seller_id" />
+              </label>
+              <label>
+                <span>Reference</span>
+                <input type="text" name="pi_branch_reference" placeholder="Reference" />
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" name="pi_branch_id_proof_ref" data-default-today data-vehicle-req="seller_id_date" />
+              </label>
+            </div>
+          </div>
+          <div class="veh-pane">
+            <div class="veh-pane-title">
+              <i class="bi bi-image"></i>
+              <div>
+                <strong>ID Proof Image</strong>
+              </div>
+            </div>
+            <div class="veh-proof-wrap">
+              <div class="veh-proof-card">
+                <strong>ID Proof Image</strong>
+                <div class="pi-proof" data-proof>
+                  <div class="pi-proof-row">
+                    <label class="pi-proof-btn" for="pi_branch_id_proof_file"><i class="bi bi-person-vcard"></i><span>Click to upload ID Proof</span></label>
+                    <input id="pi_branch_id_proof_file" type="file" name="pi_branch_id_proof_file" accept="image/*" data-proof-file />
+                  </div>
+                  <div class="pi-proof-preview" data-proof-preview>
+                    <img class="pi-proof-thumb" alt="ID proof preview" data-proof-thumb />
+                    <span class="pi-proof-name" data-proof-name></span>
+                    <button class="pi-proof-remove" type="button" aria-label="Remove attachment" data-proof-remove>
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label style="display:flex; align-items:center; gap:10px; font-weight:800; color:#3f2265;">
+        <input type="checkbox" id="piCoToggle">
+        <span>Add Co-Buyer / Co-Seller</span>
+      </label>
+    </div>
+
+    <div class="veh-two-col is-hidden" id="piCoDetails" style="margin-top:10px;">
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-person-lines-fill"></i>
+          <div>
+            <strong>Co Details</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid single-col seller-form-grid">
+          <label>
+            <span>Name</span>
+            <input type="text" name="pi_co_name" placeholder="Full name" data-co-field="co_name" />
+          </label>
+          <label>
+            <span>Address</span>
+            <input type="text" name="pi_co_address" placeholder="Address" data-co-field="co_address" />
+          </label>
+          <label>
+            <span>Mobile</span>
+            <input type="text" name="pi_co_phone" placeholder="Mobile number" data-co-field="co_phone" />
+          </label>
+          <label>
+            <span>ID</span>
+            <input type="text" name="pi_co_id" placeholder="ID number" data-co-field="co_id" />
+          </label>
+          <label>
+            <span>Date</span>
+            <input type="date" name="pi_co_id_proof_ref" data-default-today data-co-field="co_id_date" />
+          </label>
+        </div>
+      </div>
+      <div class="veh-pane">
+        <div class="veh-pane-title">
+          <i class="bi bi-image"></i>
+          <div>
+            <strong>Co ID Proof Image</strong>
+          </div>
+        </div>
+        <div class="veh-proof-wrap">
+          <div class="veh-proof-card">
+            <strong>Co ID Proof Image</strong>
+            <div class="pi-proof" data-proof>
+              <div class="pi-proof-row">
+                <label class="pi-proof-btn" for="pi_co_id_proof_file"><i class="bi bi-person-vcard"></i><span>Click to upload ID Proof</span></label>
+                <input id="pi_co_id_proof_file" type="file" name="pi_co_id_proof_file" accept="image/*" data-proof-file />
+              </div>
+              <div class="pi-proof-preview" data-proof-preview>
+                <img class="pi-proof-thumb" alt="ID proof preview" data-proof-thumb />
+                <span class="pi-proof-name" data-proof-name></span>
+                <button class="pi-proof-remove" type="button" aria-label="Remove attachment" data-proof-remove>
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <i class="icon-motorbike" aria-hidden="true"></i>
+      <span>Vehicle Details</span>
+    </div>
+
+    <div class="veh-two-col reverse">
+      <div class="veh-pane is-lavender-card">
+        <div class="veh-pane-title">
+          <i class="bi bi-card-checklist"></i>
+          <div>
+            <strong>Vehicle Information</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid seller-form-grid vehicle-form-grid">
+          <label class="veh-kv">
+            <span>Vehicle Brand</span><span class="sep">:</span>
+            <input type="text" name="vehicle_name" required placeholder="e.g. Honda Activa" />
+          </label>
+          <label class="veh-kv">
+            <span>Vehicle Number</span><span class="sep">:</span>
+            <input type="text" name="vehicle_number" required placeholder="TN-XX-XXXX" />
+          </label>
+          <label class="veh-kv">
+            <span>Model Year</span><span class="sep">:</span>
+            <input type="number" name="model_year" {% if app_setting('vehicle_add_required_model_year', '1') == '1' %}required{% endif %} placeholder="YYYY" min="1900" max="2100" />
+          </label>
+          <label class="veh-kv">
+            <span>Chassis No</span><span class="sep">:</span>
+            <input type="text" name="registration_no" {% if app_setting('vehicle_add_required_chassis_no', '0') == '1' %}required{% endif %} placeholder="Chassis no." />
+          </label>
+          <label class="veh-kv">
+            <span>Kilometer</span><span class="sep">:</span>
+            <input type="text" name="kms_driven" {% if app_setting('vehicle_add_required_kilometers', '0') == '1' %}required{% endif %} placeholder="Kilometer" />
+          </label>
+          <label class="veh-kv">
+            <span>No. of Owners</span><span class="sep">:</span>
+            <input type="number" name="owners" {% if app_setting('vehicle_add_required_owners', '1') == '1' %}required{% endif %} placeholder="1" min="0" />
+          </label>
+          <label class="span-2 veh-kv">
+            <span>Hypothecation</span><span class="sep">:</span>
+            <span class="veh-kv-toggle">
+              <input type="checkbox" id="hypothecationEnabled" name="hypothecation_enabled" value="1" />
+              <span class="veh-toggle-text">Yes</span>
+            </span>
+          </label>
+          <label id="hypothecationNameWrap" class="veh-kv is-hidden">
+            <span>Hypothecation Name</span><span class="sep">:</span>
+            <input type="text" name="hypothecation_name" placeholder="Hypothecation name" />
+          </label>
+          <label class="span-2 veh-kv">
+            <span>Insurance</span><span class="sep">:</span>
+            <span class="veh-kv-toggle">
+              <input type="checkbox" id="insuranceEnabled" name="insurance_enabled" value="1" checked />
+              <span class="veh-toggle-text">Yes</span>
+            </span>
+          </label>
+          <label id="insuranceStartDateWrap" class="veh-kv">
+            <span>Insurance Start Date</span><span class="sep">:</span>
+            <input type="date" id="insuranceStartDate" name="insurance_start_date" />
+          </label>
+          <label id="insuranceEndDateWrap" class="veh-kv">
+            <span>Insurance End Date</span><span class="sep">:</span>
+            <input type="date" id="insuranceEndDate" name="insurance_end_date" />
+          </label>
+          <label class="veh-kv">
+            <span>RC Number</span><span class="sep">:</span>
+            <input type="text" name="rc_number" {% if app_setting('vehicle_add_required_rc_number', '1') == '1' %}required{% endif %} placeholder="RC number" />
+          </label>
+          <label class="veh-kv">
+            <span>Status</span><span class="sep">:</span>
+            <select name="status">
+              <option value="Available" selected>Available</option>
+              <option value="Sold">Sold</option>
+              <option value="In Progress">In Progress</option>
+              <option value="In Repair">In Repair</option>
+            </select>
+          </label>
+
+          <label class="veh-kv">
+            <span>RC Owner Name</span><span class="sep">:</span>
+            <input type="text" name="rc_owner_name" placeholder="RC owner name" />
+          </label>
+          <label class="veh-kv">
+            <span>Selling Cost</span><span class="sep">:</span>
+            <input type="number" step="0.01" min="0" name="selling_cost" placeholder="Selling price" />
+          </label>
+          <label class="span-2 veh-kv">
+            <span>RC Owner Address</span><span class="sep">:</span>
+            <input type="text" name="rc_owner_address" placeholder="RC owner address" />
+          </label>
+
+          <label class="span-2 veh-kv">
+            <span>Remark if any</span><span class="sep">:</span>
+            <textarea name="remarks" placeholder="Remark if any"></textarea>
+          </label>
+          <label class="span-2 veh-kv">
+            <span>Fine Details</span><span class="sep">:</span>
+            <textarea name="fine_details" placeholder="Fine details"></textarea>
+          </label>
+          <label class="span-2 veh-kv">
+            <span>Sale GST</span><span class="sep">:</span>
+            <span class="gst-inline" style="display:flex; align-items:center; gap:0.6rem; font-weight:700; min-height:44px;">
+              <input type="checkbox" name="sale_gst_enabled" value="1">
+              <span>Apply GST for this bike</span>
+              <span class="muted" style="font-weight:500;">
+                {% if app_setting('gst_value_mode', 'percent') == 'amount' %}
+                  Default Rs {{ app_setting('default_gst_amount', '0') }}
+                {% else %}
+                  Default {{ app_setting('default_gst_percent', '0') }}%
+                {% endif %}
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="veh-pane is-lavender-card">
+        <div class="veh-pane-title">
+          <i class="bi bi-images"></i>
+          <div>
+            <strong>Bike Image And Documents</strong>
+          </div>
+        </div>
+        <div class="muted" style="margin-top:0.2rem;font-size:0.8rem;margin-bottom:0.8rem;">Each vehicle image must be 5 MB or smaller.</div>
+        
+        <div class="veh-photo-box tight">
+          <label class="veh-photo-trigger" for="unified_bike_photos" id="slider-placeholder-label">
+            <div class="veh-photo-icon">
+              <i class="bi bi-bicycle"></i>
+            </div>
+            <div style="text-align: center; font-size: 0.82rem; font-weight:700; margin-top: 6px; color:#475569;">
+              Click to upload Bike Images (Max 4)
+            </div>
+          </label>
+          <input type="file" id="unified_bike_photos" name="photo" accept="image/*" multiple />
+          
+          <div class="veh-photo-slider" id="unified-bike-slider">
+            <div class="veh-photo-track" id="unified-bike-track"></div>
+            <button type="button" class="veh-photo-nav prev" id="slider-btn-prev"><i class="bi bi-chevron-left"></i></button>
+            <button type="button" class="veh-photo-nav next" id="slider-btn-next"><i class="bi bi-chevron-right"></i></button>
+            <div class="veh-photo-dots" id="slider-dots-container"></div>
+            <button type="button" class="veh-photo-remove" id="slider-btn-clear" aria-label="Clear images"><i class="bi bi-x-lg"></i></button>
+          </div>
+        </div>
+
+        <div class="veh-doc-stack">
+          <div class="veh-doc-item compact-upload" data-doc-item data-has-file="0">
+            <label>
+              <strong>RC Book (Front)</strong>
+              <input type="file" name="rc_book" data-doc-input />
+              <div class="veh-doc-upload-card" data-doc-card data-doc-label="RC Book (Front)" data-doc-placeholder="Click to upload RC Book (Front)" data-doc-icon="bi-file-earmark-text">
+                <div class="veh-doc-card-copy">
+                  <i class="bi bi-file-earmark-text"></i>
+                  <span class="veh-doc-card-name">Click to upload RC Book (Front)</span>
+                </div>
+              </div>
+            </label>
+            <div class="veh-doc-preview" data-doc-preview>
+              <img class="veh-doc-thumb" alt="RC Book Front preview" data-doc-thumb />
+              <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+              <span class="veh-doc-name" data-doc-name></span>
+            </div>
+          </div>
+          <div class="veh-doc-item compact-upload" data-doc-item data-has-file="0">
+            <label>
+              <strong>RC Book (Back)</strong>
+              <input type="file" name="rc_book_back" data-doc-input />
+              <div class="veh-doc-upload-card" data-doc-card data-doc-label="RC Book (Back)" data-doc-placeholder="Click to upload RC Book (Back)" data-doc-icon="bi-file-earmark-text">
+                <div class="veh-doc-card-copy">
+                  <i class="bi bi-file-earmark-text"></i>
+                  <span class="veh-doc-card-name">Click to upload RC Book (Back)</span>
+                </div>
+              </div>
+            </label>
+            <div class="veh-doc-preview" data-doc-preview>
+              <img class="veh-doc-thumb" alt="RC Book Back preview" data-doc-thumb />
+              <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+              <span class="veh-doc-name" data-doc-name></span>
+            </div>
+          </div>
+          <div class="veh-doc-item compact-upload" data-doc-item data-has-file="0" data-insurance-doc>
+            <label>
+              <strong>Insurance</strong>
+              <input type="file" name="insurance_document" data-doc-input />
+              <div class="veh-doc-upload-card" data-doc-card data-doc-label="Insurance" data-doc-placeholder="Click to upload Insurance" data-doc-icon="bi-shield-check">
+                <div class="veh-doc-card-copy">
+                  <i class="bi bi-shield-check"></i>
+                  <span class="veh-doc-card-name">Click to upload Insurance</span>
+                </div>
+              </div>
+            </label>
+            <div class="veh-doc-preview" data-doc-preview>
+              <img class="veh-doc-thumb" alt="Insurance preview" data-doc-thumb />
+              <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+              <span class="veh-doc-name" data-doc-name></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card inventory-repair-card">
+    <div class="section-title">
+      <i class="bi bi-tools" aria-hidden="true"></i>
+      <span>Add Repair</span>
+    </div>
+    <p class="muted" style="margin:0 0 14px;">Optional. Fill this section only if you want to save repair details with the vehicle.</p>
+
+    <input type="hidden" name="repair_date" value="{{ today_date }}" />
+
+    <div class="grid two">
+      <label>
+        Vehicle number
+        <input type="text" id="inventoryRepairVehicleNumber" placeholder="Vehicle number" readonly />
+      </label>
+
+      <label>
+        Amount (&#8377;)
+        <input type="number" step="0.01" min="0" name="total_cost" id="inventoryRepairTotalCost" placeholder="0.00" />
+      </label>
+    </div>
+
+    <label style="margin-top:14px;">
+      Repair description
+      <textarea name="description" rows="3" placeholder="Describe the repair work..."></textarea>
+    </label>
+  </section>
+
+  <section class="card">
+    <div class="section-title">
+      <i class="bi bi-cash-coin" aria-hidden="true"></i>
+      <span>Settlement Details</span>
+    </div>
+
+    <div class="veh-two-col reverse">
+      <div class="veh-pane is-lavender-card">
+        <div class="veh-pane-title">
+          <i class="bi bi-receipt"></i>
+          <div>
+            <strong>Payment Information</strong>
+          </div>
+        </div>
+        <div class="veh-form-grid seller-form-grid vehicle-form-grid">
+          <label>
+            <span>Purchase Price</span>
+            <input type="number" step="0.01" min="0" name="purchase_price" {% if app_setting('vehicle_add_required_purchase_price', '1') == '1' %}required{% endif %} placeholder="Purchase price" data-purchase-price />
+          </label>
+          <label>
+            <span>Settlement Status</span>
+            <select name="purchase_settlement_status" required data-purchase-settlement-status>
+              <option value="Paid">Paid</option>
+              <option value="Partial">Partial</option>
+              <option value="Unpaid">Unpaid</option>
+            </select>
+          </label>
+          <label>
+            <span>Paid Amount</span>
+            <input type="number" step="0.01" min="0" name="purchase_paid_amount" required value="0" data-purchase-paid-amount />
+          </label>
+          <label>
+            <span>Paymode</span>
+            <select name="purchase_payment_mode" required>
+              {% for mode in ["Cash", "UPI", "Bank", "GPay", "Card"] %}
+              <option value="{{ mode }}" {% if mode == "Cash" %}selected{% endif %}>{{ mode }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="span-2" id="purchasePaidAtWrap">
+            <span>Paid Date &amp; Time</span>
+            <input type="datetime-local" name="purchase_paid_at" required data-default-now />
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+</form>
+
+<div class="img-modal" id="img-modal" aria-hidden="true">
+  <div class="img-modal-card" role="dialog" aria-modal="true" aria-label="Image preview">
+    <div class="img-modal-head">
+      <p class="img-modal-title" id="img-modal-title">Attachment preview</p>
+      <button class="img-modal-close" type="button" aria-label="Close preview" id="img-modal-close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="img-modal-body">
+      <img id="img-modal-image" alt="Preview" />
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("[data-default-today]").forEach((input) => {
+    if (!(input instanceof HTMLInputElement) || input.value) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    input.value = `${year}-${month}-${day}`;
+  });
+
+  const purchaseModeInput = document.getElementById("purchase_mode");
+  const vehicleRequired = {
+    seller_name: {{ 'true' if app_setting('vehicle_add_required_seller_name', '0') == '1' else 'false' }},
+    seller_address: {{ 'true' if app_setting('vehicle_add_required_seller_address', '0') == '1' else 'false' }},
+    seller_phone: {{ 'true' if app_setting('vehicle_add_required_seller_phone', '0') == '1' else 'false' }},
+    seller_id: {{ 'true' if app_setting('vehicle_add_required_seller_id', '0') == '1' else 'false' }},
+    seller_id_date: {{ 'true' if app_setting('vehicle_add_required_seller_id_date', '0') == '1' else 'false' }},
+    co_name: {{ 'true' if app_setting('vehicle_add_required_co_name', '0') == '1' else 'false' }},
+    co_address: {{ 'true' if app_setting('vehicle_add_required_co_address', '0') == '1' else 'false' }},
+    co_phone: {{ 'true' if app_setting('vehicle_add_required_co_phone', '0') == '1' else 'false' }},
+    co_id: {{ 'true' if app_setting('vehicle_add_required_co_id', '0') == '1' else 'false' }},
+    co_id_date: {{ 'true' if app_setting('vehicle_add_required_co_id_date', '0') == '1' else 'false' }},
+  };
+
+  function syncSellerRequired() {
+    const allInputs = Array.from(document.querySelectorAll("[data-vehicle-req]"));
+    allInputs.forEach((input) => {
+      if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement) {
+        input.required = false;
+      }
+    });
+
+    const activePanel = document.querySelector(".seller-details-card .tab-panel.active") || document.querySelector(".tab-panel.active");
+    if (!activePanel) return;
+    activePanel.querySelectorAll("[data-vehicle-req]").forEach((input) => {
+      const key = input.getAttribute("data-vehicle-req") || "";
+      const required = !!vehicleRequired[key];
+      if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement) {
+        input.required = required;
+      }
+    });
+  }
+
+  document.querySelectorAll("[data-purchase-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!purchaseModeInput) return;
+      purchaseModeInput.value = btn.getAttribute("data-purchase-mode") || "direct";
+      setTimeout(syncSellerRequired, 0);
+    });
+  });
+  syncSellerRequired();
+
+  const coToggle = document.getElementById("piCoToggle");
+  const coDetails = document.getElementById("piCoDetails");
+  const coHidden = document.getElementById("pi_has_co_hidden");
+  function syncCoDetails() {
+    const on = !!(coToggle && coToggle.checked);
+    if (coDetails) coDetails.classList.toggle("is-hidden", !on);
+    if (coHidden) coHidden.value = on ? "1" : "0";
+    if (coDetails) {
+      coDetails.querySelectorAll("[data-co-field]").forEach((input) => {
+        const key = input.getAttribute("data-co-field") || "";
+        const required = on && !!vehicleRequired[key];
+        if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement || input instanceof HTMLTextAreaElement) {
+          input.required = required;
+        }
+      });
+    }
+    if (!on && coDetails) {
+      coDetails.querySelectorAll("input").forEach((input) => {
+        if (input.type === "file") input.value = "";
+        else input.value = "";
+      });
+    }
+  }
+  if (coToggle) coToggle.addEventListener("change", syncCoDetails);
+  syncCoDetails();
+
+  const insuranceToggle = document.getElementById("insuranceEnabled");
+  const insuranceDocItem = document.querySelector("[data-insurance-doc]");
+  const insuranceStartWrap = document.getElementById("insuranceStartDateWrap");
+  const insuranceEndWrap = document.getElementById("insuranceEndDateWrap");
+  function syncInsurance() {
+    const on = !!(insuranceToggle && insuranceToggle.checked);
+    if (insuranceDocItem) {
+      insuranceDocItem.classList.toggle("is-hidden", !on);
+      if (!on) {
+        const fileInput = insuranceDocItem.querySelector('input[type=\"file\"]');
+        if (fileInput) fileInput.value = "";
+      }
+    }
+    [insuranceStartWrap, insuranceEndWrap].forEach((wrap) => {
+      if (!wrap) return;
+      wrap.classList.toggle("is-hidden", !on);
+      const input = wrap.querySelector("input");
+      if (input instanceof HTMLInputElement) {
+        input.required = on;
+        if (!on) input.value = "";
+      }
+    });
+  }
+  if (insuranceToggle) insuranceToggle.addEventListener("change", syncInsurance);
+  syncInsurance();
+
+  // If the AI document scan fills in insurance dates, make sure the toggle
+  // is on and the date fields are visible so the user can see/edit them.
+  if (insuranceStartWrap) {
+    const startInput = insuranceStartWrap.querySelector("input");
+    const endInput = insuranceEndWrap ? insuranceEndWrap.querySelector("input") : null;
+    [startInput, endInput].forEach((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.addEventListener("change", () => {
+          if (input.value && insuranceToggle && !insuranceToggle.checked) {
+            insuranceToggle.checked = true;
+            syncInsurance();
+          }
+        });
+      }
+    });
+  }
+
+  function localNowDatetimeValue(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
+  document.querySelectorAll("[data-default-now]").forEach((input) => {
+    if (!(input instanceof HTMLInputElement)) return;
+    if (!input.value) input.value = localNowDatetimeValue(new Date());
+  });
+
+  const hypToggle = document.getElementById("hypothecationEnabled");
+  const hypNameWrap = document.getElementById("hypothecationNameWrap");
+  function syncHypothecation() {
+    const on = !!(hypToggle && hypToggle.checked);
+    if (hypNameWrap) hypNameWrap.classList.toggle("is-hidden", !on);
+    const nameInput = hypNameWrap ? hypNameWrap.querySelector("input") : null;
+    if (nameInput instanceof HTMLInputElement) {
+      nameInput.required = on;
+      if (!on) nameInput.value = "";
+    }
+  }
+  if (hypToggle) hypToggle.addEventListener("change", syncHypothecation);
+  syncHypothecation();
+
+  const purchasePriceInput = document.querySelector("[data-purchase-price]");
+  const purchaseSettlementStatus = document.querySelector("[data-purchase-settlement-status]");
+  const purchasePaidAmount = document.querySelector("[data-purchase-paid-amount]");
+  function syncPurchaseSettlementAmounts() {
+    if (!(purchaseSettlementStatus instanceof HTMLSelectElement)) return;
+    if (!(purchasePaidAmount instanceof HTMLInputElement)) return;
+    const status = purchaseSettlementStatus.value || "Paid";
+    const price = purchasePriceInput instanceof HTMLInputElement ? parseFloat(purchasePriceInput.value || "0") || 0 : 0;
+    if (status === "Paid") purchasePaidAmount.value = price ? String(price) : purchasePaidAmount.value;
+    if (status === "Unpaid") purchasePaidAmount.value = "0";
+  }
+  if (purchaseSettlementStatus) purchaseSettlementStatus.addEventListener("change", syncPurchaseSettlementAmounts);
+  if (purchasePriceInput) purchasePriceInput.addEventListener("input", syncPurchaseSettlementAmounts);
+
+  const imgModal = document.getElementById("img-modal");
+  const imgModalImage = document.getElementById("img-modal-image");
+  const imgModalClose = document.getElementById("img-modal-close");
+
+  function openImageModal(src, title) {
+    if (!imgModal || !imgModalImage) return;
+    imgModalImage.src = src || "";
+    const titleEl = document.getElementById("img-modal-title");
+    if (titleEl) titleEl.textContent = title || "Attachment preview";
+    imgModal.classList.add("open");
+    imgModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeImageModal() {
+    if (!imgModal || !imgModalImage) return;
+    imgModal.classList.remove("open");
+    imgModal.setAttribute("aria-hidden", "true");
+    imgModalImage.src = "";
+  }
+
+  if (imgModalClose) imgModalClose.addEventListener("click", closeImageModal);
+  if (imgModal) {
+    imgModal.addEventListener("click", (e) => {
+      if (e.target === imgModal) closeImageModal();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeImageModal();
+  });
+
+  function resetProofBox(box) {
+    if (!box) return;
+    const fileInput = box.querySelector("[data-proof-file]");
+    const thumb = box.querySelector("[data-proof-thumb]");
+    const name = box.querySelector("[data-proof-name]");
+    const preview = box.querySelector("[data-proof-preview]");
+    if (fileInput) fileInput.value = "";
+    if (thumb) thumb.src = "";
+    if (name) name.textContent = "";
+    if (preview) {
+      preview.setAttribute("data-clickable", "0");
+      preview.onclick = null;
+    }
+    box.setAttribute("data-has-file", "0");
+  }
+
+  document.querySelectorAll("[data-proof]").forEach((box) => {
+    resetProofBox(box);
+    const fileInput = box.querySelector("[data-proof-file]");
+    const thumb = box.querySelector("[data-proof-thumb]");
+    const name = box.querySelector("[data-proof-name]");
+    const preview = box.querySelector("[data-proof-preview]");
+    const removeBtn = box.querySelector("[data-proof-remove]");
+    if (removeBtn) removeBtn.addEventListener("click", () => resetProofBox(box));
+
+    if (fileInput) {
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if (!file) {
+          resetProofBox(box);
+          return;
+        }
+        box.setAttribute("data-has-file", "1");
+        if (name) name.textContent = file.name || "attachment";
+        if (thumb) {
+          const url = URL.createObjectURL(file);
+          thumb.src = url;
+          thumb.onclick = () => openImageModal(url, file.name || "Attachment preview");
+          if (preview) {
+            preview.setAttribute("data-clickable", "1");
+            preview.onclick = (event) => {
+              const target = event.target;
+              if (target instanceof Element && target.closest("[data-proof-remove]")) return;
+              openImageModal(url, file.name || "Attachment preview");
+            };
+          }
+        }
+      });
+    }
+  });
+
+  document.querySelectorAll("[data-doc-item]").forEach((item) => {
+    const input = item.querySelector("[data-doc-input]");
+    const name = item.querySelector("[data-doc-name]");
+    const preview = item.querySelector("[data-doc-preview]");
+    const thumb = item.querySelector("[data-doc-thumb]");
+    const card = item.querySelector("[data-doc-card]");
+    if (!input || !name || !preview) return;
+
+    const syncDocPreview = () => {
+      const file = input.files && input.files[0] ? input.files[0] : null;
+      if (!file) {
+        item.setAttribute("data-has-file", "0");
+        preview.setAttribute("data-is-image", "0");
+        name.textContent = "";
+        if (thumb) {
+          thumb.src = "";
+          thumb.onclick = null;
+        }
+        if (card) {
+          const placeholder = card.getAttribute("data-doc-placeholder") || "Click to upload";
+          const iconClass = card.getAttribute("data-doc-icon") || "bi-file-earmark-text";
+          card.setAttribute("data-has-image", "0");
+          card.innerHTML = `<div class="veh-doc-card-copy"><i class="bi ${iconClass}"></i><span class="veh-doc-card-name">${placeholder}</span></div>`;
+        }
+        return;
+      }
+      item.setAttribute("data-has-file", "1");
+      name.textContent = file.name || "document";
+      const isImage = !!(file.type && file.type.startsWith("image/"));
+      preview.setAttribute("data-is-image", isImage ? "1" : "0");
+      if (thumb) {
+        if (isImage) {
+          const url = URL.createObjectURL(file);
+          thumb.src = url;
+          thumb.onclick = () => openImageModal(url, file.name || "Document preview");
+          if (card) {
+            card.setAttribute("data-has-image", "1");
+            card.innerHTML = `<img src="${url}" alt="${file.name || "Document preview"}"><div class="veh-doc-card-copy"><span class="veh-doc-card-name">${file.name || "document"}</span></div>`;
+          }
+        } else {
+          thumb.src = "";
+          thumb.onclick = null;
+          if (card) {
+            card.setAttribute("data-has-image", "0");
+            card.innerHTML = `<div class="veh-doc-card-copy"><i class="bi bi-file-earmark-text"></i><span class="veh-doc-card-name">${file.name || "document"}</span></div>`;
+          }
+        }
+      }
+    };
+
+    syncDocPreview();
+    input.addEventListener("change", syncDocPreview);
+  });
+
+  const vehicleNumberInput = document.querySelector("input[name='vehicle_number']");
+  const inventoryRepairVehicleNumber = document.getElementById("inventoryRepairVehicleNumber");
+
+  function syncRepairVehicleNumber() {
+    if (!vehicleNumberInput || !inventoryRepairVehicleNumber) return;
+    inventoryRepairVehicleNumber.value = (vehicleNumberInput.value || "").trim();
+  }
+
+  if (vehicleNumberInput) {
+    vehicleNumberInput.addEventListener("input", syncRepairVehicleNumber);
+    vehicleNumberInput.addEventListener("change", syncRepairVehicleNumber);
+    syncRepairVehicleNumber();
+  }
+
+  /* --- Multi-Image Slider/Carousel Management Logic --- */
+  const vehicleImageMaxBytes = 5 * 1024 * 1024;
+  const bikePhotosInput = document.getElementById("unified_bike_photos");
+  const placeholderLabel = document.getElementById("slider-placeholder-label");
+  const bikeSlider = document.getElementById("unified-bike-slider");
+  const bikeTrack = document.getElementById("unified-bike-track");
+  const dotsContainer = document.getElementById("slider-dots-container");
+  
+  let currentSlideIndex = 0;
+  let accumulatedFiles = [];
+
+  if (bikePhotosInput) {
+    bikePhotosInput.addEventListener("change", () => {
+      const incomingFiles = Array.from(bikePhotosInput.files || []);
+      
+      // Limit to 4 files maximum
+      if (accumulatedFiles.length + incomingFiles.length > 4) {
+        window.alert("You can upload a maximum of 4 bike images.");
+        bikePhotosInput.value = "";
+        return;
+      }
+
+      // Check size restrictions
+      for (let file of incomingFiles) {
+        if (file.size > vehicleImageMaxBytes) {
+          window.alert(`${file.name} must be 5 MB or smaller.`);
+          bikePhotosInput.value = "";
+          return;
+        }
+      }
+
+      accumulatedFiles = accumulatedFiles.concat(incomingFiles);
+      renderSliderItems();
+    });
+  }
+
+  function renderSliderItems() {
+    bikeTrack.innerHTML = "";
+    dotsContainer.innerHTML = "";
+
+    if (accumulatedFiles.length === 0) {
+      bikeSlider.classList.remove("has-items");
+      placeholderLabel.style.display = "block";
+      return;
+    }
+
+    placeholderLabel.style.display = "none";
+    bikeSlider.classList.add("has-items");
+
+    accumulatedFiles.forEach((file, index) => {
+      const objectUrl = URL.createObjectURL(file);
+
+      // Create Slide Layout
+      const previewCard = document.createElement("div");
+      previewCard.className = "veh-photo-preview-card";
+      
+      const img = document.createElement("img");
+      img.src = objectUrl;
+      img.alt = `Slide ${index + 1}`;
+      img.onclick = () => openImageModal(objectUrl, file.name);
+
+      const nameLabel = document.createElement("div");
+      nameLabel.className = "veh-photo-preview-name";
+      nameLabel.textContent = file.name;
+
+      previewCard.appendChild(img);
+      previewCard.appendChild(nameLabel);
+      bikeTrack.appendChild(previewCard);
+
+      // Create Pagination Dot Indicators
+      const dot = document.createElement("div");
+      dot.className = `veh-photo-dot ${index === currentSlideIndex ? 'active' : ''}`;
+      dotsContainer.appendChild(dot);
+    });
+
+    currentSlideIndex = Math.min(currentSlideIndex, accumulatedFiles.length - 1);
+    updateSliderPosition();
+  }
+
+  function updateSliderPosition() {
+    bikeTrack.style.transform = `translateX(-${currentSlideIndex * 100}%)`;
+    Array.from(dotsContainer.children).forEach((dot, index) => {
+      dot.classList.toggle("active", index === currentSlideIndex);
+    });
+  }
+
+  document.getElementById("slider-btn-prev").addEventListener("click", (e) => {
+    e.preventDefault();
+    if (currentSlideIndex > 0) {
+      currentSlideIndex--;
+      updateSliderPosition();
+    }
+  });
+
+  document.getElementById("slider-btn-next").addEventListener("click", (e) => {
+    e.preventDefault();
+    if (currentSlideIndex < accumulatedFiles.length - 1) {
+      currentSlideIndex++;
+      updateSliderPosition();
+    }
+  });
+
+  document.getElementById("slider-btn-clear").addEventListener("click", (e) => {
+    e.preventDefault();
+    accumulatedFiles = [];
+    currentSlideIndex = 0;
+    bikePhotosInput.value = "";
+    renderSliderItems();
+  });
+</script>
+<style>
+  body {
+    background: #eef6ff !important;
+  }
+  .seller-details-card {
+    background: #fffdfd !important;
+    border-color: #dcc4ef !important;
+  }
+  .inventory-repair-card {
+    background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%) !important;
+    border-color: #dcc4ef !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48), 0 12px 24px rgba(62, 11, 99, 0.08) !important;
+  }
+  .seller-details-card .section-title,
+  .seller-details-card .section-title i,
+  .seller-details-card .section-title span,
+  .inventory-repair-card .section-title,
+  .inventory-repair-card .section-title i,
+  .inventory-repair-card .section-title span {
+    background: transparent !important;
+  }
+  .seller-details-card .muted,
+  .seller-details-card label,
+  .seller-details-card .expense-row,
+  .seller-details-card #inventoryRepairExpenseRows,
+  .seller-details-card .grid,
+  .inventory-repair-card .muted,
+  .inventory-repair-card label,
+  .inventory-repair-card .expense-row,
+  .inventory-repair-card #inventoryRepairExpenseRows,
+  .inventory-repair-card .grid {
+    background: transparent;
+  }
+  .seller-details-card input,
+  .seller-details-card select,
+  .seller-details-card textarea,
+  .inventory-repair-card input,
+  .inventory-repair-card select,
+  .inventory-repair-card textarea {
+    background: #ffffff !important;
+  }
+  .veh-pane,
+  .veh-proof-card,
+  .pi-box,
+  .veh-doc-item,
+  .veh-doc-preview,
+  .veh-photo-slider,
+  .veh-carousel,
+  .veh-photo-preview-card {
+    border-color: #dcc4ef !important;
+  }
+  .veh-pane,
+  .veh-proof-card.is-lavender-card,
+  .veh-pane.is-lavender-card {
+    background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48), 0 12px 24px rgba(62, 11, 99, 0.08) !important;
+  }
+  .pi-box,
+  .veh-doc-item,
+  .veh-photo-slider,
+  .veh-carousel,
+  .veh-doc-preview,
+  .veh-photo-preview-card {
+    background: #fffdfd !important;
+  }
+  .veh-pane-title strong,
+  .veh-proof-card strong,
+  .seller-form-grid label > span,
+  .vehicle-form-grid label > span,
+  .veh-doc-item strong {
+    color: #3f2265 !important;
+  }
+  .veh-photo-box .veh-photo-icon,
+  .veh-doc-icon,
+  .veh-pane-title i {
+    background: #f2ebff !important;
+    color: #3d66e0 !important;
+    border-color: #d8c4ef !important;
+  }
+  .veh-upload-btn,
+  .veh-doc-upload,
+  .pi-proof-btn,
+  .veh-carousel-nav,
+  .img-modal-close {
+    background: #fffdfd !important;
+    border-color: #d7c1ee !important;
+    color: #34224f !important;
+  }
+  
+  .veh-upload-btn:hover,
+  .veh-doc-upload:hover,
+  .pi-proof-btn:hover,
+  .veh-carousel-nav:hover {
+    background: #f0e4fb !important;
+    border-color: #c9acee !important;
+    color: #4a2370 !important;
+  }
+  .pi-tabs .tab-btn {
+    background: #fffaf8 !important;
+    border-color: #dbc7ef !important;
+    color: #5b4f6f !important;
+  }
+  .pi-tabs .tab-btn.active {
+    background: #d8e8ff !important;
+    border-color: #9dc3ff !important;
+    color: #2457d6 !important;
+  }
+  .veh-photo-counter,
+  .veh-photo-preview-name {
+    background: rgba(63, 34, 101, 0.82) !important;
+    color: #fff !important;
+  }
+</style>
+{% endblock %}

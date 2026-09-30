@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .sale-view-shell { display: grid; gap: 12px; max-height: calc(100vh - 110px); overflow: hidden; }
+  .sale-view-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .sale-view-topbar h1 { margin: 0; font-size: 1.35rem; font-weight: 1000; }
+  .sale-view-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .sale-view-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr); gap: 12px; min-height: 0; }
+  .sale-view-stack { display: grid; gap: 12px; min-height: 0; }
+  .sale-panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: 0 10px 22px rgba(39, 28, 64, 0.08); min-width: 0; }
+  .sale-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .sale-panel-title { margin: 0; font-size: 0.96rem; font-weight: 1000; }
+  .sale-eye-btn { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(108, 47, 143, 0.24); border-radius: 50%; background: #faf5ff; color: #6c2f8f; cursor: pointer; }
+  .sale-eye-btn:hover { background: #f0e4ff; }
+  .sale-mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .sale-mini-field { border: 1px solid rgba(15, 23, 42, 0.08); border-radius: 10px; background: #fcfbff; padding: 8px 10px; min-width: 0; }
+  .sale-mini-field span { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
+  .sale-mini-field strong { display: block; margin-top: 3px; font-size: 0.9rem; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sale-image-card { display: grid; gap: 10px; }
+  .sale-main-image { width: 100%; height: 220px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); background: #f7f7fb; display: block; }
+  .sale-image-placeholder { height: 220px; border-radius: 12px; border: 1px solid var(--line); background: #f7f7fb; display: grid; place-items: center; color: var(--muted); font-weight: 900; }
+  .sale-vehicle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sale-summary-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(15, 23, 42, 0.08); font-weight: 800; }
+  .sale-summary-row:last-child { border-bottom: 0; }
+  .sale-summary-row.total { color: #b3261e; font-weight: 1000; font-size: 1.05rem; }
+  .sale-modal-backdrop { position: fixed; inset: 0; z-index: 10050; background: rgba(15, 23, 42, 0.46); display: none; align-items: center; justify-content: center; padding: 22px; }
+  .sale-modal-backdrop.open { display: flex; }
+  .sale-modal { width: min(760px, 96vw); max-height: 86vh; overflow: auto; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28); }
+  .sale-modal-head { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .sale-modal-head h2 { margin: 0; font-size: 1.05rem; font-weight: 1000; }
+  .sale-modal-close { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: #fff; cursor: pointer; display: grid; place-items: center; }
+  .sale-modal-body { padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .sale-modal-body .sale-mini-field strong { white-space: normal; }
+  .sale-doc-link { color: #6c2f8f; font-weight: 900; text-decoration: none; }
+
+  /* ── DETAIL COMPONENT SLIDER CAROUSEL STYLES ── */
+  .sale-detail-carousel {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    overflow: hidden;
+    border-radius: 12px;
+    box-sizing: border-box;
+  }
+  .sale-detail-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #fcfbff;
+  }
+  .sale-detail-slide.active {
+    opacity: 1;
+    z-index: 1;
+  }
+  .sale-detail-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    padding: 6px;
+    box-sizing: border-box;
+  }
+  .sale-detail-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    color: #3f2265;
+    padding: 0;
+  }
+  .sale-detail-arrow:hover { background: #fff; color: #2563eb; }
+  .sale-detail-arrow.prev { left: 8px; }
+  .sale-detail-arrow.next { right: 8px; }
+  .sale-detail-dots {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    gap: 5px;
+  }
+  .sale-detail-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1.5px solid rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .sale-detail-dot.active {
+    background: #3f2265;
+    width: 16px;
+    border-radius: 3px;
+  }
+
+  @media (max-width: 980px) {
+    .sale-view-shell { max-height: none; overflow: visible; }
+    .sale-view-layout { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 620px) {
+    .sale-mini-grid, .sale-vehicle-grid, .sale-modal-body { grid-template-columns: 1fr; }
+  }
+</style>
+
+{% set buyer_name = sale.customer_name if sale and sale.customer_name else order.name %}
+{% set buyer_phone = sale.customer_phone if sale and sale.customer_phone else order.phone %}
+{% set main_image = sale.photo_filename if sale and sale.photo_filename else (sale.gallery_images[0] if sale and sale.gallery_images else '') %}
+
+<section class="sale-view-shell">
+  <div class="sale-view-topbar">
+    <h1>Vehicle Sale Detail</h1>
+    <div class="sale-view-actions">
+      {% if sale %}<a class="btn primary" href="{{ url_for('order_new', sale_id=sale.id) }}">Edit</a>{% endif %}
+      <a class="btn ghost" href="{{ url_for('order_print_a4', order_id=order.id) }}">Print</a>
+      <a class="btn ghost js-back-button" href="{{ url_for('orders') }}" data-fallback="{{ url_for('orders') }}">Back</a>
+    </div>
+  </div>
+
+  <div class="sale-view-layout">
+    <div class="sale-view-stack">
+      <section class="sale-panel">
+        <div class="sale-panel-head">
+          <h2 class="sale-panel-title">Buyer Details</h2>
+          <button class="sale-eye-btn" type="button" data-sale-modal="buyerModal" aria-label="View buyer full details"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="sale-mini-grid">
+          <div class="sale-mini-field"><span>Name</span><strong>{{ buyer_name or "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Phone</span><strong>{{ buyer_phone or "-" }}</strong></div>
+          <div class="sale-mini-field"><span>ID Proof</span><strong>{{ sale.customer_identifier if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.customer_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+          <div class="sale-mini-field"><span>Customer Photo</span><strong>{% if sale and sale.customer_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+          <div class="sale-mini-field"><span>Customer With Bike</span><strong>{% if sale and sale.customer_with_bike_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+        </div>
+      </section>
+
+      <section class="sale-panel">
+        <div class="sale-panel-head">
+          <h2 class="sale-panel-title">Seller Details</h2>
+          <button class="sale-eye-btn" type="button" data-sale-modal="sellerModal" aria-label="View seller full details"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="sale-mini-grid">
+          <div class="sale-mini-field"><span>Name</span><strong>{{ sale.purchase_customer_name if sale and sale.purchase_customer_name else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Mobile</span><strong>{{ sale.purchase_customer_phone if sale and sale.purchase_customer_phone else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Purchase Mode</span><strong>{{ (sale.purchase_mode or "Direct")|capitalize if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>ID</span><strong>{{ sale.purchase_customer_id if sale and sale.purchase_customer_id else "-" }}</strong></div>
+        </div>
+      </section>
+
+      <section class="sale-panel">
+        <div class="sale-panel-head">
+          <h2 class="sale-panel-title">Payment Summary</h2>
+        </div>
+        <div>
+          <div class="sale-summary-row"><span>Selling Price</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('selling_price', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Repair Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('repair_cost', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Discount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('discount_amount', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row total"><span>Total</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('total_amount', 0) if sale else 0) or (order.total_amount or 0))|float) }}</strong></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="sale-view-stack">
+      <section class="sale-panel sale-image-card" style="padding:0; overflow:hidden; height:220px; position:relative;">
+        {% if sale and sale.gallery_images and sale.gallery_images|length > 0 %}
+        <div class="sale-detail-carousel">
+          {% for img in sale.gallery_images %}
+          <div class="sale-detail-slide {% if loop.first %}active{% endif %}">
+            <img src="{{ url_for('static', filename='uploads/vehicles/' ~ img) }}" alt="Bike layout" />
+          </div>
+          {% endfor %}
+          
+          {% if sale.gallery_images|length > 1 %}
+          <button type="button" class="sale-detail-arrow prev" onclick="moveDetailSlide(-1, event)"><i class="bi bi-chevron-left"></i></button>
+          <button type="button" class="sale-detail-arrow next" onclick="moveDetailSlide(1, event)"><i class="bi bi-chevron-right"></i></button>
+          <div class="sale-detail-dots">
+            {% for img in sale.gallery_images %}
+            <div class="sale-detail-dot {% if loop.first %}active{% endif %}" onclick="gotoDetailSlide({{ loop.index0 }}, event)"></div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% elif main_image %}
+        <img class="sale-main-image" src="{{ url_for('static', filename='uploads/vehicles/' ~ main_image) }}" alt="{{ sale.vehicle_name if sale else 'Vehicle image' }}">
+        {% else %}
+        <div class="sale-image-placeholder"><i class="icon-motorbike"></i> No image uploaded</div>
+        {% endif %}
+      </section>
+
+      <section class="sale-panel">
+        <div class="sale-panel-head">
+          <h2 class="sale-panel-title">Vehicle Details</h2>
+          <button class="sale-eye-btn" type="button" data-sale-modal="vehicleModal" aria-label="View vehicle full details"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="sale-mini-grid sale-vehicle-grid">
+          <div class="sale-mini-field"><span>Bike Name</span><strong>{{ sale.vehicle_name if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Vehicle No</span><strong>{{ sale.vehicle_number if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Model Year</span><strong>{{ sale.model_year if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Chassis No</span><strong>{{ sale.registration_no if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Current FC</span><strong>{{ sale.current_fc if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Owners</span><strong>{{ sale.owners if sale else "-" }}</strong></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<div class="sale-modal-backdrop" id="buyerModal" role="dialog" aria-modal="true" aria-labelledby="buyerModalTitle">
+  <div class="sale-modal">
+    <div class="sale-modal-head"><h2 id="buyerModalTitle">Buyer Full Details</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+    <div class="sale-modal-body">
+      <div class="sale-mini-field"><span>Name</span><strong>{{ buyer_name or "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Phone</span><strong>{{ buyer_phone or "-" }}</strong></div>
+      <div class="sale-mini-field"><span>ID Proof</span><strong>{{ sale.customer_identifier if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Order ID</span><strong>{{ order.order_no or order.invoice_id or order.id }}</strong></div>
+      <div class="sale-mini-field"><span>Status</span><strong>{{ order.status or "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Payment Method</span><strong>{{ sale.payment_method if sale and sale.payment_method else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.customer_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Customer Photo</span><strong>{% if sale and sale.customer_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Customer With Bike</span><strong>{% if sale and sale.customer_with_bike_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="sale-modal-backdrop" id="sellerModal" role="dialog" aria-modal="true" aria-labelledby="sellerModalTitle">
+  <div class="sale-modal">
+    <div class="sale-modal-head"><h2 id="sellerModalTitle">Seller Full Details</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+    <div class="sale-modal-body">
+      <div class="sale-mini-field"><span>Purchase Mode</span><strong>{{ (sale.purchase_mode or "Direct")|capitalize if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Name</span><strong>{{ sale.purchase_customer_name if sale and sale.purchase_customer_name else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Mobile</span><strong>{{ sale.purchase_customer_phone if sale and sale.purchase_customer_phone else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Address</span><strong>{{ sale.purchase_customer_address if sale and sale.purchase_customer_address else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>ID</span><strong>{{ sale.purchase_customer_id if sale and sale.purchase_customer_id else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>ID Date</span><strong>{{ sale.purchase_id_proof_ref|date_dmy if sale and sale.purchase_id_proof_ref else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Reference</span><strong>{{ sale.purchase_reference if sale and sale.purchase_reference else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.purchase_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.purchase_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="sale-modal-backdrop" id="vehicleModal" role="dialog" aria-modal="true" aria-labelledby="vehicleModalTitle">
+  <div class="sale-modal">
+    <div class="sale-modal-head"><h2 id="vehicleModalTitle">Vehicle Full Details</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+    <div class="sale-modal-body">
+      <div class="sale-mini-field"><span>Sale Code</span><strong>{{ sale.sale_code if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Bike Name</span><strong>{{ sale.vehicle_name if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Vehicle Number</span><strong>{{ sale.vehicle_number if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Brand</span><strong>{{ sale.brand if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Model Year</span><strong>{{ sale.model_year if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Chassis No</span><strong>{{ sale.registration_no if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Current FC</span><strong>{{ sale.current_fc if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Owners</span><strong>{{ sale.owners if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Subtotal</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('subtotal_amount', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>GST</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('gst_amount', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Advance</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('advance_amount', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Total</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('total_amount', 0) if sale else 0) or (order.total_amount or 0))|float) }}</strong></div>
+      <div class="sale-mini-field"><span>RC Book</span><strong>{% if sale and sale.rc_book_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Insurance</span><strong>{% if sale and sale.insurance_document_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.insurance_document_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>PUC</span><strong>{% if sale and sale.puc_certificate_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.puc_certificate_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const openButtons = document.querySelectorAll("[data-sale-modal]");
+    const modals = document.querySelectorAll(".sale-modal-backdrop");
+
+    function closeAll() {
+      modals.forEach(modal => modal.classList.remove("open"));
+      document.body.style.overflow = "";
+    }
+
+    openButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        const modal = document.getElementById(button.dataset.saleModal);
+        if (!modal) return;
+        closeAll();
+        modal.classList.add("open");
+        document.body.style.overflow = "hidden";
+      });
+    });
+
+    modals.forEach(modal => {
+      modal.addEventListener("click", event => {
+        if (event.target === modal || event.target.closest(".sale-modal-close")) closeAll();
+      });
+    });
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") closeAll();
+    });
+
+    /* ── DYNAMIC BIKE SLIDER COMPONENT LOGIC ── */
+    let currentDetailIndex = 0;
+    const detailSlides = document.querySelectorAll('.sale-detail-slide');
+    const detailDots = document.querySelectorAll('.sale-detail-dot');
+    const totalDetailSlides = detailSlides.length;
+
+    window.moveDetailSlide = function(direction, event) {
+      if (event) event.stopPropagation();
+      if (totalDetailSlides <= 1) return;
+
+      detailSlides[currentDetailIndex].classList.remove('active');
+      if (detailDots[currentDetailIndex]) detailDots[currentDetailIndex].classList.remove('active');
+
+      currentDetailIndex = (currentDetailIndex + direction + totalDetailSlides) % totalDetailSlides;
+
+      detailSlides[currentDetailIndex].classList.add('active');
+      if (detailDots[currentDetailIndex]) detailDots[currentDetailIndex].classList.add('active');
+    };
+
+    window.gotoDetailSlide = function(targetIndex, event) {
+      if (event) event.stopPropagation();
+      if (targetIndex === currentDetailIndex) return;
+
+      detailSlides[currentDetailIndex].classList.remove('active');
+      if (detailDots[currentDetailIndex]) detailDots[currentDetailIndex].classList.remove('active');
+
+      currentDetailIndex = targetIndex;
+
+      detailSlides[currentDetailIndex].classList.add('active');
+      if (detailDots[currentDetailIndex]) detailDots[currentDetailIndex].classList.add('active');
+    };
+  })();
+</script>
+{% endblock %}

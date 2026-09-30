@@ -792,6 +792,8 @@
       'ready_to_sale_count': 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f3c1.png',
       'total_profit': 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4b0.png',
       'sold_vehicle_count': 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4c8.png',
+      'sales_amount': 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4b5.png',
+      'available_amount': 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2705.png',
     } %}
     <a class="bd-metric metric-blue" href="{{ url_for('inventory', tab='vehicles') }}" title="View all vehicles">
       <div class="bd-metric-ico"><img src="{{ kpi_img['total_vehicles'] }}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" /></div>
@@ -805,6 +807,13 @@
       <div class="bd-metric-body">
         <div class="bd-metric-label">Total Sales</div>
         <div class="bd-metric-value">{{ (mv.get('sales', 0) or 0) | int }}</div>
+      </div>
+    </a>
+    <a class="bd-metric metric-orange" href="{{ url_for('orders') }}" title="View total sales amount">
+      <div class="bd-metric-ico"><img src="{{ kpi_img['sales_amount'] }}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" /></div>
+      <div class="bd-metric-body">
+        <div class="bd-metric-label">Sales Amount</div>
+        <div class="bd-metric-value">&#8377; {{ "{:,.0f}".format(mv.get('sales_amount', 0) or 0) }}</div>
       </div>
     </a>
     <a class="bd-metric metric-green" href="{{ url_for('inventory', tab='vehicles') }}" title="View vehicle purchase costs">
@@ -826,6 +835,13 @@
       <div class="bd-metric-body">
         <div class="bd-metric-label">Available</div>
         <div class="bd-metric-value">{{ (mv.get('available', 0) or 0) | int }}</div>
+      </div>
+    </a>
+    <a class="bd-metric metric-teal" href="{{ url_for('inventory', tab='vehicles', status='available') }}" title="Purchase + repair cost of available vehicles">
+      <div class="bd-metric-ico"><img src="{{ kpi_img['available_amount'] }}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" /></div>
+      <div class="bd-metric-body">
+        <div class="bd-metric-label">Available Amount</div>
+        <div class="bd-metric-value">&#8377; {{ "{:,.0f}".format(mv.get('available_amount', 0) or 0) }}</div>
       </div>
     </a>
     <a class="bd-metric metric-indigo" href="{{ url_for('orders', date=today_iso) }}" title="View today's sales">
@@ -856,7 +872,7 @@
         <div class="bd-metric-value">{{ (mv.get('sold_vehicle_count', 0) or 0) | int }}</div>
       </div>
     </a>
-    <a class="bd-metric metric-gold" href="{{ url_for('orders') }}" title="View total profit">
+    <a class="bd-metric metric-gold" href="{{ url_for('reports', type='sales_summary') }}" title="View total profit">
       <div class="bd-metric-ico"><img src="{{ kpi_img['total_profit'] }}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" /></div>
       <div class="bd-metric-body">
         <div class="bd-metric-label">Total Profit</div>

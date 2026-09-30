@@ -143,6 +143,9 @@
           <div class="sale-mini-field"><span>Phone</span><strong>{{ buyer_phone or "-" }}</strong></div>
           <div class="sale-mini-field"><span>ID Proof</span><strong>{{ sale.customer_identifier if sale else "-" }}</strong></div>
           <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.customer_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+          <div class="sale-mini-field"><span>Customer Photo</span><strong>{% if sale and sale.customer_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+          <div class="sale-mini-field"><span>Customer With Bike</span><strong>{% if sale and sale.customer_with_bike_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
         </div>
       </section>
 
@@ -229,6 +232,8 @@
       <div class="sale-mini-field"><span>Status</span><strong>{{ order.status or "-" }}</strong></div>
       <div class="sale-mini-field"><span>Payment Method</span><strong>{{ sale.payment_method if sale and sale.payment_method else "-" }}</strong></div>
       <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.customer_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Customer Photo</span><strong>{% if sale and sale.customer_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Customer With Bike</span><strong>{% if sale and sale.customer_with_bike_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
     </div>
   </div>
 </div>

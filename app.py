@@ -98,6 +98,7 @@ from datetime import datetime, timedelta
 
 from flask import redirect, url_for
 from flask import Flask, redirect, render_template, request, url_for, send_from_directory, jsonify, session, abort, g
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -114,6 +115,8 @@ from reportlab.pdfbase.ttfonts import TTFont # type: ignore
 from reportlab.platypus import SimpleDocTemplate, Preformatted, Table, TableStyle, Paragraph, Spacer # type: ignore
 from reportlab.lib.styles import getSampleStyleSheet # type: ignore
 from reportlab.lib import colors 
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 from flask import jsonify
 
 from flask_cors import CORS
@@ -153,21 +156,125 @@ except Exception:
     WD_ALIGN_PARAGRAPH = None
     WD_ORIENTATION = None
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+def get_app_dir() -> str:
+    """Folder the app's real, persistent files should live next to.
+
+    When running as a PyInstaller onefile .exe (e.g. behind IIS reverse
+    proxy), sys.executable is the actual .exe location. os.path.abspath(__file__)
+    is NOT safe to use here -- when frozen, it resolves inside the onefile
+    build's temporary extraction folder, which is wiped/regenerated on every
+    run. Anything saved there (like uploads) silently disappears and never
+    shows up next to the real .exe.
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+APP_DIR = get_app_dir()
 
 DB_PATH = os.path.join(APP_DIR, "tailor.db")
+
+# ---------------------------------------------------------------------------
+# Logging setup
+#
+# This runs no matter how the app is launched (Windows Service, the .exe
+# double-clicked/run manually in a console, or `python app.py`). It always
+# writes to LOG_DIR next to the real app folder, with automatic rotation so
+# the files don't grow forever. All existing print(...) calls throughout
+# this file are also captured, since sys.stdout/sys.stderr are tee'd into
+# the log file below.
+# ---------------------------------------------------------------------------
+import logging
+from logging.handlers import RotatingFileHandler
+
+LOG_DIR = os.path.join(APP_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+_log_formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+_app_log_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, "app.log"),
+    maxBytes=5 * 1024 * 1024,
+    backupCount=5,
+    encoding="utf-8",
+)
+_app_log_handler.setFormatter(_log_formatter)
+_app_log_handler.setLevel(logging.INFO)
+
+_error_log_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, "error.log"),
+    maxBytes=5 * 1024 * 1024,
+    backupCount=5,
+    encoding="utf-8",
+)
+_error_log_handler.setFormatter(_log_formatter)
+_error_log_handler.setLevel(logging.ERROR)
+
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.INFO)
+_root_logger.addHandler(_app_log_handler)
+_root_logger.addHandler(_error_log_handler)
+
+app_logger = logging.getLogger("bike_app")
+app_logger.setLevel(logging.INFO)
+
+# Also route Flask's/Werkzeug's own loggers (app.logger.exception(...) calls
+# already scattered in this file, plus per-request access logs) into the
+# same files.
+logging.getLogger("werkzeug").setLevel(logging.INFO)
+
+
+class _StreamToLog:
+    """Tees writes to the original stream (so the console window still
+    shows output when run manually) AND into the log file (so nothing is
+    lost when there's no console, e.g. running as a Windows Service)."""
+
+    def __init__(self, logger, level, original_stream):
+        self._logger = logger
+        self._level = level
+        self._original_stream = original_stream
+        self._buffer = ""
+
+    def write(self, message):
+        try:
+            if self._original_stream:
+                self._original_stream.write(message)
+        except Exception:
+            pass
+        self._buffer += message
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if line.strip():
+                self._logger.log(self._level, line)
+
+    def flush(self):
+        try:
+            if self._original_stream:
+                self._original_stream.flush()
+        except Exception:
+            pass
+
+    def isatty(self):
+        return False
+
+
+sys.stdout = _StreamToLog(app_logger, logging.INFO, sys.stdout)
+sys.stderr = _StreamToLog(app_logger, logging.ERROR, sys.stderr)
 
 print("=" * 60)
 print("APP_DIR :", APP_DIR)
 print("DB_PATH :", DB_PATH)
 print("DB EXISTS :", os.path.exists(DB_PATH))
+print("LOG_DIR :", LOG_DIR)
 print("=" * 60)
 print("APP_DIR :", APP_DIR)
 print("DB_PATH :", DB_PATH)
 print("DB EXISTS =", os.path.exists(DB_PATH))
 THERMAL_WIDTH = 80 * mm   # 80mm paper width
-
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 REPORT_DIR = os.path.join(APP_DIR, "static", "reports")
 os.makedirs(REPORT_DIR, exist_ok=True)
@@ -184,11 +291,88 @@ def resource_path(*parts) -> str:
     return os.path.join(base, *parts)
 
 
+def _sync_bundled_static_assets() -> None:
+    """Copy the build-time static assets (style.css, app.js, icons, etc.)
+    that PyInstaller bundles into the .exe and extracts to a temp folder
+    on every run, into the persistent APP_DIR/static folder next to the
+    real .exe.
+
+    This is required because static_folder below is pointed at APP_DIR
+    (so it can also serve the "uploads" subfolder, which holds real
+    user-uploaded files and only ever exists next to the real .exe, never
+    in the temp bundle). Without this sync, bundled assets like style.css
+    would 404 forever, since they'd only exist in the temp folder that
+    static_folder no longer looks at.
+
+    Only copies/overwrites files that come from the bundle -- never
+    touches anything else already sitting in APP_DIR/static (most
+    importantly: never touches static/uploads/*, which is real user data).
+    """
+    bundled_static = resource_path("static")
+    persistent_static = os.path.join(APP_DIR, "static")
+    if not os.path.isdir(bundled_static):
+        return
+    for root, _dirs, files in os.walk(bundled_static):
+        rel = os.path.relpath(root, bundled_static)
+        dest_root = persistent_static if rel == "." else os.path.join(persistent_static, rel)
+        os.makedirs(dest_root, exist_ok=True)
+        for fname in files:
+            try:
+                shutil.copy2(os.path.join(root, fname), os.path.join(dest_root, fname))
+            except Exception:
+                app_logger.exception("Failed to sync bundled static asset %s", fname)
+
+
+_sync_bundled_static_assets()
+
 app = Flask(
     __name__,
     template_folder=resource_path("templates"),
+    static_folder=os.path.join(APP_DIR, "static"),
+    static_url_path="/static",
 )
 CORS(app)
+
+# Route Flask's own app.logger (used by the app.logger.exception(...) calls
+# already in this file) into the same rotating log files, instead of
+# wherever Flask's default handler would otherwise send it.
+app.logger.handlers = [_app_log_handler, _error_log_handler]
+app.logger.setLevel(logging.INFO)
+app.logger.propagate = False
+
+
+@app.before_request
+def _log_request_start():
+    g._req_start_time = time.time()
+
+
+@app.after_request
+def _log_request_end(response):
+    try:
+        duration_ms = (time.time() - getattr(g, "_req_start_time", time.time())) * 1000
+        app_logger.info(
+            "%s %s -> %s (%.1fms) from %s",
+            request.method,
+            request.full_path if request.query_string else request.path,
+            response.status_code,
+            duration_ms,
+            request.remote_addr,
+        )
+    except Exception:
+        pass
+    return response
+
+
+@app.errorhandler(Exception)
+def _log_unhandled_exception(exc):
+    # HTTPException covers normal, expected cases like a missing static file
+    # (404) or a forbidden request (403). Those aren't bugs -- let Flask
+    # return its regular status code/page for them instead of turning every
+    # 404 into a 500 Internal Server Error.
+    if isinstance(exc, HTTPException):
+        return exc
+    app_logger.exception("Unhandled exception on %s %s", request.method, request.path)
+    raise exc
 
 _jwt_secret = os.getenv("JWT_SECRET_KEY")
 if not _jwt_secret:
@@ -239,6 +423,28 @@ app.config["GALLERY_FOLDER"] = GALLERY_FOLDER
 UPLOAD_FOLDER = os.path.join(APP_DIR, "static", "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+# Fixed public base URL for building absolute links to uploaded files
+# (images, PDFs, etc). Set APP_PUBLIC_BASE_URL in .env to whatever address
+# your Flutter app / other clients can actually reach the server at, e.g.
+#   APP_PUBLIC_BASE_URL=http://10.0.2.2:8000        (Android emulator)
+#   APP_PUBLIC_BASE_URL=http://192.168.1.50:8000     (real phone on same WiFi)
+#   APP_PUBLIC_BASE_URL=https://sms.ilogicigroup.com (production)
+# If left blank, falls back to guessing the host from the incoming request
+# (the old behaviour, which is what caused images to break on the server
+# while working fine locally/on the emulator).
+APP_PUBLIC_BASE_URL = os.getenv("APP_PUBLIC_BASE_URL", "").strip().rstrip("/")
+
+
+def build_upload_url(relative_path: str) -> str:
+    """Build an absolute URL to a file under /static/<relative_path>.
+    Uses APP_PUBLIC_BASE_URL when configured, so every client (web,
+    emulator, real device) gets the same, correct, reachable URL instead
+    of one derived from whichever host happened to make the request."""
+    if APP_PUBLIC_BASE_URL:
+        return f"{APP_PUBLIC_BASE_URL}/static/{relative_path}"
+    return url_for("static", filename=relative_path, _external=True)
+
 
 VEHICLE_UPLOAD_FOLDER = os.path.join(UPLOAD_FOLDER, "vehicles")
 os.makedirs(VEHICLE_UPLOAD_FOLDER, exist_ok=True)
@@ -397,13 +603,6 @@ def init_license_db():
 
     con.commit()
     con.close()
-
-def get_app_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-APP_DIR = get_app_dir()
 
 DB_FILE = os.path.join(APP_DIR, "license_db.sqlite")
 print("APP DB PATH:", DB_FILE)
@@ -589,12 +788,30 @@ def build_sql_server_connection_string(database_name: str | None = None) -> str:
     server = (os.getenv("DB_SERVER") or "").strip()
     driver = (os.getenv("DB_DRIVER") or "ODBC Driver 17 for SQL Server").strip()
     database = (os.getenv("DB_DATABASE") or database_name or "").strip()
+    # if os.getenv("DB_TRUSTED_CONNECTION") == "yes":
+    #     return (
+    #         f"DRIVER={{{driver}}};"
+    #         f"SERVER={server};"
+    #         f"DATABASE={database};"
+    #         "Trusted_Connection=yes;"
+    #     )
+    # user = os.getenv("DB_USERNAME")
+    # password = os.getenv("DB_PASSWORD")
+    # return (
+    #     f"DRIVER={{{driver}}};"
+    #     f"SERVER={server};"
+    #     f"DATABASE={database};"
+    #     f"UID={user};PWD={password};"
+    # )
+    
+    trust_cert = (os.getenv("DB_TRUST_SERVER_CERTIFICATE") or "yes").strip()
     if os.getenv("DB_TRUSTED_CONNECTION") == "yes":
         return (
             f"DRIVER={{{driver}}};"
             f"SERVER={server};"
             f"DATABASE={database};"
             "Trusted_Connection=yes;"
+            f"TrustServerCertificate={trust_cert};"
         )
     user = os.getenv("DB_USERNAME")
     password = os.getenv("DB_PASSWORD")
@@ -603,6 +820,7 @@ def build_sql_server_connection_string(database_name: str | None = None) -> str:
         f"SERVER={server};"
         f"DATABASE={database};"
         f"UID={user};PWD={password};"
+        f"TrustServerCertificate={trust_cert};"
     )
 
 
@@ -1064,6 +1282,60 @@ def get_expense_breakdown_daily_series(
         "repair": repair_values,
         "total": total_values,
     }
+
+
+def ensure_expenses_category_column(conn) -> None:
+    conn.execute(
+        """
+        IF OBJECT_ID('expenses', 'U') IS NOT NULL
+        BEGIN
+            IF COL_LENGTH('expenses', 'category') IS NULL
+                ALTER TABLE expenses ADD category NVARCHAR(100) NULL;
+        END
+        """
+    )
+    try:
+        conn.commit()
+    except Exception:
+        pass
+
+
+def ensure_expense_categories_table(conn) -> None:
+    conn.execute(
+        """
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'expense_categories')
+        BEGIN
+            CREATE TABLE expense_categories (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                name NVARCHAR(100) NOT NULL UNIQUE,
+                created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+            )
+        END
+        """
+    )
+    try:
+        conn.commit()
+    except Exception:
+        pass
+
+
+def add_expense_category_if_missing(conn, name: str) -> None:
+    clean_name = (name or "").strip()
+    if not clean_name:
+        return
+    try:
+        exists = conn.execute(
+            "SELECT TOP 1 id FROM expense_categories WHERE LOWER(name) = LOWER(?)",
+            (clean_name,),
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                "INSERT INTO expense_categories (name, created_at) VALUES (?, ?)",
+                (clean_name, now_str()),
+            )
+            conn.commit()
+    except Exception:
+        conn.rollback()
 
 
 def ensure_dashboard_widgets_table(conn) -> None:
@@ -1714,7 +1986,7 @@ def normalize_payment_mode(mode: str | None, default: str = "Cash") -> str:
 
 
 def normalize_vehicle_transfer_mode(mode: str | None, default: str = "Cash") -> str:
-    allowed = {"Cash", "UPI", "Bank", "GPay", "Card"}
+    allowed = {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}
     text = str(mode or "").strip()
     return text if text in allowed else default
 
@@ -2604,6 +2876,8 @@ def init_db(database_name: str | None = None):
             purchase_settlement_status NVARCHAR(50),
             purchase_paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
             purchase_payment_mode NVARCHAR(50),
+            purchase_payment_finance_name NVARCHAR(255),
+            purchase_payment_commission_amount DECIMAL(10,2),
             purchase_paid_at DATETIME2,
             selling_price DECIMAL(10,2),
             status NVARCHAR(50),
@@ -2813,6 +3087,10 @@ def init_db(database_name: str | None = None):
             ALTER TABLE vehicles ADD purchase_paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0;
         IF COL_LENGTH('vehicles', 'purchase_payment_mode') IS NULL
             ALTER TABLE vehicles ADD purchase_payment_mode NVARCHAR(50) NULL;
+        IF COL_LENGTH('vehicles', 'purchase_payment_finance_name') IS NULL
+            ALTER TABLE vehicles ADD purchase_payment_finance_name NVARCHAR(255) NULL;
+        IF COL_LENGTH('vehicles', 'purchase_payment_commission_amount') IS NULL
+            ALTER TABLE vehicles ADD purchase_payment_commission_amount DECIMAL(10,2) NULL;
         IF COL_LENGTH('vehicles', 'purchase_paid_at') IS NULL
             ALTER TABLE vehicles ADD purchase_paid_at DATETIME2 NULL;
         IF COL_LENGTH('vehicles', 'selling_price') IS NULL
@@ -3527,6 +3805,8 @@ def init_db(database_name: str | None = None):
             customer_address NVARCHAR(MAX) NULL,
             customer_id_proof_filename NVARCHAR(255) NULL,
             customer_id_proof_ref DATE NULL,
+            customer_photo_filename NVARCHAR(255) NULL,
+            customer_with_bike_photo_filename NVARCHAR(255) NULL,
             vehicle_id INT NOT NULL,
             vehicle_name NVARCHAR(255) NOT NULL,
             vehicle_number NVARCHAR(50) NOT NULL,
@@ -3545,6 +3825,8 @@ def init_db(database_name: str | None = None):
             advance_amount DECIMAL(12,2) NULL,
             total_amount DECIMAL(12,2) NULL,
             payment_method NVARCHAR(50) NULL,
+            payment_finance_name NVARCHAR(255) NULL,
+            payment_commission_amount DECIMAL(12,2) NULL,
             vehicle_image_filenames NVARCHAR(MAX) NULL,
             created_at DATETIME2 NOT NULL,
             updated_at DATETIME2 NOT NULL,
@@ -3568,6 +3850,10 @@ def init_db(database_name: str | None = None):
             ALTER TABLE vehicle_sale_orders ADD customer_id_proof_filename NVARCHAR(255) NULL;
         IF COL_LENGTH('vehicle_sale_orders', 'customer_id_proof_ref') IS NULL
             ALTER TABLE vehicle_sale_orders ADD customer_id_proof_ref DATE NULL;
+        IF COL_LENGTH('vehicle_sale_orders', 'customer_photo_filename') IS NULL
+            ALTER TABLE vehicle_sale_orders ADD customer_photo_filename NVARCHAR(255) NULL;
+        IF COL_LENGTH('vehicle_sale_orders', 'customer_with_bike_photo_filename') IS NULL
+            ALTER TABLE vehicle_sale_orders ADD customer_with_bike_photo_filename NVARCHAR(255) NULL;
         IF COL_LENGTH('vehicle_sale_orders', 'registration_no') IS NULL
             ALTER TABLE vehicle_sale_orders ADD registration_no NVARCHAR(100) NULL;
         IF COL_LENGTH('vehicle_sale_orders', 'owners') IS NULL
@@ -3580,6 +3866,10 @@ def init_db(database_name: str | None = None):
             ALTER TABLE vehicle_sale_orders ADD vehicle_image_filenames NVARCHAR(MAX) NULL;
         IF COL_LENGTH('vehicle_sale_orders', 'purchase_total_cost') IS NULL
             ALTER TABLE vehicle_sale_orders ADD purchase_total_cost DECIMAL(12,2) NULL;
+        IF COL_LENGTH('vehicle_sale_orders', 'payment_finance_name') IS NULL
+            ALTER TABLE vehicle_sale_orders ADD payment_finance_name NVARCHAR(255) NULL;
+        IF COL_LENGTH('vehicle_sale_orders', 'payment_commission_amount') IS NULL
+            ALTER TABLE vehicle_sale_orders ADD payment_commission_amount DECIMAL(12,2) NULL;
         IF COL_LENGTH('vehicle_sale_orders', 'updated_at') IS NULL
             ALTER TABLE vehicle_sale_orders ADD updated_at DATETIME2 NULL;
     END
@@ -4325,6 +4615,7 @@ def create_expense_record(
     amount: float,
     created_at: str,
     *,
+    category: str | None = None,
     max_attempts: int = 5,
 ) -> tuple[int, str]:
     last_error: Exception | None = None
@@ -4334,10 +4625,10 @@ def create_expense_record(
         try:
             cur.execute(
                 """
-                INSERT INTO expenses (expense_no, expense_name, amount, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO expenses (expense_no, expense_name, amount, category, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (expense_no, expense_name, amount, created_at),
+                (expense_no, expense_name, amount, (category or None), created_at),
             )
             return int(cur.lastrowid), expense_no
         except pyodbc.IntegrityError as exc:
@@ -7228,6 +7519,7 @@ ENDPOINT_PERMISSION_MAP = {
     "expense_dashboard": "expense",
     "expense_add": "expense",
     "expense_edit": "expense",
+    "expense_category_add": "expense",
     "expense_repair_add": "vehicle_expense",
     "expense_repair_delete": "expense",
     "tailors": "staff_management",
@@ -8601,6 +8893,29 @@ def dashboard():
     except Exception:
         metric_values["available"] = 0.0
     try:
+        available_amount_sql = """
+                SELECT COALESCE(SUM(
+                    COALESCE(v.purchase_price, 0) + COALESCE(vr_sum.repair_total, 0)
+                ), 0) AS s
+                FROM vehicles v
+                LEFT JOIN (
+                    SELECT vehicle_id, SUM(COALESCE(total_cost, 0)) AS repair_total
+                    FROM vehicle_repairs
+                    GROUP BY vehicle_id
+                ) vr_sum ON vr_sum.vehicle_id = v.id
+                WHERE LOWER(COALESCE(v.status, 'available')) = 'available'
+        """
+        available_amount_params: list[str] = []
+        if date_filter_active:
+            available_amount_sql += " AND date(COALESCE(v.purchase_date, v.created_at)) BETWEEN ? AND ?"
+            available_amount_params.extend([from_date, to_date])
+        metric_values["available_amount"] = float(
+            conn.execute(available_amount_sql, tuple(available_amount_params)).fetchone()["s"]
+            or 0
+        )
+    except Exception:
+        metric_values["available_amount"] = 0.0
+    try:
         in_progress_sql = """
                 SELECT COUNT(*) AS c
                 FROM vehicles
@@ -8651,6 +8966,24 @@ def dashboard():
     except Exception:
         metric_values["sales"] = float(metric_values.get("sold", 0.0) or 0.0)
     metric_values["vehicle_name_sales"] = float(metric_values.get("sales", 0.0) or 0.0)
+    try:
+        sales_amount_sql = """
+                SELECT COALESCE(SUM(vso.total_amount), 0) AS s
+                FROM vehicle_sale_orders vso
+                LEFT JOIN orders o ON o.id = vso.order_id
+                WHERE vso.order_id IS NOT NULL
+                  AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
+        """
+        sales_amount_params: list[str] = []
+        if date_filter_active:
+            sales_amount_sql += " AND date(vso.created_at) BETWEEN ? AND ?"
+            sales_amount_params.extend([from_date, to_date])
+        metric_values["sales_amount"] = float(
+            conn.execute(sales_amount_sql, tuple(sales_amount_params)).fetchone()["s"]
+            or 0
+        )
+    except Exception:
+        metric_values["sales_amount"] = 0.0
     try:
         if date_filter_active:
             metric_values["purchase"] = float(
@@ -9869,7 +10202,7 @@ def dashboard():
                     elif metric_key == "staffs":
                         widget_href = url_for("tailors")
                     elif metric_key == "profit":
-                        widget_href = url_for("reports")
+                        widget_href = url_for("reports", type="sales_summary")
                 except Exception:
                     widget_href = None
                 widget["href"] = widget_href
@@ -10138,7 +10471,7 @@ def dashboard():
             elif metric_key == "staffs":
                 widget_href = url_for("tailors")
             elif metric_key == "profit":
-                widget_href = url_for("reports")
+                widget_href = url_for("reports", type="sales_summary")
         except Exception:
             widget_href = None
 
@@ -11317,7 +11650,7 @@ def customer_sell_submit():
     if upload_error:
         return redirect(url_for("gallery", status=upload_error))
 
-    image_filenames = save_customer_sell_uploads(sell_photos)
+    image_filenames = save_customer_sell_uploads(sell_photos, customer_name=customer_name)
     branch = get_current_branch()
     branch_name = (branch or {}).get("name") or get_setting("branch_name", "")
 
@@ -12040,7 +12373,107 @@ def generate_vendor_report_80mm(from_date, to_date):
 
     return redirect(url_for("static", filename=f"reports/vendor_report_{ts}.pdf"))
 
-def generate_expenses_report_80mm(from_date, to_date):
+def generate_repairs_report_80mm(from_date, to_date, q: str = ""):
+    from_dt = from_date + " 00:00:00"
+    to_dt = to_date + " 23:59:59"
+
+    conn = get_db()
+    repair_query = """
+        SELECT vr.id, vr.description, vr.total_cost, vr.repair_date, vr.created_at, v.vehicle_number, v.vehicle_name
+        FROM vehicle_repairs vr
+        JOIN vehicles v ON v.id = vr.vehicle_id
+        WHERE COALESCE(vr.repair_date, vr.created_at) BETWEEN ? AND ?
+    """
+    params: list[str] = [from_dt, to_dt]
+    if q:
+        repair_query += " AND (LOWER(COALESCE(v.vehicle_number, '')) LIKE ? OR LOWER(COALESCE(v.vehicle_name, '')) LIKE ? OR LOWER(COALESCE(vr.description, '')) LIKE ?)"
+        like = f"%{q.lower()}%"
+        params.extend([like, like, like])
+    repair_query += " ORDER BY COALESCE(vr.repair_date, vr.created_at) DESC, vr.id DESC"
+    rows = conn.execute(repair_query, tuple(params)).fetchall()
+    conn.close()
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = os.path.join(REPORT_DIR, f"repairs_report_{ts}.pdf")
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    doc = SimpleDocTemplate(
+        file_path,
+        pagesize=A4,
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=REPORT_TOP_MARGIN,
+        bottomMargin=24
+    )
+
+    regular_report_font, bold_report_font = get_reportlab_tamil_fonts()
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        name="ReportTitleRepairs",
+        parent=styles["Heading2"],
+        fontName=bold_report_font,
+        fontSize=15,
+        leading=18,
+        spaceAfter=6,
+    )
+    subtitle_style = ParagraphStyle(
+        name="ReportSubtitleRepairs",
+        parent=styles["Normal"],
+        fontName=regular_report_font,
+        fontSize=10,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=12,
+    )
+
+    elements = []
+    elements.append(Paragraph("Vehicle Repairs Report", title_style))
+    elements.append(Paragraph(f"From {from_date} To {to_date}", subtitle_style))
+
+    table_data = [["ID", "Date", "Vehicle No", "Vehicle", "Description", "Cost"]]
+    for r in rows:
+        when = r["repair_date"] or r["created_at"]
+        table_data.append([
+            f"R{int(r['id'] or 0):06d}",
+            format_report_date(when),
+            str(r["vehicle_number"] or "-"),
+            str(r["vehicle_name"] or "-"),
+            str(r["description"] or "-"),
+            f"{float(r['total_cost'] or 0):.2f}",
+        ])
+
+    if len(table_data) == 1:
+        elements.append(Paragraph("No vehicle repairs found for selected date range.", subtitle_style))
+    else:
+        col_widths = [55, 65, 80, 100, 150, 60]
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#efefef")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("FONTNAME", (0, 0), (-1, 0), bold_report_font),
+                    ("FONTNAME", (0, 1), (-1, -1), regular_report_font),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("ALIGN", (5, 1), (5, -1), "RIGHT"),
+                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                    ("ALIGN", (0, 1), (0, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#b5b5b5")),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fafafa")]),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ]
+            )
+        )
+        elements.append(table)
+
+    header_draw = build_report_page_header()
+    doc.build(elements, onFirstPage=header_draw, onLaterPages=header_draw)
+    return redirect(url_for("static", filename=f"reports/repairs_report_{ts}.pdf"))
+
+def generate_expenses_report_80mm(from_date, to_date, q: str = ""):
     # expand date range to full day
     from_dt = from_date + " 00:00:00"
     to_dt = to_date + " 23:59:59"
@@ -12048,15 +12481,20 @@ def generate_expenses_report_80mm(from_date, to_date):
     print("[EXPENSES] From:", from_dt, "To:", to_dt)
 
     conn = get_db()
-    rows = conn.execute(
-        """
-        SELECT expense_name, amount, created_at
-        FROM expenses
-        WHERE created_at BETWEEN ? AND ?
-        ORDER BY created_at
-        """,
-        (from_dt, to_dt),
-    ).fetchall()
+    expense_query = """
+        SELECT e.expense_no, e.expense_name, e.amount, e.created_at
+        FROM expenses e
+        LEFT JOIN vehicle_repairs vr ON vr.expense_id = e.id
+        WHERE vr.id IS NULL
+          AND e.created_at BETWEEN ? AND ?
+    """
+    expense_params = [from_dt, to_dt]
+    if q:
+        expense_query += " AND (LOWER(COALESCE(e.expense_no, '')) LIKE ? OR LOWER(COALESCE(e.expense_name, '')) LIKE ?)"
+        like = f"%{q.lower()}%"
+        expense_params.extend([like, like])
+    expense_query += " ORDER BY e.created_at DESC"
+    rows = conn.execute(expense_query, tuple(expense_params)).fetchall()
     conn.close()
 
     print("[EXPENSES] Rows fetched:", len(rows))
@@ -12100,7 +12538,6 @@ def generate_expenses_report_80mm(from_date, to_date):
         elif isinstance(r, (tuple, list)) and len(r) >= 3:
             expense_name, amount, created_at = r[0], r[1], r[2]
         else:
-            # Fallback for unexpected row shapes
             expense_name, amount, created_at = "", 0, r
 
         date_text = format_report_date(created_at)
@@ -12138,7 +12575,7 @@ def reports():
         return f"{from_d} 00:00:00", f"{to_d} 23:59:59"
 
     selected_type = (request.args.get("type") or "").strip().lower()
-    if selected_type not in {"vehicles", "expenses", "sales"}:
+    if selected_type not in {"vehicles", "expenses", "sales", "repairs", "sales_summary"}:
         selected_type = "vehicles"
 
     selected_range = (request.args.get("range") or "").strip().lower() or "month"
@@ -12161,7 +12598,9 @@ def reports():
     conn = get_db()
     vehicle_list = []
     expense_items: list[dict] = []
+    repair_items: list[dict] = []
     vehicle_sales_list: list[dict] = []
+    sales_summary_list: list[dict] = []
     preview_data = None
     payment_mode = ""
 
@@ -12193,7 +12632,6 @@ def reports():
 
     def fetch_expense_items(from_dt: str, to_dt: str, *, q: str = "") -> list[dict]:
         items: list[dict] = []
-
         expense_query = """
             SELECT TOP 800
                 e.id,
@@ -12225,7 +12663,10 @@ def reports():
                     "open_href": url_for("expense_edit", expense_id=r.get("id")),
                 }
             )
+        return items
 
+    def fetch_repair_items(from_dt: str, to_dt: str, *, q: str = "") -> list[dict]:
+        items: list[dict] = []
         repair_query = """
             SELECT TOP 800
                 vr.id,
@@ -12255,21 +12696,19 @@ def reports():
             else:
                 open_href = url_for("expense_repair_detail", repair_id=r.get("id"), mode="view")
             when = r.get("repair_date") or r.get("created_at")
-            vehicle_part = " ".join([str(r.get("vehicle_number") or "").strip(), str(r.get("vehicle_name") or "").strip()]).strip()
             desc = str(r.get("description") or "").strip()
-            full_desc = f"{vehicle_part} - {desc}" if vehicle_part and desc else (vehicle_part or desc or "Repair")
             items.append(
                 {
                     "kind": "Repair",
                     "ref_no": f"R{int(r.get('id') or 0):06d}",
-                    "description": full_desc,
+                    "vehicle_number": r.get("vehicle_number") or "",
+                    "vehicle_name": r.get("vehicle_name") or "",
+                    "description": desc or "Repair",
                     "amount": float(r.get("total_cost") or 0),
                     "created_at": when,
                     "open_href": open_href,
                 }
             )
-
-        items.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
         return items
 
     def fetch_sales_list(from_dt: str, to_dt: str, *, q: str = "", payment_mode: str = "", status_filter: str = "") -> list[dict]:
@@ -12302,8 +12741,6 @@ def reports():
             params.extend([like, like, like])
         query += " ORDER BY vso.created_at DESC, vso.id DESC"
         rows = conn.execute(query, tuple(params)).fetchall()
-        for r in rows:
-            print("INVENTORY DB STATUS:", r.get("vehicle_name"), r.get("status"))
         out: list[dict] = []
         for row in rows:
             data = dict(row)
@@ -12337,6 +12774,60 @@ def reports():
             out.append(data)
         return out
 
+    def fetch_sales_summary_list(from_dt: str, to_dt: str, *, q: str = "") -> list[dict]:
+        query = """
+            SELECT TOP 800
+                vso.id,
+                vso.order_id,
+                vso.sale_code,
+                vso.created_at,
+                vso.vehicle_name,
+                vso.vehicle_number,
+                v.purchase_price AS purchase_cost,
+                vso.repair_cost AS repair_cost,
+                vso.total_amount AS selling_amount
+            FROM vehicle_sale_orders vso
+            JOIN vehicles v ON v.id = vso.vehicle_id
+            LEFT JOIN orders o ON o.id = vso.order_id
+            WHERE vso.order_id IS NOT NULL
+              AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
+              AND vso.created_at BETWEEN ? AND ?
+        """
+        params: list[str] = [from_dt, to_dt]
+        if q:
+            query += " AND (LOWER(COALESCE(vso.vehicle_number, '')) LIKE ? OR LOWER(COALESCE(vso.vehicle_name, '')) LIKE ?)"
+            like = f"%{q.lower()}%"
+            params.extend([like, like])
+        query += " ORDER BY vso.created_at DESC, vso.id DESC"
+        rows = conn.execute(query, tuple(params)).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            data = dict(row)
+            purchase_cost = float(data.get("purchase_cost") or 0)
+            repair_cost = float(data.get("repair_cost") or 0)
+            selling_amount = float(data.get("selling_amount") or 0)
+            profit = round(selling_amount - purchase_cost - repair_cost, 2)
+            open_href = ""
+            if data.get("order_id"):
+                open_href = url_for("order_detail", order_id=data.get("order_id"), sale_id=data.get("id"), source="orders")
+            else:
+                open_href = url_for("order_new", sale_id=data.get("id"))
+            out.append(
+                {
+                    "id": data.get("id"),
+                    "sale_code": data.get("sale_code") or ("%06d" % (data.get("id") or 0)),
+                    "created_at": data.get("created_at"),
+                    "vehicle_name": data.get("vehicle_name") or "",
+                    "vehicle_number": data.get("vehicle_number") or "",
+                    "purchase_cost": round(purchase_cost, 2),
+                    "repair_cost": round(repair_cost, 2),
+                    "selling_amount": round(selling_amount, 2),
+                    "profit": profit,
+                    "open_href": open_href,
+                }
+            )
+        return out
+
     if request.method == "POST":
         report_type = (request.form.get("type") or "vehicles").strip().lower()
         from_date = (request.form.get("from_date") or "").strip() or from_date
@@ -12355,7 +12846,12 @@ def reports():
 
         vehicle_list = fetch_vehicle_list(from_dt, to_dt, q=q, status_filter=vehicle_status)
         expense_items = fetch_expense_items(from_dt, to_dt, q=q)
+        repair_items = fetch_repair_items(from_dt, to_dt, q=q)
         vehicle_sales_list = fetch_sales_list(from_dt, to_dt, q=q, payment_mode=sales_payment, status_filter=sales_status)
+        try:
+            sales_summary_list = fetch_sales_summary_list(from_dt, to_dt, q=q)
+        except Exception:
+            sales_summary_list = []
 
     else:
         from_dt, to_dt = as_dt_bounds(from_date, to_date)
@@ -12368,9 +12864,17 @@ def reports():
         except Exception:
             expense_items = []
         try:
+            repair_items = fetch_repair_items(from_dt, to_dt)
+        except Exception:
+            repair_items = []
+        try:
             vehicle_sales_list = fetch_sales_list(from_dt, to_dt)
         except Exception:
             vehicle_sales_list = []
+        try:
+            sales_summary_list = fetch_sales_summary_list(from_dt, to_dt)
+        except Exception:
+            sales_summary_list = []
 
     report_files = []
     try:
@@ -12380,6 +12884,13 @@ def reports():
     except Exception:
         report_files = []
     report_files.sort(reverse=True)
+
+    sales_summary_totals = {
+        "purchase_cost": round(sum(float(r.get("purchase_cost") or 0) for r in sales_summary_list), 2),
+        "repair_cost": round(sum(float(r.get("repair_cost") or 0) for r in sales_summary_list), 2),
+        "selling_amount": round(sum(float(r.get("selling_amount") or 0) for r in sales_summary_list), 2),
+        "profit": round(sum(float(r.get("profit") or 0) for r in sales_summary_list), 2),
+    }
 
     conn.close()
     return render_template(
@@ -12392,7 +12903,10 @@ def reports():
         installed_printers=get_installed_printer_names(),
         vehicle_list=vehicle_list,
         expense_items=expense_items,
+        repair_items=repair_items,
         vehicle_sales_list=vehicle_sales_list,
+        sales_summary_list=sales_summary_list,
+        sales_summary_totals=sales_summary_totals,
         report_files=report_files[:30],
     )
 
@@ -12412,7 +12926,7 @@ def reports_import_pdf():
 
 @app.route("/reports/generate", methods=["POST"])
 def report_generate():
-    rtype = request.form.get("type")
+    rtype = (request.form.get("type") or "").strip().lower()
     from_date = request.form.get("from_date")
     to_date = request.form.get("to_date")
     payment_mode = request.form.get("payment_mode", "").strip()
@@ -12423,13 +12937,19 @@ def report_generate():
         return generate_orders_report_80mm(from_date, to_date, payment_mode)
 
     if rtype == "expenses":
-        return generate_expenses_and_repairs_report(from_date, to_date, q=q)
+        return generate_expenses_report_80mm(from_date, to_date, q=q)
+
+    if rtype == "repairs":
+        return generate_repairs_report_80mm(from_date, to_date, q=q)
 
     if rtype == "vehicles":
         return generate_vehicle_inventory_report(from_date, to_date, q=q, status_filter=status_filter)
 
     if rtype == "sales":
         return generate_vehicle_sales_report(from_date, to_date, payment_mode=payment_mode, q=q, status_filter=status_filter)
+
+    if rtype == "sales_summary":
+        return generate_sales_summary_report(from_date, to_date, q=q)
 
     if rtype == "inventory":
         return generate_inventory_report_80mm()
@@ -12448,7 +12968,7 @@ def reports_export_excel():
     q = (request.form.get("q") or "").strip()
     status_filter = (request.form.get("status") or "").strip().title()
 
-    if rtype in {"orders", "expenses", "vendors", "vehicles", "sales"} and (not from_date or not to_date):
+    if rtype in {"orders", "expenses", "vendors", "vehicles", "sales", "repairs", "sales_summary"} and (not from_date or not to_date):
         return redirect(url_for("reports"))
 
     from_dt = f"{from_date} 00:00:00"
@@ -12516,6 +13036,9 @@ def reports_export_excel():
                 ]
             )
 
+    elif rtype == "repairs":
+        writer.writerow(["Type", "Repair ID", "Vehicle No", "Vehicle", "Description", "Cost", "Date"])
+
         repair_query = """
             SELECT vr.id, vr.description, vr.total_cost, vr.repair_date, vr.created_at, v.vehicle_number, v.vehicle_name
             FROM vehicle_repairs vr
@@ -12531,14 +13054,13 @@ def reports_export_excel():
         repair_rows = conn.execute(repair_query, tuple(repair_params)).fetchall()
         for row in repair_rows:
             when = row["repair_date"] or row["created_at"]
-            vehicle_part = " ".join([str(row["vehicle_number"] or "").strip(), str(row["vehicle_name"] or "").strip()]).strip()
-            desc = str(row["description"] or "").strip()
-            full_desc = f"{vehicle_part} - {desc}" if vehicle_part and desc else (vehicle_part or desc or "Repair")
             writer.writerow(
                 [
                     "Repair",
                     f"R{int(row['id'] or 0):06d}",
-                    full_desc,
+                    row["vehicle_number"] or "",
+                    row["vehicle_name"] or "",
+                    row["description"] or "",
                     f'{float(row["total_cost"] or 0):.2f}',
                     format_report_date(when),
                 ]
@@ -12660,6 +13182,49 @@ def reports_export_excel():
                     f"{due_amount:.2f}",
                     row["payment_method"] or "",
                     settlement_status,
+                ]
+            )
+
+    elif rtype == "sales_summary":
+        query = """
+            SELECT
+                vso.sale_code,
+                vso.created_at,
+                vso.vehicle_name,
+                vso.vehicle_number,
+                v.purchase_price AS purchase_cost,
+                vso.repair_cost AS repair_cost,
+                vso.total_amount AS selling_amount
+            FROM vehicle_sale_orders vso
+            JOIN vehicles v ON v.id = vso.vehicle_id
+            LEFT JOIN orders o ON o.id = vso.order_id
+            WHERE vso.order_id IS NOT NULL
+              AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
+              AND vso.created_at BETWEEN ? AND ?
+        """
+        params = [from_dt, to_dt]
+        if q:
+            query += " AND (LOWER(COALESCE(vso.vehicle_number, '')) LIKE ? OR LOWER(COALESCE(vso.vehicle_name, '')) LIKE ?)"
+            like = f"%{q.lower()}%"
+            params.extend([like, like])
+        query += " ORDER BY vso.created_at DESC, vso.id DESC"
+        rows = conn.execute(query, tuple(params)).fetchall()
+        writer.writerow(["Sale Code", "Date", "Vehicle No", "Vehicle", "Purchase Cost", "Repair Cost", "Selling Cost", "Profit"])
+        for row in rows:
+            purchase_cost = float(row["purchase_cost"] or 0)
+            repair_cost = float(row["repair_cost"] or 0)
+            selling_amount = float(row["selling_amount"] or 0)
+            profit = round(selling_amount - purchase_cost - repair_cost, 2)
+            writer.writerow(
+                [
+                    row["sale_code"] or "",
+                    format_report_date(row["created_at"]),
+                    row["vehicle_number"] or "",
+                    row["vehicle_name"] or "",
+                    f"{purchase_cost:.2f}",
+                    f"{repair_cost:.2f}",
+                    f"{selling_amount:.2f}",
+                    f"{profit:.2f}",
                 ]
             )
 
@@ -13208,6 +13773,150 @@ def generate_vehicle_sales_report(
     header_draw = build_report_page_header()
     doc.build(elements, onFirstPage=header_draw, onLaterPages=header_draw)
     return redirect(url_for("static", filename=f"reports/sales_report_{ts}.pdf"))
+
+def generate_sales_summary_report(from_date: str, to_date: str, *, q: str = ""):
+    from_dt = from_date + " 00:00:00"
+    to_dt = to_date + " 23:59:59"
+
+    conn = get_db()
+    query = """
+        SELECT
+            vso.sale_code,
+            vso.created_at,
+            vso.vehicle_name,
+            vso.vehicle_number,
+            v.purchase_price AS purchase_cost,
+            vso.repair_cost AS repair_cost,
+            vso.total_amount AS selling_amount
+        FROM vehicle_sale_orders vso
+        JOIN vehicles v ON v.id = vso.vehicle_id
+        LEFT JOIN orders o ON o.id = vso.order_id
+        WHERE vso.order_id IS NOT NULL
+          AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
+          AND vso.created_at BETWEEN ? AND ?
+    """
+    params: list[str] = [from_dt, to_dt]
+    if q:
+        query += " AND (LOWER(COALESCE(vso.vehicle_number, '')) LIKE ? OR LOWER(COALESCE(vso.vehicle_name, '')) LIKE ?)"
+        like = f"%{q.lower()}%"
+        params.extend([like, like])
+    query += " ORDER BY vso.created_at"
+    rows = conn.execute(query, tuple(params)).fetchall()
+    conn.close()
+
+    computed_rows = []
+    total_purchase = 0.0
+    total_repair = 0.0
+    total_selling = 0.0
+    total_profit = 0.0
+    for row in rows:
+        purchase_cost = float(row["purchase_cost"] or 0)
+        repair_cost = float(row["repair_cost"] or 0)
+        selling_amount = float(row["selling_amount"] or 0)
+        profit = round(selling_amount - purchase_cost - repair_cost, 2)
+        total_purchase += purchase_cost
+        total_repair += repair_cost
+        total_selling += selling_amount
+        total_profit += profit
+        computed_rows.append((row, purchase_cost, repair_cost, selling_amount, profit))
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = os.path.join(REPORT_DIR, f"sales_summary_report_{ts}.pdf")
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    doc = SimpleDocTemplate(
+        file_path,
+        pagesize=A4,
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=REPORT_TOP_MARGIN,
+        bottomMargin=24,
+    )
+    regular_report_font, bold_report_font = get_reportlab_tamil_fonts()
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        name="SalesSummaryReportTitle",
+        parent=styles["Heading2"],
+        fontName=bold_report_font,
+        fontSize=15,
+        leading=18,
+        spaceAfter=6,
+    )
+    subtitle_style = ParagraphStyle(
+        name="SalesSummaryReportSubtitle",
+        parent=styles["Normal"],
+        fontName=regular_report_font,
+        fontSize=10,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=12,
+    )
+    normal_style = ParagraphStyle(
+        name="SalesSummaryReportNormalTamil",
+        parent=styles["Normal"],
+        fontName=regular_report_font,
+    )
+
+    elements: list = []
+    elements.append(Paragraph("Sales Summary Report", title_style))
+    elements.append(Paragraph(f"From {from_date} To {to_date}", subtitle_style))
+
+    table_data = [["Sale", "Date", "Vehicle No", "Vehicle", "Purchase", "Repair", "Selling", "Profit"]]
+    for row, purchase_cost, repair_cost, selling_amount, profit in computed_rows:
+        table_data.append(
+            [
+                str(row["sale_code"] or ""),
+                format_report_date(row["created_at"]),
+                str(row["vehicle_number"] or ""),
+                str(row["vehicle_name"] or ""),
+                f"{purchase_cost:.2f}",
+                f"{repair_cost:.2f}",
+                f"{selling_amount:.2f}",
+                f"{profit:.2f}",
+            ]
+        )
+
+    if len(table_data) == 1:
+        elements.append(Paragraph("No sales found for selected date range.", normal_style))
+    else:
+        table_data.append(
+            [
+                "", "", "", "Total",
+                f"{total_purchase:.2f}",
+                f"{total_repair:.2f}",
+                f"{total_selling:.2f}",
+                f"{total_profit:.2f}",
+            ]
+        )
+        col_widths = [65, 60, 85, 110, 60, 60, 60, 60]
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#efefef")),
+                    ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#efefef")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("FONTNAME", (0, 0), (-1, 0), bold_report_font),
+                    ("FONTNAME", (0, -1), (-1, -1), bold_report_font),
+                    ("FONTNAME", (0, 1), (-1, -2), regular_report_font),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("ALIGN", (4, 1), (7, -1), "RIGHT"),
+                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#b5b5b5")),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#fafafa")]),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ]
+            )
+        )
+        elements.append(table)
+        elements.append(Spacer(1, 8))
+
+    header_draw = build_report_page_header()
+    doc.build(elements, onFirstPage=header_draw, onLaterPages=header_draw)
+    return redirect(url_for("static", filename=f"reports/sales_summary_report_{ts}.pdf"))
 
 def generate_inventory_report_80mm():
     conn = get_db()
@@ -14097,133 +14806,137 @@ def measurement_update_status(measurement_id: int):
 
 @app.route("/orders/download")
 def orders_download():
+    require_app_permission("orders")
     conn = get_db()
-    value_keys = [
-        "neck", "chest", "waist", "hip", "shoulder",
-        "sleeve", "length", "cuff",
-        "inseam", "outseam", "thigh",
-        "knee", "bottom",
+    from_date = (request.args.get("from") or "").strip()
+    to_date = (request.args.get("to") or "").strip()
+    search = (request.args.get("q") or "").strip()
+    statuses = [
+        value.strip().lower()
+        for value in request.args.getlist("status")
+        if value.strip()
     ]
-    def extract_payment_method(notes_text: str | None) -> str:
-        for raw in str(notes_text or "").splitlines():
-            line = raw.strip()
-            if line.lower().startswith("payment method:"):
-                return line.split(":", 1)[1].strip() or "-"
-        return "-"
 
-    def extract_measurement_details(customer_id: int, order_id: int, created_at: str | None) -> str:
-        try:
-            ms = fetch_order_measurements(conn, int(customer_id), int(order_id), created_at)
-        except Exception:
-            return "-"
-        chunks: list[str] = []
-        for m in ms:
-            kind = (m["kind"] or "Item").strip()
-            vals: list[str] = []
-            for key in value_keys:
-                val = m[key] if key in m.keys() else None
-                if val is not None and str(val).strip() != "":
-                    vals.append(fmt_measure(val))
-            if vals:
-                chunks.append(f"{kind}: {', '.join(vals)}")
-            else:
-                chunks.append(f"{kind}: -")
-        return " | ".join(chunks) if chunks else "-"
-
-    def extract_category(order_id: int) -> str:
-        rows = conn.execute(
-            "SELECT item_type FROM order_items WHERE order_id = ?",
-            (order_id,),
-        ).fetchall()
-        names = []
-        for r in rows:
-            item = str(r["item_type"] or "").strip()
-            if not item:
-                continue
-            base = item.split("-", 1)[0].strip()
-            if base and base.lower() not in [x.lower() for x in names]:
-                names.append(base)
-        return ", ".join(names) if names else "-"
-
-    rows = conn.execute(
+    query = """
+        SELECT
+            vso.sale_code,
+            vso.customer_name,
+            vso.customer_phone,
+            vso.vehicle_name,
+            vso.vehicle_number,
+            vso.payment_method,
+            vso.total_amount,
+            COALESCE(o.advance_amount, vso.advance_amount, 0) AS advance_amount,
+            COALESCE(o.paid_amount, 0) AS paid_amount,
+            COALESCE(o.status, 'In-Progress') AS order_status,
+            vso.created_at
+        FROM vehicle_sale_orders vso
+        LEFT JOIN orders o ON o.id = vso.order_id
+        WHERE vso.order_id IS NOT NULL
+    """
+    params: list[object] = []
+    if from_date:
+        query += " AND date(vso.created_at) >= ?"
+        params.append(from_date)
+    if to_date:
+        query += " AND date(vso.created_at) <= ?"
+        params.append(to_date)
+    if statuses:
+        placeholders = ",".join("?" for _ in statuses)
+        query += f" AND LOWER(COALESCE(o.status, 'in-progress')) IN ({placeholders})"
+        params.extend(statuses)
+    else:
+        query += " AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'"
+    if search:
+        like_value = f"%{search}%"
+        query += """
+            AND (
+                vso.sale_code LIKE ?
+                OR vso.customer_name LIKE ?
+                OR vso.customer_phone LIKE ?
+                OR vso.vehicle_name LIKE ?
+                OR vso.vehicle_number LIKE ?
+            )
         """
-        SELECT orders.*, customers.name, customers.phone,
-               (
-                   SELECT GROUP_CONCAT(DISTINCT m.assigned_tailor)
-                   FROM order_items oi
-                   JOIN measurements m ON m.customer_id = orders.customer_id
-                   WHERE oi.order_id = orders.id
-                     AND m.assigned_tailor IS NOT NULL
-                     AND m.assigned_tailor != ''
-                     AND m.kind LIKE '%' || oi.item_type || '%'
-               ) AS assigned_tailors
-        FROM orders
-        JOIN customers ON (
-            customers.id = orders.customer_id
-            OR customers.id = orders.customer_display_id
-        )
-        ORDER BY orders.created_at DESC
-        """
-    ).fetchall()
+        params.extend([like_value] * 5)
+    query += " ORDER BY vso.created_at DESC, vso.id DESC"
+    rows = conn.execute(query, tuple(params)).fetchall()
 
-    output = io.StringIO()
-    writer = csv.writer(output, delimiter="\t")
-    writer.writerow([
-        "Order ID",
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Sales"
+    headers = [
+        "Invoice",
+        "Vehicle",
+        "Vehicle Number",
         "Customer",
         "Phone",
-        "Type",
-        "Status",
-        "Tailor",
-        "Total",
-        "Delivery Date",
-        "Order Date",
-        "Measurement Details",
-        "Order Status",
-        "Payment Summary",
         "Payment Method",
-        "Order Type",
-        "Category",
-    ])
+        "Total Amount",
+        "Advance Amount",
+        "Paid Amount",
+        "Balance Amount",
+        "Status",
+        "Sale Date",
+    ]
+    worksheet.append(headers)
+    header_fill = PatternFill("solid", fgColor="4A1768")
+    for cell in worksheet[1]:
+        cell.font = Font(color="FFFFFF", bold=True)
+        cell.fill = header_fill
+
     for row in rows:
         total_amount = float(row["total_amount"] or 0)
         advance_amount = float(row["advance_amount"] or 0)
         paid_amount = float(row["paid_amount"] or 0)
         balance_amount = max(total_amount - advance_amount - paid_amount, 0)
-        measurement_details = extract_measurement_details(
-            int(row["customer_id"]),
-            int(row["id"]),
-            row["created_at"] if "created_at" in row.keys() else None,
-        )
-        payment_summary = (
-            f"Total: {total_amount:.2f}, "
-            f"Advance: {advance_amount:.2f}, "
-            f"Paid: {paid_amount:.2f}, "
-            f"Balance: {balance_amount:.2f}"
-        )
-        writer.writerow([
-            row.get("order_no") or display_order_no(dict(row)),
-            row["name"],
-            row["phone"],
-            row["order_type"] or "-",
-            row["status"] or "-",
-            row["assigned_tailors"] or row["assigned_tailor"] or "-",
-            f"{total_amount:.2f}",
-            row["due_date"] or "-",
-            row["created_at"] or "-",
-            measurement_details,
-            row["status"] or "-",
-            payment_summary,
-            extract_payment_method(row["notes"] if "notes" in row.keys() else None),
-            row["order_type"] or "-",
-            extract_category(int(row["id"])),
+        sale_date = row["created_at"]
+        if isinstance(sale_date, str):
+            try:
+                sale_date = datetime.fromisoformat(sale_date.strip())
+            except ValueError:
+                pass
+        worksheet.append([
+            row["sale_code"] or "-",
+            row["vehicle_name"] or "-",
+            row["vehicle_number"] or "-",
+            row["customer_name"] or "-",
+            row["customer_phone"] or "-",
+            row["payment_method"] or "-",
+            total_amount,
+            advance_amount,
+            paid_amount,
+            balance_amount,
+            row["order_status"] or "In-Progress",
+            sale_date or "-",
         ])
     conn.close()
 
-    filename = f"order_list_{datetime.now().strftime('%Y%m%d')}.xls"
-    response = Response(output.getvalue(), mimetype="application/vnd.ms-excel")
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    return response
+    for row_number in range(2, worksheet.max_row + 1):
+        for column_number in range(7, 11):
+            worksheet.cell(row=row_number, column=column_number).number_format = '#,##0.00'
+        if isinstance(worksheet.cell(row=row_number, column=12).value, datetime):
+            worksheet.cell(row=row_number, column=12).number_format = "dd-mm-yyyy hh:mm"
+
+    column_widths = [16, 24, 18, 24, 18, 18, 16, 16, 16, 16, 18, 20]
+    for column_number, width in enumerate(column_widths, start=1):
+        worksheet.column_dimensions[worksheet.cell(row=1, column=column_number).column_letter].width = width
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    date_suffix = ""
+    if from_date or to_date:
+        date_suffix = f"_{from_date or 'start'}_to_{to_date or 'today'}"
+    filename = f"sales{date_suffix}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 # @app.route("/orders/new", methods=["GET", "POST"])
@@ -15242,6 +15955,16 @@ def order_new():
             if data.get("customer_id_proof_filename")
             else ""
         )
+        data["customer_photo_url"] = (
+            url_for("static", filename=f"uploads/vehicle_sales/{data['customer_photo_filename']}")
+            if data.get("customer_photo_filename")
+            else ""
+        )
+        data["customer_with_bike_photo_url"] = (
+            url_for("static", filename=f"uploads/vehicle_sales/{data['customer_with_bike_photo_filename']}")
+            if data.get("customer_with_bike_photo_filename")
+            else ""
+        )
         data["rc_book_url"] = (
             url_for("static", filename=f"uploads/vehicles/{data['rc_book_filename']}")
             if data.get("rc_book_filename")
@@ -15314,6 +16037,8 @@ def order_new():
         "gst_amount": f"{as_money(sale_record.get('gst_amount')):.2f}" if sale_record else "0.00",
         "advance_amount": f"{as_money(sale_record.get('advance_amount')):.2f}" if sale_record else "0.00",
         "payment_method": sale_record.get("payment_method", "Cash") if sale_record else "Cash",
+        "payment_finance_name": sale_record.get("payment_finance_name", "") if sale_record else "",
+        "payment_commission_amount": f"{as_money(sale_record.get('payment_commission_amount')):.2f}" if sale_record and sale_record.get("payment_commission_amount") is not None else "",
         "order_date": as_display_datetime(sale_record.get("created_at")) if sale_record else datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
 
@@ -15354,6 +16079,8 @@ def order_new():
             "gst_amount": (request.form.get("gst_amount") or "0").strip() or "0",
             "advance_amount": (request.form.get("advance_amount") or "0").strip() or "0",
             "payment_method": (request.form.get("payment_method") or "Cash").strip() or "Cash",
+            "payment_finance_name": (request.form.get("payment_finance_name") or "").strip(),
+            "payment_commission_amount": (request.form.get("payment_commission_amount") or "").strip(),
             "order_date": (request.form.get("order_date") or "").strip() or datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
 
@@ -15376,9 +16103,24 @@ def order_new():
         customer_id_proof_filename = save_vehicle_sale_upload(
             request.files.get("customer_id_proof_file"),
             fallback=sale_record.get("customer_id_proof_filename") if sale_record else None,
+            customer_name=form_data["customer_name"],
+            doc_label="id proof",
         )
         if not customer_id_proof_filename:
             return render_order_form("Customer ID proof is required.")
+
+        customer_photo_filename = save_vehicle_sale_upload(
+            request.files.get("customer_photo_file"),
+            fallback=sale_record.get("customer_photo_filename") if sale_record else None,
+            customer_name=form_data["customer_name"],
+            doc_label="customer photo",
+        )
+        customer_with_bike_photo_filename = save_vehicle_sale_upload(
+            request.files.get("customer_with_bike_photo_file"),
+            fallback=sale_record.get("customer_with_bike_photo_filename") if sale_record else None,
+            customer_name=form_data["customer_name"],
+            doc_label="customer with bike photo",
+        )
 
         selling_price = round(max(as_money(form_data["selling_price"]), 0.0), 2)
         repair_cost = round(max(as_money(form_data["repair_cost"]), 0.0), 2)
@@ -15397,8 +16139,18 @@ def order_new():
             gst_percent = round((gst_amount * 100.0 / taxable_amount), 2, ) if taxable_amount > 0 else 0.0
         total_amount = round(taxable_amount + gst_amount, 2)
         payment_method = form_data["payment_method"]
-        if payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card"}:
+        if payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}:
             payment_method = "Cash"
+        payment_finance_name = form_data["payment_finance_name"] or None
+        payment_commission_amount = None
+        if payment_method == "Finance":
+            if not payment_finance_name:
+                return render_order_form("Finance name is required for Finance payments.")
+            if not form_data["payment_commission_amount"]:
+                return render_order_form("Commission amount is required for Finance payments.")
+            payment_commission_amount = round(as_money(form_data["payment_commission_amount"]), 2)
+        else:
+            payment_finance_name = None
         purchase_price = round(as_money(vehicle.get("purchase_price")), 2)
         purchase_total_cost = round(purchase_price + repair_cost, 2)
 
@@ -15509,6 +16261,8 @@ def order_new():
                     customer_address = ?,
                     customer_id_proof_filename = ?,
                     customer_id_proof_ref = ?,
+                    customer_photo_filename = ?,
+                    customer_with_bike_photo_filename = ?,
                     vehicle_id = ?,
                     vehicle_name = ?,
                     vehicle_number = ?,
@@ -15527,6 +16281,8 @@ def order_new():
                     advance_amount = ?,
                     total_amount = ?,
                     payment_method = ?,
+                    payment_finance_name = ?,
+                    payment_commission_amount = ?,
                     vehicle_image_filenames = ?,
                     updated_at = ?
                 WHERE id = ?
@@ -15540,6 +16296,8 @@ def order_new():
                     form_data["customer_address"] or None,
                     customer_id_proof_filename,
                     customer_id_proof_ref,
+                    customer_photo_filename,
+                    customer_with_bike_photo_filename,
                     vehicle_id,
                     vehicle.get("vehicle_name") or form_data["vehicle_name"],
                     vehicle.get("vehicle_number") or form_data["vehicle_number"],
@@ -15558,6 +16316,8 @@ def order_new():
                     advance_amount,
                     total_amount,
                     payment_method,
+                    payment_finance_name,
+                    payment_commission_amount,
                     ",".join(gallery_names) if gallery_names else None,
                     now,
                     int(sale_record["id"]),
@@ -15578,6 +16338,8 @@ def order_new():
                     customer_address,
                     customer_id_proof_filename,
                     customer_id_proof_ref,
+                    customer_photo_filename,
+                    customer_with_bike_photo_filename,
                     vehicle_id,
                     vehicle_name,
                     vehicle_number,
@@ -15596,11 +16358,13 @@ def order_new():
                     advance_amount,
                     total_amount,
                     payment_method,
+                    payment_finance_name,
+                    payment_commission_amount,
                     vehicle_image_filenames,
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     linked_order_id,
@@ -15612,6 +16376,8 @@ def order_new():
                     form_data["customer_address"] or None,
                     customer_id_proof_filename,
                     customer_id_proof_ref,
+                    customer_photo_filename,
+                    customer_with_bike_photo_filename,
                     vehicle_id,
                     vehicle.get("vehicle_name") or form_data["vehicle_name"],
                     vehicle.get("vehicle_number") or form_data["vehicle_number"],
@@ -15630,6 +16396,8 @@ def order_new():
                     advance_amount,
                     total_amount,
                     payment_method,
+                    payment_finance_name,
+                    payment_commission_amount,
                     ",".join(gallery_names) if gallery_names else None,
                     now,
                     now,
@@ -17316,7 +18084,10 @@ def expense_dashboard():
     filter_type = raw_type or "repair"  # expense | repair (default: repair)
     if filter_type not in {"expense", "repair"}:
         filter_type = "repair"
+    category_filter = (request.args.get("category") or "").strip()
     conn = get_db()
+    ensure_expenses_category_column(conn)
+    ensure_expense_categories_table(conn)
 
     quick_error = None
     quick_form = None
@@ -17324,6 +18095,7 @@ def expense_dashboard():
     if request.method == "POST":
         is_repair = (request.form.get("is_repair") == "1")
         description = (request.form.get("description") or "").strip()
+        category_input = (request.form.get("category") or "").strip()
         vehicle_number_input = (request.form.get("vehicle_number") or "").strip()
         amount_raw = (request.form.get("amount") or "").strip()
         amount = 0.0
@@ -17331,6 +18103,8 @@ def expense_dashboard():
 
         if not description:
             error = "Description is required."
+        if not error and not is_repair and not category_input:
+            error = "Category is required."
         if not error:
             try:
                 amount = float(amount_raw)
@@ -17400,7 +18174,8 @@ def expense_dashboard():
                         )
                         print("Rows updated:", update_cursor.rowcount)
                 else:
-                    create_expense_record(conn, description, amount, now_str())
+                    create_expense_record(conn, description, amount, now_str(), category=category_input)
+                    add_expense_category_if_missing(conn, category_input)
             except Exception:
                 error = "Unable to save. Please try again."
 
@@ -17411,13 +18186,17 @@ def expense_dashboard():
                 "is_repair": "1" if is_repair else "0",
                 "vehicle_number": vehicle_number_input,
                 "description": description,
+                "category": category_input,
                 "amount": amount_raw,
             }
             filter_type = "repair" if is_repair else "expense"
         else:
             conn.commit()
             conn.close()
-            return redirect(url_for("expense_dashboard", type=("repair" if is_repair else "expense")))
+            redirect_args = {"type": ("repair" if is_repair else "expense"), "open": "1"}
+            if not is_repair and category_input:
+                redirect_args["category"] = category_input
+            return redirect(url_for("expense_dashboard", **redirect_args))
 
     expense_totals = get_expense_breakdown_totals(conn)
     total_expense = float(expense_totals.get("misc") or 0.0)
@@ -17428,6 +18207,7 @@ def expense_dashboard():
 
     repairs = []
     expenses = []
+    category_tabs: list[str] = []
     if filter_type == "repair":
         repairs = conn.execute(
             """
@@ -17457,21 +18237,33 @@ def expense_dashboard():
             """
         ).fetchall()
     else:
-        expenses = conn.execute(
-            """
+        try:
+            category_rows = conn.execute(
+                "SELECT name FROM expense_categories ORDER BY name"
+            ).fetchall()
+            category_tabs = [row["name"] for row in category_rows if row.get("name")]
+        except Exception:
+            category_tabs = []
+
+        expense_sql = """
             SELECT e.id,
                    e.expense_no,
                    e.expense_name,
                    e.amount,
+                   e.category,
                    e.created_at,
                    vr.id AS repair_id
             FROM expenses e
             LEFT JOIN vehicle_repairs vr ON vr.expense_id = e.id
             LEFT JOIN salaries s ON s.expense_id = e.id
             WHERE s.id IS NULL AND vr.id IS NULL
-            ORDER BY e.created_at DESC
-            """
-        ).fetchall()
+        """
+        expense_params: list[str] = []
+        if category_filter:
+            expense_sql += " AND LOWER(COALESCE(e.category, '')) = LOWER(?)"
+            expense_params.append(category_filter)
+        expense_sql += " ORDER BY e.created_at DESC"
+        expenses = conn.execute(expense_sql, tuple(expense_params)).fetchall()
 
     quick_expense_no = generate_expense_no(conn)
     conn.close()
@@ -17490,10 +18282,44 @@ def expense_dashboard():
         expenses=expenses,
         repairs=repairs,
         filter_type=filter_type,
+        category_tabs=category_tabs,
+        category_filter=category_filter,
         quick_expense_no=quick_expense_no,
         quick_error=quick_error,
         quick_form=quick_form,
     )
+
+
+@app.route("/expense/category/add", methods=["POST"])
+def expense_category_add():
+    name = (request.form.get("name") or "").strip()
+    if not name and request.is_json:
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Category name is required."}), 400
+
+    conn = get_db()
+    try:
+        ensure_expense_categories_table(conn)
+        existing = conn.execute(
+            "SELECT TOP 1 id, name FROM expense_categories WHERE LOWER(name) = LOWER(?)",
+            (name,),
+        ).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({"ok": True, "name": existing["name"], "existing": True})
+        conn.execute(
+            "INSERT INTO expense_categories (name, created_at) VALUES (?, ?)",
+            (name, now_str()),
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "name": name, "existing": False})
+    except Exception:
+        conn.rollback()
+        conn.close()
+        return jsonify({"ok": False, "error": "Unable to add category."}), 500
 
 
 @app.route("/expense/repair/add", methods=["GET", "POST"])
@@ -21847,47 +22673,102 @@ def materials_delete(item_id: int):
     return redirect(url_for("materials"))
 
 
-def save_vehicle_upload(upload, *, fallback: str | None = None) -> str | None:
+def _slugify_for_filename(value: str | None, *, fallback: str = "file") -> str:
+    """Turn arbitrary text into a short, readable, filesystem-safe fragment.
+    e.g. "Subash R." -> "subash_r". Falls back to `fallback` if nothing
+    usable is left after cleaning (empty name, only symbols, etc)."""
+    value = (value or "").strip().lower()
+    value = re.sub(r"[^a-z0-9]+", "_", value)
+    value = value.strip("_")
+    return value or fallback
+
+
+def _named_upload_filename(folder: str, customer_name: str | None, doc_label: str | None, original_filename: str) -> str:
+    """Build a human-readable filename like 'subash_rc_book.jpg' from the
+    customer name + document label, and de-duplicate against existing files
+    in `folder` by appending _2, _3, ... instead of ever overwriting one.
+    Falls back to a uuid-prefixed name if there's no customer name to use."""
+    ext = os.path.splitext(secure_filename(original_filename or ""))[1].lower()
+
+    customer_slug = _slugify_for_filename(customer_name, fallback="")
+    label_slug = _slugify_for_filename(doc_label, fallback="")
+
+    if not customer_slug:
+        # No customer context available -- keep the old, always-unique scheme.
+        base_filename = secure_filename(original_filename or "") or "file"
+        return f"{uuid.uuid4().hex}_{base_filename}"
+
+    base = "_".join(part for part in (customer_slug, label_slug) if part) or customer_slug
+    candidate = f"{base}{ext}"
+    counter = 2
+    while os.path.exists(os.path.join(folder, candidate)):
+        candidate = f"{base}_{counter}{ext}"
+        counter += 1
+    return candidate
+
+
+def save_vehicle_upload(
+    upload,
+    *,
+    fallback: str | None = None,
+    customer_name: str | None = None,
+    doc_label: str | None = None,
+) -> str | None:
     if not upload or not getattr(upload, "filename", ""):
         return fallback
-    filename = secure_filename(upload.filename or "")
-    if not filename:
+    if not secure_filename(upload.filename or ""):
         return fallback
-    final_name = f"{uuid.uuid4().hex}_{filename}"
-    upload.save(os.path.join(app.config["VEHICLE_UPLOAD_FOLDER"], final_name))
+    folder = app.config["VEHICLE_UPLOAD_FOLDER"]
+    final_name = _named_upload_filename(folder, customer_name, doc_label, upload.filename)
+    upload.save(os.path.join(folder, final_name))
     return final_name
 
 
-def save_vehicle_uploads(files, *, limit: int = 4, fallback: list[str] | None = None) -> list[str]:
+def save_vehicle_uploads(
+    files,
+    *,
+    limit: int = 4,
+    fallback: list[str] | None = None,
+    customer_name: str | None = None,
+    doc_label: str | None = None,
+) -> list[str]:
     saved: list[str] = []
+    folder = app.config["VEHICLE_UPLOAD_FOLDER"]
+    index = 1
     for upload in files or []:
         if len(saved) >= limit:
             break
         if not upload or not getattr(upload, "filename", ""):
             continue
-        filename = secure_filename(upload.filename or "")
-        if not filename:
+        if not secure_filename(upload.filename or ""):
             continue
-        final_name = f"{uuid.uuid4().hex}_{filename}"
-        upload.save(os.path.join(app.config["VEHICLE_UPLOAD_FOLDER"], final_name))
+        # When multiple files share one label (e.g. vehicle photos), number
+        # them so they don't collide: "subash_photo_1.jpg", "..._photo_2.jpg".
+        this_label = f"{doc_label}_{index}" if doc_label and limit > 1 else doc_label
+        final_name = _named_upload_filename(folder, customer_name, this_label, upload.filename)
+        upload.save(os.path.join(folder, final_name))
         saved.append(final_name)
+        index += 1
     if saved:
         return saved[:limit]
     return list(fallback or [])[:limit]
 
 
-def save_customer_sell_uploads(files) -> list[str]:
+def save_customer_sell_uploads(files, *, customer_name: str | None = None) -> list[str]:
     saved: list[str] = []
+    folder = app.config["CUSTOMER_SELL_UPLOAD_FOLDER"]
+    index = 1
     for upload in files or []:
         if not upload or not getattr(upload, "filename", ""):
             continue
-        filename = secure_filename(upload.filename or "")
-        if not filename:
+        if not secure_filename(upload.filename or ""):
             continue
-        final_name = f"{uuid.uuid4().hex}_{filename}"
+        doc_label = f"photo_{index}" if customer_name else None
+        final_name = _named_upload_filename(folder, customer_name, doc_label, upload.filename)
         upload.stream.seek(0)
-        upload.save(os.path.join(app.config["CUSTOMER_SELL_UPLOAD_FOLDER"], final_name))
+        upload.save(os.path.join(folder, final_name))
         saved.append(final_name)
+        index += 1
     return saved
 
 
@@ -21928,14 +22809,20 @@ def validate_customer_sell_uploads(files) -> str | None:
     return None
 
 
-def save_vehicle_sale_upload(upload, *, fallback: str | None = None) -> str | None:
+def save_vehicle_sale_upload(
+    upload,
+    *,
+    fallback: str | None = None,
+    customer_name: str | None = None,
+    doc_label: str | None = None,
+) -> str | None:
     if not upload or not getattr(upload, "filename", ""):
         return fallback
-    filename = secure_filename(upload.filename or "")
-    if not filename:
+    if not secure_filename(upload.filename or ""):
         return fallback
-    final_name = f"{uuid.uuid4().hex}_{filename}"
-    upload.save(os.path.join(app.config["VEHICLE_SALE_UPLOAD_FOLDER"], final_name))
+    folder = app.config["VEHICLE_SALE_UPLOAD_FOLDER"]
+    final_name = _named_upload_filename(folder, customer_name, doc_label, upload.filename)
+    upload.save(os.path.join(folder, final_name))
     return final_name
 
 
@@ -22420,6 +23307,8 @@ def inventory_add():
         purchase_settlement_status = (request.form.get("purchase_settlement_status") or "").strip().title()
         purchase_paid_amount = to_money(request.form.get("purchase_paid_amount")) or 0.0
         purchase_payment_mode = (request.form.get("purchase_payment_mode") or "").strip()
+        purchase_payment_finance_name = (request.form.get("purchase_payment_finance_name") or "").strip() or None
+        purchase_payment_commission_amount = to_money(request.form.get("purchase_payment_commission_amount"))
         purchase_paid_at = normalize_datetime_local(request.form.get("purchase_paid_at")) or now_str()
         selling_price = to_money(request.form.get("selling_price"))
         status = vehicle_status_label(request.form.get("status"))
@@ -22459,6 +23348,16 @@ def inventory_add():
         if not purchase_payment_mode:
             conn.close()
             return render_inventory_add("Paymode is required.")
+        if purchase_payment_mode == "Finance":
+            if not purchase_payment_finance_name:
+                conn.close()
+                return render_inventory_add("Finance name is required.")
+            if purchase_payment_commission_amount is None:
+                conn.close()
+                return render_inventory_add("Commission amount is required.")
+        else:
+            purchase_payment_finance_name = None
+            purchase_payment_commission_amount = None
         if purchase_price is not None:
             if purchase_paid_amount > float(purchase_price):
                 conn.close()
@@ -22633,13 +23532,28 @@ def inventory_add():
                 conn.close()
                 return render_inventory_add("Repair amount is required.")
 
-        purchase_id_proof_filename = save_vehicle_upload(purchase_id_proof_upload)
-        purchase_co_id_proof_filename = save_vehicle_upload(purchase_co_id_proof_upload) if co_enabled else None
-        gallery_photo_filenames = save_vehicle_uploads(uploaded_vehicle_photos, limit=4)
+        purchase_id_proof_filename = save_vehicle_upload(
+            purchase_id_proof_upload, customer_name=purchase_customer_name, doc_label="id proof"
+        )
+        purchase_co_id_proof_filename = save_vehicle_upload(
+            purchase_co_id_proof_upload, customer_name=purchase_co_name or purchase_customer_name, doc_label="co id proof"
+        ) if co_enabled else None
+        gallery_photo_filenames = save_vehicle_uploads(
+            uploaded_vehicle_photos, limit=4, customer_name=purchase_customer_name, doc_label="photo"
+        )
         photo_filename = gallery_photo_filenames[0] if gallery_photo_filenames else None
-        rc_book_filename = save_vehicle_upload(request.files.get("rc_book"))
-        insurance_document_filename = save_vehicle_upload(request.files.get("insurance_document")) if insurance_enabled else None
-        puc_certificate_filename = save_vehicle_upload(request.files.get("puc_certificate"))
+        rc_book_filename = save_vehicle_upload(
+            request.files.get("rc_book"), customer_name=purchase_customer_name, doc_label="rc book"
+        )
+        rc_book_back_filename = save_vehicle_upload(
+            request.files.get("rc_book_back"), customer_name=purchase_customer_name, doc_label="rc book back"
+        )
+        insurance_document_filename = save_vehicle_upload(
+            request.files.get("insurance_document"), customer_name=purchase_customer_name, doc_label="insurance"
+        ) if insurance_enabled else None
+        puc_certificate_filename = save_vehicle_upload(
+            request.files.get("puc_certificate"), customer_name=purchase_customer_name, doc_label="puc"
+        )
 
         now = now_str()
         exists = conn.execute(
@@ -22675,6 +23589,8 @@ def inventory_add():
                 purchase_settlement_status,
                 purchase_paid_amount,
                 purchase_payment_mode,
+                purchase_payment_finance_name,
+                purchase_payment_commission_amount,
                 purchase_paid_at,
                 selling_price,
                 status,
@@ -22711,10 +23627,11 @@ def inventory_add():
                 purchase_branch_transfer_id,
                 purchase_branch_handled_by,
                 rc_book_filename,
+                rc_book_back_filename,
                 insurance_document_filename,
                 puc_certificate_filename
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 vehicle_name,
@@ -22738,6 +23655,8 @@ def inventory_add():
                 purchase_settlement_status,
                 purchase_paid_amount,
                 purchase_payment_mode,
+                purchase_payment_finance_name,
+                purchase_payment_commission_amount,
                 purchase_paid_at,
                 selling_price,
                 status,
@@ -22774,6 +23693,7 @@ def inventory_add():
                 purchase_branch_transfer_id,
                 purchase_branch_handled_by,
                 rc_book_filename,
+                rc_book_back_filename,
                 insurance_document_filename,
                 puc_certificate_filename,
             ),
@@ -22960,6 +23880,8 @@ def inventory_vehicle_edit(vehicle_id: int):
         purchase_paid_amount_raw = to_money(request.form.get("purchase_paid_amount"))
         purchase_paid_amount = purchase_paid_amount_raw if purchase_paid_amount_raw is not None else float(vehicle.get("purchase_paid_amount") or 0)
         purchase_payment_mode = (request.form.get("purchase_payment_mode") or vehicle.get("purchase_payment_mode") or "").strip()
+        purchase_payment_finance_name = None
+        purchase_payment_commission_amount = None
         purchase_paid_at = (
             normalize_datetime_local(request.form.get("purchase_paid_at"))
             or normalize_datetime_local(vehicle.get("purchase_paid_at"))
@@ -23030,7 +23952,7 @@ def inventory_vehicle_edit(vehicle_id: int):
                 error="Purchase settlement status is required.",
             )
         purchase_payment_mode = normalize_vehicle_transfer_mode(purchase_payment_mode, default="")
-        if not purchase_payment_mode:
+        if purchase_payment_mode not in {"Cash", "UPI", "Bank", "GPay", "Card"}:
             conn.close()
             return render_template(
                 "vehicle_edit.html",
@@ -23198,7 +24120,14 @@ def inventory_vehicle_edit(vehicle_id: int):
             upload = request.files.get(f"photo_{idx}")
             if upload and getattr(upload, "filename", ""):
                 any_slot_upload = True
-                updated_slots.append(save_vehicle_upload(upload, fallback=None))
+                updated_slots.append(
+                    save_vehicle_upload(
+                        upload,
+                        fallback=None,
+                        customer_name=purchase_customer_name,
+                        doc_label=f"photo_{idx + 1}",
+                    )
+                )
             elif remove_requested:
                 updated_slots.append(None)
             else:
@@ -23244,6 +24173,8 @@ def inventory_vehicle_edit(vehicle_id: int):
                     legacy_uploads,
                     limit=4,
                     fallback=deduped_existing_gallery,
+                    customer_name=purchase_customer_name,
+                    doc_label="photo",
                 )
 
         compact_gallery = [name for name in updated_slots if name]
@@ -23261,26 +24192,38 @@ def inventory_vehicle_edit(vehicle_id: int):
         purchase_id_proof_filename = save_vehicle_upload(
             purchase_id_proof_upload,
             fallback=vehicle.get("purchase_id_proof_filename"),
+            customer_name=purchase_customer_name,
+            doc_label="id proof",
         )
         purchase_co_id_proof_filename = save_vehicle_upload(
             request.files.get("pi_co_id_proof_file") if co_enabled else None,
             fallback=vehicle.get("purchase_co_id_proof_filename"),
+            customer_name=purchase_co_name or purchase_customer_name,
+            doc_label="co id proof",
         ) if co_enabled else None
         rc_book_filename = save_vehicle_upload(
             request.files.get("rc_book"),
             fallback=vehicle.get("rc_book_filename"),
+            customer_name=purchase_customer_name,
+            doc_label="rc book",
         )
         rc_book_back_filename = save_vehicle_upload(
             request.files.get("rc_book_back"),
             fallback=vehicle.get("rc_book_back_filename"),
+            customer_name=purchase_customer_name,
+            doc_label="rc book back",
         )
         insurance_document_filename = save_vehicle_upload(
             request.files.get("insurance_document") if insurance_enabled else None,
             fallback=vehicle.get("insurance_document_filename") if insurance_enabled else None,
+            customer_name=purchase_customer_name,
+            doc_label="insurance",
         ) if insurance_enabled else None
         puc_certificate_filename = save_vehicle_upload(
             request.files.get("puc_certificate"),
             fallback=vehicle.get("puc_certificate_filename"),
+            customer_name=purchase_customer_name,
+            doc_label="puc",
         )
 
         conn.execute(
@@ -23307,6 +24250,8 @@ def inventory_vehicle_edit(vehicle_id: int):
                 purchase_settlement_status = ?,
                 purchase_paid_amount = ?,
                 purchase_payment_mode = ?,
+                purchase_payment_finance_name = ?,
+                purchase_payment_commission_amount = ?,
                 purchase_paid_at = ?,
                 selling_price = ?,
                 status = ?,
@@ -23368,6 +24313,8 @@ def inventory_vehicle_edit(vehicle_id: int):
                 purchase_settlement_status,
                 purchase_paid_amount,
                 purchase_payment_mode,
+                purchase_payment_finance_name,
+                purchase_payment_commission_amount,
                 purchase_paid_at,
                 selling_price,
                 status,
@@ -23993,7 +24940,7 @@ def api_vehicles():
         for row in rows:
             vehicle = build_gallery_vehicle_payload(row)
             vehicle["gallery_images"] = [
-                url_for("static", filename=f"uploads/vehicles/{name}", _external=True)
+                build_upload_url(f"uploads/vehicles/{name}")
                 for name in vehicle.get("gallery_images", [])
                 if name
             ]
@@ -24030,7 +24977,7 @@ def api_vehicle_detail(vehicle_id: int):
 
         vehicle = build_gallery_vehicle_payload(row)
         vehicle["gallery_images"] = [
-            url_for("static", filename=f"uploads/vehicles/{name}", _external=True)
+            build_upload_url(f"uploads/vehicles/{name}")
             for name in vehicle.get("gallery_images", [])
             if name
         ]
@@ -24093,15 +25040,15 @@ def api_vehicle_detail(vehicle_id: int):
         # how gallery_images is turned into full URLs above). Without this
         # the filenames sit in the row but the app has no link to open.
         vehicle["rc_book_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{row['rc_book_filename']}", _external=True)
+            build_upload_url(f"uploads/vehicles/{row['rc_book_filename']}")
             if row.get("rc_book_filename") else None
         )
         vehicle["rc_book_back_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{row['rc_book_back_filename']}", _external=True)
+            build_upload_url(f"uploads/vehicles/{row['rc_book_back_filename']}")
             if row.get("rc_book_back_filename") else None
         )
         vehicle["insurance_document_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{row['insurance_document_filename']}", _external=True)
+            build_upload_url(f"uploads/vehicles/{row['insurance_document_filename']}")
             if row.get("insurance_document_filename") else None
         )
 
@@ -24258,7 +25205,7 @@ def api_vehicle_update(vehicle_id: int):
 
         vehicle = build_gallery_vehicle_payload(updated_row)
         vehicle["gallery_images"] = [
-            url_for("static", filename=f"uploads/vehicles/{name}", _external=True)
+            build_upload_url(f"uploads/vehicles/{name}")
             for name in vehicle.get("gallery_images", [])
             if name
         ]
@@ -24315,7 +25262,14 @@ def api_vehicle_upload_documents(vehicle_id: int):
         if photo_error:
             return jsonify({"success": False, "message": photo_error}), 400
 
-        newly_saved = save_vehicle_uploads(new_photo_uploads, limit=remaining_slots) if remaining_slots else []
+        doc_customer_name = row.get("purchase_customer_name") or None
+
+        newly_saved = save_vehicle_uploads(
+            new_photo_uploads,
+            limit=remaining_slots,
+            customer_name=doc_customer_name,
+            doc_label="photo",
+        ) if remaining_slots else []
         gallery_images = (existing_images + newly_saved)[:4]
 
         set_clauses: list = ["vehicle_image_filenames = ?"]
@@ -24331,16 +25285,16 @@ def api_vehicle_upload_documents(vehicle_id: int):
 
         if rc_book_upload and getattr(rc_book_upload, "filename", ""):
             set_clauses.append("rc_book_filename = ?")
-            params.append(save_vehicle_upload(rc_book_upload))
+            params.append(save_vehicle_upload(rc_book_upload, customer_name=doc_customer_name, doc_label="rc book"))
         if rc_book_back_upload and getattr(rc_book_back_upload, "filename", ""):
             set_clauses.append("rc_book_back_filename = ?")
-            params.append(save_vehicle_upload(rc_book_back_upload))
+            params.append(save_vehicle_upload(rc_book_back_upload, customer_name=doc_customer_name, doc_label="rc book back"))
         if insurance_doc_upload and getattr(insurance_doc_upload, "filename", ""):
             set_clauses.append("insurance_document_filename = ?")
-            params.append(save_vehicle_upload(insurance_doc_upload))
+            params.append(save_vehicle_upload(insurance_doc_upload, customer_name=doc_customer_name, doc_label="insurance"))
         if puc_doc_upload and getattr(puc_doc_upload, "filename", ""):
             set_clauses.append("puc_certificate_filename = ?")
-            params.append(save_vehicle_upload(puc_doc_upload))
+            params.append(save_vehicle_upload(puc_doc_upload, customer_name=doc_customer_name, doc_label="puc"))
 
         set_clauses.append("updated_at = ?")
         params.append(now_str())
@@ -24355,7 +25309,7 @@ def api_vehicle_upload_documents(vehicle_id: int):
         updated_row = conn.execute("SELECT * FROM vehicles WHERE id = ?", (vehicle_id,)).fetchone()
         vehicle = build_gallery_vehicle_payload(updated_row)
         vehicle["gallery_images"] = [
-            url_for("static", filename=f"uploads/vehicles/{name}", _external=True)
+            build_upload_url(f"uploads/vehicles/{name}")
             for name in vehicle.get("gallery_images", [])
             if name
         ]
@@ -24470,29 +25424,45 @@ def api_vehicle_add():
             if exists:
                 return jsonify({"success": False, "message": "Vehicle number already exists."}), 409
 
-        gallery_photo_filenames = save_vehicle_uploads(uploaded_photos, limit=4)
+        gallery_photo_filenames = save_vehicle_uploads(
+            uploaded_photos, limit=4, customer_name=purchase_customer_name, doc_label="photo"
+        )
         photo_filename = gallery_photo_filenames[0] if gallery_photo_filenames else None
 
-        rc_book_filename = save_vehicle_upload(rc_book_upload)
-        rc_book_back_filename = save_vehicle_upload(rc_book_back_upload)
-        insurance_document_filename = save_vehicle_upload(insurance_doc_upload)
-        puc_certificate_filename = save_vehicle_upload(puc_doc_upload)
+        rc_book_filename = save_vehicle_upload(
+            rc_book_upload, customer_name=purchase_customer_name, doc_label="rc book"
+        )
+        rc_book_back_filename = save_vehicle_upload(
+            rc_book_back_upload, customer_name=purchase_customer_name, doc_label="rc book back"
+        )
+        insurance_document_filename = save_vehicle_upload(
+            insurance_doc_upload, customer_name=purchase_customer_name, doc_label="insurance"
+        )
+        puc_certificate_filename = save_vehicle_upload(
+            puc_doc_upload, customer_name=purchase_customer_name, doc_label="puc"
+        )
 
         # Save ID proof files
         purchase_id_proof_filename = (
-            save_vehicle_uploads([purchase_id_proof], limit=1)[0]
+            save_vehicle_uploads(
+                [purchase_id_proof], limit=1, customer_name=purchase_customer_name, doc_label="id proof"
+            )[0]
             if purchase_id_proof and purchase_id_proof.filename
             else None
         )
 
         purchase_agent_id_proof_filename = (
-            save_vehicle_uploads([purchase_agent_id_proof], limit=1)[0]
+            save_vehicle_uploads(
+                [purchase_agent_id_proof], limit=1, customer_name=purchase_agent_name or purchase_customer_name, doc_label="agent id proof"
+            )[0]
             if purchase_agent_id_proof and purchase_agent_id_proof.filename
             else None
         )
 
         purchase_co_id_proof_filename = (
-            save_vehicle_uploads([purchase_co_id_proof], limit=1)[0]
+            save_vehicle_uploads(
+                [purchase_co_id_proof], limit=1, customer_name=purchase_co_name or purchase_customer_name, doc_label="co id proof"
+            )[0]
             if purchase_co_id_proof and purchase_co_id_proof.filename
             else None
         )
@@ -24627,7 +25597,7 @@ def api_vehicle_add():
         row = conn.execute("SELECT * FROM vehicles WHERE id = ?", (new_id,)).fetchone()
         vehicle = build_gallery_vehicle_payload(row)
         vehicle["gallery_images"] = [
-            url_for("static", filename=f"uploads/vehicles/{name}", _external=True)
+            build_upload_url(f"uploads/vehicles/{name}")
             for name in vehicle.get("gallery_images", [])
             if name
         ]
@@ -25754,7 +26724,7 @@ def _serialize_rental_row(row):
     """Shared shaping for /api/rentals list + detail rows."""
     gallery_source = row.get("vehicle_gallery") or row.get("vehicle_image_filenames") or ""
     gallery_images = [
-        url_for("static", filename=f"uploads/vehicles/{name.strip()}", _external=True)
+        build_upload_url(f"uploads/vehicles/{name.strip()}")
         for name in str(gallery_source).split(",")
         if name.strip()
     ]
@@ -26154,6 +27124,176 @@ def api_sale_update(sale_id: int):
         conn.close()
 
 
+@app.route("/api/sales/<int:sale_id>/id-proof", methods=["POST"])
+@jwt_required()
+def api_sale_id_proof(sale_id: int):
+    """
+    Mobile — upload/replace the buyer's Customer ID Proof for a sale.
+
+    Sent as multipart/form-data (not JSON) because it carries a file:
+      customer_id_proof_file  (required, image or pdf)
+      customer_id_proof_ref   (optional, YYYY-MM-DD reference date)
+
+    This mirrors the upload the web "Edit Sale" screen already does, so a
+    sale created on mobile (which the JSON /sell endpoint can't attach a
+    file to) can still get its ID proof attached afterwards.
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM vehicle_sale_orders WHERE id = ?", (sale_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Sale not found."}), 404
+
+        upload = request.files.get("customer_id_proof_file")
+        if not upload or not getattr(upload, "filename", ""):
+            return jsonify({"success": False, "message": "Choose an ID proof file to upload."}), 400
+
+        filename = save_vehicle_sale_upload(
+            upload,
+            fallback=row.get("customer_id_proof_filename"),
+            customer_name=row.get("customer_name"),
+            doc_label="id proof",
+        )
+        if not filename:
+            return jsonify({"success": False, "message": "Unsupported file. Please upload an image or PDF."}), 400
+
+        ref_raw = (request.form.get("customer_id_proof_ref") or "").strip()[:10]
+        ref_value = ref_raw if ref_raw and date_only(ref_raw) != "-" else row.get("customer_id_proof_ref")
+
+        conn.execute(
+            """
+            UPDATE vehicle_sale_orders
+            SET customer_id_proof_filename = ?, customer_id_proof_ref = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (filename, ref_value, now_str(), sale_id),
+        )
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Customer ID proof uploaded.",
+            "customer_id_proof_filename": filename,
+            "customer_id_proof_url": build_upload_url(f"uploads/vehicle_sales/{filename}"),
+        })
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"Failed to upload ID proof: {e}"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/sales/<int:sale_id>/customer-photo", methods=["POST"])
+@jwt_required()
+def api_sale_customer_photo(sale_id: int):
+    """
+    Mobile — upload/replace the buyer's own photo for a sale.
+
+    Sent as multipart/form-data:
+      customer_photo_file  (required, image)
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM vehicle_sale_orders WHERE id = ?", (sale_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Sale not found."}), 404
+
+        upload = request.files.get("customer_photo_file")
+        if not upload or not getattr(upload, "filename", ""):
+            return jsonify({"success": False, "message": "Choose a customer photo to upload."}), 400
+
+        filename = save_vehicle_sale_upload(
+            upload,
+            fallback=row.get("customer_photo_filename"),
+            customer_name=row.get("customer_name"),
+            doc_label="customer photo",
+        )
+        if not filename:
+            return jsonify({"success": False, "message": "Unsupported file. Please upload an image."}), 400
+
+        conn.execute(
+            """
+            UPDATE vehicle_sale_orders
+            SET customer_photo_filename = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (filename, now_str(), sale_id),
+        )
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Customer photo uploaded.",
+            "customer_photo_filename": filename,
+            "customer_photo_url": build_upload_url(f"uploads/vehicle_sales/{filename}"),
+        })
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"Failed to upload customer photo: {e}"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/sales/<int:sale_id>/customer-with-bike-photo", methods=["POST"])
+@jwt_required()
+def api_sale_customer_with_bike_photo(sale_id: int):
+    """
+    Mobile — upload/replace the sale-proof photo of the customer with the bike.
+
+    Sent as multipart/form-data:
+      customer_with_bike_photo_file  (required, image)
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM vehicle_sale_orders WHERE id = ?", (sale_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "Sale not found."}), 404
+
+        upload = request.files.get("customer_with_bike_photo_file")
+        if not upload or not getattr(upload, "filename", ""):
+            return jsonify({"success": False, "message": "Choose a photo to upload."}), 400
+
+        filename = save_vehicle_sale_upload(
+            upload,
+            fallback=row.get("customer_with_bike_photo_filename"),
+            customer_name=row.get("customer_name"),
+            doc_label="customer with bike photo",
+        )
+        if not filename:
+            return jsonify({"success": False, "message": "Unsupported file. Please upload an image."}), 400
+
+        conn.execute(
+            """
+            UPDATE vehicle_sale_orders
+            SET customer_with_bike_photo_filename = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (filename, now_str(), sale_id),
+        )
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Customer with bike photo uploaded.",
+            "customer_with_bike_photo_filename": filename,
+            "customer_with_bike_photo_url": build_upload_url(f"uploads/vehicle_sales/{filename}"),
+        })
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"Failed to upload customer with bike photo: {e}"}), 500
+    finally:
+        conn.close()
+
+
 def _serialize_sale_row(row):
     """Shared shaping for /api/sales list + detail rows."""
     gallery_source = row.get("vehicle_gallery") or row.get("vehicle_image_filenames") or ""
@@ -26161,7 +27301,7 @@ def _serialize_sale_row(row):
     print("vehicle_image_filenames =", row.get("vehicle_image_filenames"))
     print("gallery_source =", gallery_source)
     gallery_images = [
-        url_for("static", filename=f"uploads/vehicles/{name.strip()}", _external=True)
+        build_upload_url(f"uploads/vehicles/{name.strip()}")
         for name in str(gallery_source).split(",")
         if name.strip()
     ]
@@ -26208,9 +27348,69 @@ def _serialize_sale_row(row):
         "delivery_date": str(row.get("delivery_date") or ""),
         "created_at": str(row.get("created_at") or ""),
         "gallery_images": gallery_images,
+        "customer_id_proof_filename": row.get("customer_id_proof_filename") or "",
+        "customer_id_proof_url": (
+            build_upload_url(f"uploads/vehicle_sales/{row.get('customer_id_proof_filename')}")
+            if row.get("customer_id_proof_filename") else None
+        ),
+        "customer_id_proof_ref": date_only(row.get("customer_id_proof_ref")) if row.get("customer_id_proof_ref") else "",
+        "customer_photo_filename": row.get("customer_photo_filename") or "",
+        "customer_photo_url": (
+            build_upload_url(f"uploads/vehicle_sales/{row.get('customer_photo_filename')}")
+            if row.get("customer_photo_filename") else None
+        ),
+        "customer_with_bike_photo_filename": row.get("customer_with_bike_photo_filename") or "",
+        "customer_with_bike_photo_url": (
+            build_upload_url(f"uploads/vehicle_sales/{row.get('customer_with_bike_photo_filename')}")
+            if row.get("customer_with_bike_photo_filename") else None
+        ),
     }
 
         
+@app.route("/api/expenses/categories", methods=["GET"])
+@jwt_required()
+def api_expense_categories():
+    """
+    Shared expense category list — same `expense_categories` table the web
+    dashboard reads from, so a category added on web shows up on mobile and
+    vice versa.
+    """
+    conn = get_db()
+    try:
+        ensure_expense_categories_table(conn)
+        rows = conn.execute(
+            "SELECT name FROM expense_categories ORDER BY name"
+        ).fetchall()
+        categories = [row["name"] for row in rows if row["name"]]
+        return jsonify({"success": True, "categories": categories})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "categories": []}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/expenses/categories", methods=["POST"])
+@jwt_required()
+def api_expense_category_add():
+    """Add a new shared expense category from mobile."""
+    data = request.get_json(force=True, silent=True) or {}
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return jsonify({"success": False, "message": "Category name is required."}), 400
+
+    conn = get_db()
+    try:
+        ensure_expense_categories_table(conn)
+        add_expense_category_if_missing(conn, name)
+        conn.commit()
+        return jsonify({"success": True, "name": name})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"Unable to add category: {e}"}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/api/expenses", methods=["GET"])
 @jwt_required()
 def api_expenses():
@@ -26234,6 +27434,9 @@ def api_expenses():
 
     conn = get_db()
     try:
+        ensure_expenses_category_column(conn)
+        ensure_expense_categories_table(conn)
+
         params: list = []
 
         query = """
@@ -26242,6 +27445,7 @@ def api_expenses():
             e.expense_no,
             e.expense_name,
             e.amount,
+            e.category,
             e.created_at,
 
             s.id AS salary_id,
@@ -26302,6 +27506,7 @@ def api_expenses():
                 "expense_no": row["expense_no"] or "-",
                 "expense_name": row["expense_name"] or "-",
                 "amount": float(row["amount"] or 0),
+                "category": row["category"] or None,
                 "created_at": str(row["created_at"] or ""),
                 "date": str(row["created_at"] or ""),
                 "is_salary": is_salary,
@@ -26356,9 +27561,13 @@ def api_expense_add():
         return str(data.get(key) or "").strip()
 
     is_salary = bool(data.get("is_salary")) or req_str("is_salary") in {"1", "true", "True"}
+    category_input = req_str("category")
 
     conn = get_db()
     try:
+        ensure_expenses_category_column(conn)
+        ensure_expense_categories_table(conn)
+
         created_at = now_str()
         staff_row = None
 
@@ -26404,7 +27613,15 @@ def api_expense_add():
             except (TypeError, ValueError):
                 return jsonify({"success": False, "message": "Expense amount must be a number."}), 400
 
-        expense_id, expense_no = create_expense_record(conn, expense_name, final_amount, created_at)
+        expense_id, expense_no = create_expense_record(
+            conn,
+            expense_name,
+            final_amount,
+            created_at,
+            category=(category_input if not is_salary else None),
+        )
+        if not is_salary and category_input:
+            add_expense_category_if_missing(conn, category_input)
 
         if is_salary:
             print("=== SALARY INSERT DEBUG ===")
@@ -26433,6 +27650,7 @@ def api_expense_add():
                 "expense_no": expense_no,
                 "expense_name": expense_name,
                 "amount": final_amount,
+                "category": (category_input if not is_salary else None) or None,
                 "created_at": created_at,
                 "date": created_at,
                 "is_salary": is_salary,
@@ -27161,9 +28379,7 @@ def get_branding_info() -> dict:
     logo_filename = (get_setting("brand_logo_filename", "") or "").strip()
     logo_url = None
     if logo_filename:
-        logo_url = url_for(
-            "static", filename=f"uploads/branding/{logo_filename}", _external=True
-        )
+        logo_url = build_upload_url(f"uploads/branding/{logo_filename}")
 
     return {"company_name": name, "logo_url": logo_url}
 

@@ -119,12 +119,12 @@
   .veh-inline-link { font-size: 0.8rem; font-weight: 700; }
   .img-modal { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.72); display: none; align-items: center; justify-content: center; padding: 1.2rem; z-index: 9999; }
   .img-modal.open { display: flex; }
-  .img-modal-card { background: #fff; border-radius: 16px; max-width: min(980px, 96vw); max-height: min(740px, 86vh); width: 100%; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); display: grid; grid-template-rows: auto 1fr; }
+  .img-modal-card { background: #fff; border-radius: 16px; max-width: min(980px, 96vw); max-height: min(740px, 86vh); width: 100%; height: min(740px, 86vh); overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.25); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); display: grid; grid-template-rows: auto 1fr; }
   .img-modal-head { padding: 0.65rem 0.85rem; display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
   .img-modal-title { font-weight: 800; font-size: 0.95rem; margin: 0; }
   .img-modal-close { border: 1px solid var(--line); background: #fff; border-radius: 999px; width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer; }
-  .img-modal-body { padding: 0.85rem; display: grid; place-items: center; background: #0b1220; }
-  .img-modal-body img { max-width: 100%; max-height: 100%; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); background: #111827; }
+  .img-modal-body { padding: 0.85rem; display: grid; place-items: center; background: #0b1220; min-height: 0; overflow: auto; }
+  .img-modal-body img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); background: #111827; }
   .is-hidden { display: none !important; }
   @media (max-width: 960px) {
     .veh-two-col, .veh-two-col.reverse, .veh-form-grid, .veh-photo-preview-grid { grid-template-columns: 1fr; }
@@ -504,10 +504,10 @@
         <div class="veh-doc-stack">
           <div class="veh-doc-item">
             <div>
-              <strong>RC Book</strong>
+              <strong>RC Book (Front)</strong>
               {% if not view_only %}
               <div style="margin-top:4px;">
-                <label class="veh-doc-upload" for="rc_book_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book</span></label>
+                <label class="veh-doc-upload" for="rc_book_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book (Front)</span></label>
                 <input class="veh-doc-input" id="rc_book_file" type="file" name="rc_book" />
               </div>
               {% endif %}
@@ -517,7 +517,7 @@
                 {% set rc_lower = vehicle.rc_book_filename|lower %}
                 {% set rc_is_image = rc_lower.endswith('.png') or rc_lower.endswith('.jpg') or rc_lower.endswith('.jpeg') or rc_lower.endswith('.webp') or rc_lower.endswith('.gif') %}
                 {% if rc_is_image %}
-                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" alt="RC Book" data-preview-image />
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" alt="RC Book Front" data-preview-image />
                 {% else %}
                 <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
                 {% endif %}
@@ -525,7 +525,34 @@
                 <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" target="_blank" rel="noopener">Open file</a>
               {% else %}
                 <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
-                <span class="veh-doc-empty-note">No RC Book uploaded</span>
+                <span class="veh-doc-empty-note">No RC Book (Front) uploaded</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="veh-doc-item">
+            <div>
+              <strong>RC Book (Back)</strong>
+              {% if not view_only %}
+              <div style="margin-top:4px;">
+                <label class="veh-doc-upload" for="rc_book_back_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book (Back)</span></label>
+                <input class="veh-doc-input" id="rc_book_back_file" type="file" name="rc_book_back" />
+              </div>
+              {% endif %}
+            </div>
+            <div class="veh-doc-preview">
+              {% if vehicle.rc_book_back_filename %}
+                {% set rcb_lower = vehicle.rc_book_back_filename|lower %}
+                {% set rcb_is_image = rcb_lower.endswith('.png') or rcb_lower.endswith('.jpg') or rcb_lower.endswith('.jpeg') or rcb_lower.endswith('.webp') or rcb_lower.endswith('.gif') %}
+                {% if rcb_is_image %}
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_back_filename) }}" alt="RC Book Back" data-preview-image />
+                {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+                {% endif %}
+                <span class="veh-doc-name">{{ vehicle.rc_book_back_filename }}</span>
+                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_back_filename) }}" target="_blank" rel="noopener">Open file</a>
+              {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
+                <span class="veh-doc-empty-note">No RC Book (Back) uploaded</span>
               {% endif %}
             </div>
           </div>
@@ -556,33 +583,6 @@
               {% endif %}
             </div>
           </div>
-          <div class="veh-doc-item">
-            <div>
-              <strong>PUC Certificate</strong>
-              {% if not view_only %}
-              <div style="margin-top:4px;">
-                <label class="veh-doc-upload" for="puc_certificate_file"><i class="bi bi-patch-check"></i><span>Click to upload PUC</span></label>
-                <input class="veh-doc-input" id="puc_certificate_file" type="file" name="puc_certificate" />
-              </div>
-              {% endif %}
-            </div>
-            <div class="veh-doc-preview">
-              {% if vehicle.puc_certificate_filename %}
-                {% set puc_lower = vehicle.puc_certificate_filename|lower %}
-                {% set puc_is_image = puc_lower.endswith('.png') or puc_lower.endswith('.jpg') or puc_lower.endswith('.jpeg') or puc_lower.endswith('.webp') or puc_lower.endswith('.gif') %}
-                {% if puc_is_image %}
-                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.puc_certificate_filename) }}" alt="PUC Certificate" data-preview-image />
-                {% else %}
-                <span class="veh-doc-icon"><i class="bi bi-file-earmark-medical"></i></span>
-                {% endif %}
-                <span class="veh-doc-name">{{ vehicle.puc_certificate_filename }}</span>
-                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.puc_certificate_filename) }}" target="_blank" rel="noopener">Open file</a>
-              {% else %}
-                <span class="veh-doc-icon"><i class="bi bi-patch-check"></i></span>
-                <span class="veh-doc-empty-note">No PUC Certificate uploaded</span>
-              {% endif %}
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -606,7 +606,7 @@
           <label><span>Purchase Price</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.purchase_price or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="purchase_price" {% if app_setting('vehicle_add_required_purchase_price', '1') == '1' %}required{% endif %} value="{{ vehicle.purchase_price or 0 }}" data-purchase-price />{% endif %}</label>
           <label><span>Settlement Status</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_settlement_status or '-' }}</div>{% else %}{% set ss = (vehicle.purchase_settlement_status or 'Paid') %}<select name="purchase_settlement_status" required data-purchase-settlement-status><option value="Paid" {% if ss == 'Paid' %}selected{% endif %}>Paid</option><option value="Partial" {% if ss == 'Partial' %}selected{% endif %}>Partial</option><option value="Unpaid" {% if ss == 'Unpaid' %}selected{% endif %}>Unpaid</option></select>{% endif %}</label>
           <label><span>Paid Amount</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.purchase_paid_amount or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="purchase_paid_amount" required value="{{ vehicle.purchase_paid_amount if vehicle.purchase_paid_amount is not none else (vehicle.purchase_price or 0) }}" data-purchase-paid-amount />{% endif %}</label>
-          <label><span>Paymode</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_payment_mode or '-' }}</div>{% else %}{% set pm = (vehicle.purchase_payment_mode or 'Cash') %}<select name="purchase_payment_mode" required>{% for mode in ['Cash','UPI','Bank','GPay','Card'] %}<option value="{{ mode }}" {% if mode == pm %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>{% endif %}</label>
+          <label><span>Paymode</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_payment_mode or '-' }}</div>{% else %}{% set pm = (vehicle.purchase_payment_mode or 'Cash') %}<select name="purchase_payment_mode" required>{% for mode in ['Cash','UPI','Bank','GPay','Card','Finance'] %}<option value="{{ mode }}" {% if mode == pm %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>{% endif %}</label>
           <label class="span-2"><span>Paid Date &amp; Time</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_paid_at|datetime_display if vehicle.purchase_paid_at else '-' }}</div>{% else %}<input type="datetime-local" name="purchase_paid_at" required data-default-now value="{{ (vehicle.purchase_paid_at|datetime_display)|replace(' ', 'T') if vehicle.purchase_paid_at else '' }}" />{% endif %}</label>
         </div>
       </div>

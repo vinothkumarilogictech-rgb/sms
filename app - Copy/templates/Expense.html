@@ -1,0 +1,1247 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('add') === '1' && typeof goToForm === 'function') {
+    goToForm();
+    // Wait for form to render, then fill fields
+    setTimeout(function() {
+      var vname = params.get('name') || '';
+      var vno = params.get('number') || '';
+      if (vname) {
+        var nameInput = document.querySelector('.vname');
+        if (nameInput) nameInput.value = decodeURIComponent(vname);
+      }
+      if (vno) {
+        var numberInput = document.querySelector('.vno');
+        if (numberInput) numberInput.value = decodeURIComponent(vno);
+      }
+    }, 200);
+  }
+});
+</script>
+=======
+>>>>>>> a25f8a814e4746a0d5cc2ac9feb2f0025b166dfa
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+{% extends "base.html" %}
+
+{% block title %}Expense Tracking{% endblock %}
+
+{% block content %}
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+<style>
+  /* PREMIUM UI VARIABLES */
+  :root {
+    --accent-blue: #3b82f6;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --glass-bg: #ffffff;
+  }
+
+  /* 1. HEADER SECTION */
+  .expense-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+  }
+
+  .search-box-custom {
+    background: white;
+    border-radius: 12px;
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    width: 350px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .search-box-custom input {
+    border: none;
+    outline: none;
+    width: 100%;
+    margin-left: 10px;
+    font-size: 14px;
+  }
+
+  /* 2. TABLE STYLING */
+  .glass-card {
+    background: var(--glass-bg);
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    border: 1px solid #f1f5f9;
+    overflow: hidden;
+  }
+
+  .modern-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .modern-table th {
+    background: #f8fafc;
+    padding: 18px 15px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 700;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: center;
+  }
+
+  .modern-table td {
+    padding: 15px;
+    text-align: center;
+    border-bottom: 1px solid #f1f5f9;
+    color: var(--text-main);
+    font-size: 14px;
+  }
+
+  .id-badge {
+    background: #eff6ff;
+    color: #3b82f6;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-family: monospace;
+  }
+
+  /* 3. FORM STYLING */
+  .page { display: none; }
+  .active { display: block; }
+
+  .form-box-premium {
+    background: white;
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    max-width: 850px;
+    width: 100%;
+    margin: 20px auto;
+  }
+
+  .form-row-custom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-bottom: 20px;
+  }
+
+  .field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .input-custom {
+    width: 100%;
+    padding: 12px 15px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    font-size: 14px;
+    transition: 0.2s;
+  }
+
+  .input-custom:focus {
+    border-color: var(--accent-blue);
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  }
+
+  /* BUTTONS */
+  .btn-primary-custom {
+    background: var(--accent-blue);
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+
+  .btn-primary-custom:hover { transform: translateY(-2px); box-shadow: 0 10px 15px rgba(59, 130, 246, 0.3); }
+
+  .btn-outline-custom {
+    background: #f1f5f9;
+    color: #475569;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  .edit-btn-icon {
+    color: var(--accent-blue);
+    background: #eff6ff;
+    border: none;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+</style>
+
+<!-- PAGE 1: LIST VIEW -->
+<div id="page1" class="page active">
+  <div class="expense-header">
+    <div>
+        <h4 class="fw-bold mb-0">Vehicle Expenses</h4>
+        <p class="text-muted small">Maintain and track all repair costs</p>
+    </div>
+
+    <div class="search-box-custom">
+      <i class="bi bi-search text-muted"></i>
+      <input type="text" id="filterAll" placeholder="Search by vehicle, ID or repair..." onkeyup="applyFilter()">
+    </div>
+
+    <button class="btn-primary-custom" onclick="goToForm()">
+        <i class="bi bi-plus-lg me-2"></i> Add Expense
+    </button>
+  </div>
+
+  <div class="glass-card">
+    <table class="modern-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Date</th>
+          <th>Vehicle Name</th>
+          <th>Vehicle Number</th>
+          <th>Repair Details</th>
+          <th>Amount (₹)</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 2: FORM VIEW -->
+<div id="page2" class="page">
+    <div class="d-flex justify-content-center">
+        <div id="formContainer" style="width: 100%;"></div>
+    </div>
+</div>
+
+<script>
+let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+let editIndexes = null;
+
+/* DATE FORMAT */
+function formatDate(dateStr) {
+  if (!dateStr) return "";
+  let parts = dateStr.split("-");
+  return parts[2] + "-" + parts[1] + "-" + parts[0];
+}
+
+/* ID GENERATION */
+function generateID(num) {
+  return "EXP-" + String(num).padStart(3, '0');
+}
+
+/* GET TODAY */
+function getTodayDate() {
+  return new Date().toISOString().split('T')[0];
+}
+
+/* CREATE FORM (MATCHES MODULE LOGIC) */
+function createForm(data = {}) {
+  let form = document.createElement("div");
+  form.className = "form-box-premium expense-form";
+
+  form.innerHTML = `
+<<<<<<< HEAD
+    <div class="form-row">
+      <div class="field">
+        <label>ID</label>
+        <input type="text" readonly value="${data.id || generateID(expenses.length + 1)}">
+=======
+    <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-file-earmark-text me-2"></i>Expense Entry Form</h5>
+    
+    <div class="form-row-custom">
+      <div>
+        <label class="field-label">Expense ID</label>
+        <input type="text" class="idField input-custom bg-light" readonly value="${data.id || generateID(expenses.length + 1)}">
+>>>>>>> hussain
+      </div>
+      <div>
+        <label class="field-label">Date</label>
+        <input type="date" class="date input-custom" value="${data.date || getTodayDate()}">
+      </div>
+    </div>
+
+<<<<<<< HEAD
+<<<<<<< HEAD
+    <div class="form-row">
+      <div class="field">
+        <label>Vehicle Name</label>
+        <input type="text" class="vname" value="${data.name || ""}">
+=======
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+    <div class="form-row-custom">
+      <div>
+        <label class="field-label">Vehicle Name</label>
+        <input type="text" class="vname input-custom" placeholder="e.g. Honda Activa" value="${data.name || ""}">
+<<<<<<< HEAD
+>>>>>>> hussain
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+      </div>
+      <div>
+        <label class="field-label">Vehicle Number</label>
+        <input type="text" class="vno input-custom" placeholder="TN-XX-XXXX" value="${data.number || ""}">
+      </div>
+    </div>
+
+    <div class="form-row-custom">
+      <div>
+        <label class="field-label">Repair/Description</label>
+        <input type="text" class="notes input-custom" placeholder="Oil change, Clutch work, etc." value="${data.repair || ""}">
+      </div>
+      <div>
+        <label class="field-label">Total Amount (₹)</label>
+        <input type="number" class="amount input-custom" placeholder="0.00" value="${data.amount || ""}">
+      </div>
+    </div>
+
+    <hr class="my-4 opacity-50">
+
+    <div class="d-flex justify-content-between align-items-center">
+      <button class="btn-outline-custom" onclick="goToTable()"><i class="bi bi-arrow-left me-2"></i>Back to List</button>
+      <div class="d-flex gap-3">
+        <button class="btn btn-outline-primary rounded-pill px-4" onclick="addAnother()">+ Add More</button>
+        <button class="btn-primary-custom shadow" onclick="saveAll()">Save Expense</button>
+      </div>
+    </div>
+  `;
+
+  return form;
+}
+
+/* PAGE NAVIGATION */
+function goToForm() {
+  document.getElementById("page1").classList.remove("active");
+  document.getElementById("page2").classList.add("active");
+  formContainer.innerHTML = "";
+  formContainer.appendChild(createForm());
+}
+
+function goToTable() {
+  document.getElementById("page2").classList.remove("active");
+  document.getElementById("page1").classList.add("active");
+  loadTable();
+}
+
+/* ADD ANOTHER FORM LOGIC */
+function addAnother() {
+  let forms = document.querySelectorAll(".expense-form");
+  let lastForm = forms[forms.length - 1];
+
+  let newForm = createForm({
+    number: lastForm.querySelector(".vno").value,
+    name: lastForm.querySelector(".vname").value,
+    date: lastForm.querySelector(".date").value
+  });
+
+  document.getElementById("formContainer").appendChild(newForm);
+}
+
+/* SAVE ALL DATA */
+function saveAll() {
+  let forms = document.querySelectorAll(".expense-form");
+
+  if (editIndexes !== null) {
+
+    forms.forEach((form, i) => {
+      let index = editIndexes[i];
+
+    if (editIndex !== null) {
+        expenses[editIndex] = {
+            id: form.querySelector(".idField").value,
+            name, number, date, repair, amount
+        };
+        editIndex = null;
+    } else {
+        expenses.push({
+            id: generateID(expenses.length + 1),
+            name, number, date, repair, amount
+        });
+    }
+  });
+
+  // ✅ IMPORTANT
+  localStorage.setItem("expenses", JSON.stringify(expenses));
+  loadTable();   // <-- this was missing
+  goToTable();
+}
+
+/* RENDER TABLE */
+function loadTable() {
+  let table = document.getElementById("tableBody");
+  table.innerHTML = "";
+
+  let grouped = {};
+
+  expenses.forEach((item, i) => {
+    let key = item.number + "_" + item.date;
+
+    if (!grouped[key]) {
+      grouped[key] = {
+        id: item.id,
+        name: item.name,
+        number: item.number,
+        date: item.date,
+        repair: [],
+        amount: 0,
+        indexes: []
+      };
+    }
+
+    grouped[key].repair.push(item.repair);
+    grouped[key].amount += parseFloat(item.amount);
+    grouped[key].indexes.push(i);
+  });
+
+  Object.values(grouped).forEach(group => {
+    let row = table.insertRow();
+
+    row.innerHTML = `
+<<<<<<< HEAD
+<<<<<<< HEAD
+      <td>${group.id}</td>
+      <td>${formatDate(group.date)}</td>
+      <td>${group.name || "-"}</td>
+      <td>${group.number}</td>
+      <td>${group.repair.join(", ")}</td>
+      <td>${group.amount}</td>
+      <td><button class="edit-btn" onclick='editGroup(${JSON.stringify(group.indexes)})'>Edit</button></td>
+=======
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+      <td><span class="id-badge">${item.id}</span></td>
+      <td class="text-muted">${formatDate(item.date)}</td>
+      <td class="fw-bold">${item.name || "-"}</td>
+      <td><code>${item.number}</code></td>
+      <td class="text-start">${item.repair}</td>
+      <td class="fw-bold text-primary">₹${item.amount}</td>
+      <td>
+        <button class="edit-btn-icon" onclick="editRow(${index})">
+            <i class="bi bi-pencil-square"></i>
+        </button>
+      </td>
+<<<<<<< HEAD
+>>>>>>> hussain
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+    `;
+  });
+}
+
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+/* EDIT */
+function editGroup(indexes) {
+  goToForm();
+  formContainer.innerHTML = "";
+
+  editIndexes = indexes;
+
+  indexes.forEach(i => {
+    formContainer.appendChild(createForm(expenses[i]));
+  });
+<<<<<<< HEAD
+=======
+=======
+
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+/* EDIT LOGIC */
+function editRow(index) {
+  let item = expenses[index];
+  editIndex = index;
+  goToForm();
+  formContainer.innerHTML = "";
+  formContainer.appendChild(createForm(item));
+<<<<<<< HEAD
+>>>>>>> hussain
+=======
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+}
+
+/* FILTER LOGIC */
+function applyFilter() {
+  let search = document.getElementById("filterAll").value.toLowerCase();
+  let table = document.getElementById("tableBody");
+  table.innerHTML = "";
+
+  expenses.forEach((item, index) => {
+    let data = (item.id + item.name + item.number + item.repair + item.amount + formatDate(item.date)).toLowerCase();
+
+    if (data.includes(search)) {
+      let row = table.insertRow();
+
+      row.innerHTML = `
+        <td><span class="id-badge">${item.id}</span></td>
+        <td>${formatDate(item.date)}</td>
+        <td class="fw-bold">${item.name || "-"}</td>
+        <td><code>${item.number}</code></td>
+        <td class="text-start">${item.repair}</td>
+        <td class="fw-bold text-primary">₹${item.amount}</td>
+        <td><button class="edit-btn-icon" onclick="editRow(${index})"><i class="bi bi-pencil-square"></i></button></td>
+      `;
+    }
+  });
+}
+
+loadTable();
+<<<<<<< HEAD
+=======
+=======
+</script> 
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+
+<title>Expense System</title>
+
+<style>
+  body {
+    font-family: Arial;
+    background: #f4f6f9;
+    margin: 0;
+  }
+
+  /* HEADER ROW (TITLE + BUTTON SAME LINE) */
+  .header-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 20px 80px;
+}
+
+.search-box{
+  width:30%;
+  padding:10px;
+  border-radius:20px;
+  border:1px solid #ccc;
+}
+
+  .title{
+    font-size: 22px;
+    font-weight: bold;
+  }
+
+  .add-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  /* 🔥 SEARCH CENTER */
+  .search-wrap{
+    display:flex;
+    justify-content:center;
+    margin: 10px 0 20px;
+  }
+
+  
+
+  /* TABS */
+  .tabs-wrapper{
+    padding: 10px 100px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 10px;
+  }
+
+  .tab {
+    padding: 8px 20px;
+    font-size: 13px;
+    border-radius: 20px;
+    cursor: pointer;
+    background: #e5e7eb;
+  }
+
+  .tab.active {
+    background: #3b82f6;
+    color: white;
+  }
+
+  /* DASHBOARD */
+  .dashboard {
+    padding: 5px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .card {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    width: 90%;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+
+  th, td {
+    padding: 8px;
+    text-align: center;
+  }
+
+  th {
+    background: #f3f4f5;
+  }
+
+ .form-page {
+  display: none;
+  position: fixed;   /* 🔥 important */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #f4f6f9;
+  overflow: auto;
+  z-index: 1000;
+}
+
+.form-container {
+  max-width: 700px;
+  margin: 80px auto;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+  .form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .form-tabs {
+    display: flex;
+    gap: 10px;
+  }
+
+  .form-tab {
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 20px;
+    cursor: pointer;
+    background: #e5e7eb;
+  }
+
+  .form-tab.active {
+    background: #3b82f6;
+    color: white;
+  }
+
+  .row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  label {
+    font-size: 14px;
+    margin-bottom: 5px;
+  }
+
+  input {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+
+  .button-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+  }
+
+  .btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .back { background: #6c757d; color: white; }
+  .save { background: #28a745; color: white; }
+
+.action-menu {
+  position: relative;
+}
+
+.action-menu button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 20px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  width: 100px;
+  z-index: 10;
+}
+
+.menu div {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.menu div:hover {
+  background: #f1f1f1;
+}
+
+</style>
+
+
+<div id="dashboardPage">
+
+<!-- HEADER -->
+<div class="header-row">
+  <div class="title">Expense</div>
+
+  <input type="text" class="search-box"
+         placeholder="Search..."
+         onkeyup="searchTable(this.value)">
+
+  <button class="add-btn" onclick="openForm()">Add Expense</button>
+</div>
+
+<!-- TABS -->
+<div class="tabs-wrapper">
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('all', this)">All</div>
+    <div class="tab" onclick="showTab('shop', this)">Shop</div>
+    <div class="tab" onclick="showTab('vehicle', this)">Vehicle</div>
+    <div class="tab" onclick="showTab('staff', this)">Staff</div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard">
+
+  <div class="card tab-content" id="allTab">
+    <h3>All Data</h3>
+    <table>
+ <tr>
+  <th>ID</th>
+  <th>Date</th>
+  <th>Type</th>
+  <th>Details</th>
+  <th>Amount</th>
+  <th>Action</th>
+</tr>  
+    </table>
+  </div>
+
+  <div class="card tab-content" id="shopTab" style="display:none;">
+    <h3>Shop Data</h3>
+    <table>
+      <tr><th>ID</th><th>Date</th><th>Bills</th><th>Amount</th><th>Action</th></tr>
+    </table>
+  </div>
+
+  <div class="card tab-content" id="vehicleTab" style="display:none;">
+    <h3>Vehicle Data</h3>
+    <table>
+      <tr><th>ID</th><th>Date</th><th>Name</th><th>Number</th><th>Repair</th><th>Rupees</th><th>Action</th></tr>
+    </table>
+  </div>
+
+  <div class="card tab-content" id="staffTab" style="display:none;">
+    <table>
+      <h3>Staff Data</h3>
+      <tr><th>ID</th><th>Date</th><th>Name</th><th>Salary</th><th>Action</th></tr>
+    </table>
+  </div>
+
+</div>
+</div> <!-- ✅ CLOSE dashboardPage -->
+
+<!-- FORM PAGE -->
+<div class="form-page" id="formPage">
+
+  <div class="form-container">  <!-- ✅ ADD THIS -->
+
+    <div class="form-header">
+      <h2>Add Expense</h2>
+
+      <div class="form-tabs">
+        <div class="form-tab active" onclick="formTab('shop', this)">Shop</div>
+        <div class="form-tab" onclick="formTab('vehicle', this)">Vehicle</div>
+        <div class="form-tab" onclick="formTab('staff', this)">Staff</div>
+      </div>
+    </div>
+
+    
+
+  <div id="shopForm">
+    <div class="row">
+      <div class="field"><label>ID</label><input id="shop_id" readonly></div>
+<div class="field"><label>Date</label><input type="date" id="shop_date"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Bills</label><input></div>
+      <div class="field"><label>Amount</label><input></div>
+    </div>
+  </div>
+
+  <div id="vehicleForm" style="display:none;">
+    <div class="row">
+      <div class="field"><label>ID</label><input id="vehicle_id" readonly></div>
+<div class="field"><label>Date</label><input type="date" id="vehicle_date"></div>
+    </div>
+    <div class="row">
+     <div class="field"><label>Vehicle Name</label><input id="vehicle_name"></div>
+<div class="field"><label>Vehicle Number</label><input id="vehicle_number"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Repair</label><input></div>
+      <div class="field"><label>Rupees</label><input></div>
+    </div>
+
+      
+  </div>
+  
+
+  <div id="staffForm" style="display:none;">
+    <div class="row">
+      <div class="field"><label>ID</label><input id="staff_id" readonly></div>
+<div class="field"><label>Date</label><input type="date" id="staff_date"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Name</label><input></div>
+      <div class="field"><label>Salary</label><input></div>
+    </div>
+  </div>
+
+ <!-- 🔥 MOVE HERE -->
+<div id="extraVehicleForms"></div>
+
+<!-- BUTTONS ALWAYS STAY LAST -->
+<div class="button-row">
+  <button class="btn back" onclick="back()">Back</button>
+
+  <div style="display:flex; gap:10px;">
+    <button class="btn save" onclick="saveData()">Save</button>
+
+    <button id="vehicleAddBtn"
+            class="btn"
+            style="background:#007bff; color:white; display:none;"
+            onclick="addExpenseForm()">
+      Add Expense
+    </button>
+  </div>
+</div>
+
+</div>
+</div>
+<script>
+
+function showTab(tab, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  document.getElementById(tab + 'Tab').style.display = 'block';
+
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function openForm(){
+  document.getElementById("dashboardPage").style.display = "none";
+  document.getElementById("formPage").style.display = "block";
+
+  // Default show shop
+  document.getElementById("shopForm").style.display = "block";
+  document.getElementById("vehicleForm").style.display = "none";
+  document.getElementById("staffForm").style.display = "none";
+
+  // Hide vehicle button initially
+  document.getElementById("vehicleAddBtn").style.display = "none";
+
+  setTodayDate();
+  generateID();
+}
+
+function back(){
+  document.getElementById("dashboardPage").style.display = "block";
+  document.getElementById("formPage").style.display = "none";
+}
+
+function formTab(tab, el) {
+  document.querySelectorAll('.form-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+
+  document.getElementById('shopForm').style.display = 'none';
+  document.getElementById('vehicleForm').style.display = 'none';
+  document.getElementById('staffForm').style.display = 'none';
+
+  document.getElementById(tab + 'Form').style.display = 'block';
+
+  // 🔥 SHOW button only for vehicle
+  if(tab === "vehicle"){
+    document.getElementById("vehicleAddBtn").style.display = "inline-block";
+  } else {
+    document.getElementById("vehicleAddBtn").style.display = "none";
+  }
+}
+
+/* SEARCH */
+function searchTable(value){
+  let filter = value.toLowerCase();
+  let rows = document.querySelectorAll("table tr");
+
+  rows.forEach((row, index) => {
+    if(index === 0) return;
+    row.style.display = row.innerText.toLowerCase().includes(filter) ? "" : "none";
+  });
+}
+
+function saveData() {
+
+  let data = JSON.parse(localStorage.getItem("expenses")) || [];
+
+  let activeForm = document.querySelector(".form-tab.active").innerText.toLowerCase();
+
+  let id, date, type, details, amount;
+
+  if (activeForm === "shop") {
+    let inputs = document.querySelectorAll("#shopForm input");
+    id = inputs[0].value;
+    date = inputs[1].value;
+    details = inputs[2].value;
+    amount = inputs[3].value;
+    type = "Shop";
+  }
+
+  if (activeForm === "vehicle") {
+    let inputs = document.querySelectorAll("#vehicleForm input");
+    id = inputs[0].value;
+    date = inputs[1].value;
+    let name = inputs[2].value;
+    let repair = inputs[4].value;
+    amount = inputs[5].value;
+
+    details = name + " - " + repair;
+    type = "Vehicle";
+  }
+
+  if (activeForm === "staff") {
+    let inputs = document.querySelectorAll("#staffForm input");
+    id = inputs[0].value;
+    date = inputs[1].value;
+    let name = inputs[2].value;
+    amount = inputs[3].value;
+
+    details = name;
+    type = "Staff";
+  }
+
+  // SAVE DATA
+  data.push({ id, date, type, details, amount });
+  localStorage.setItem("expenses", JSON.stringify(data));
+
+  // Reload table
+  loadTable();
+
+  // Clear + reset
+  document.querySelectorAll("input").forEach(input => {
+    if(input.type !== "date") input.value = "";
+  });
+
+  currentID++;
+  setTodayDate();
+  generateID();
+
+  back();
+}
+
+function loadTable() {
+
+  let data = JSON.parse(localStorage.getItem("expenses")) || [];
+
+  // Clear all tables
+  document.querySelector("#allTab table").innerHTML =
+    `<tr><th>ID</th><th>Date</th><th>Type</th><th>Details</th><th>Amount</th><th>Action</th></tr>`;
+
+  document.querySelector("#shopTab table").innerHTML =
+    `<tr><th>ID</th><th>Date</th><th>Bills</th><th>Amount</th><th>Action</th></tr>`;
+
+  document.querySelector("#vehicleTab table").innerHTML =
+    `<tr><th>ID</th><th>Date</th><th>Name</th><th>Number</th><th>Repair</th><th>Rupees</th><th>Action</th></tr>`;
+
+  document.querySelector("#staffTab table").innerHTML =
+    `<tr><th>ID</th><th>Date</th><th>Name</th><th>Salary</th><th>Action</th></tr>`;
+
+  data.forEach((item, index) => {
+
+    // ALL TABLE
+    let allRow = document.querySelector("#allTab table").insertRow();
+   allRow.innerHTML =
+  `<td>${item.id}</td>
+   <td>${formatDate(item.date)}</td>
+   <td>${item.type}</td>
+   <td>${item.details}</td>
+   <td>${item.amount}</td>
+   <td>
+     <div class="action-menu">
+       <button onclick="toggleMenu(this)">⋮</button>
+
+       <div class="menu">
+         <div onclick="viewData(${index})">View</div>
+         <div onclick="editData(${index})">Edit</div>
+         <div onclick="deleteData(${index})">Delete</div>
+       </div>
+     </div>
+   </td>`;
+
+    // TYPE TABLES
+   if(item.type === "Shop"){
+    let row = document.querySelector("#shopTab table").insertRow();
+    row.innerHTML =
+      `<td>${item.id}</td>
+       <td>${formatDate(item.date)}</td>
+       <td>${item.details}</td>
+       <td>${item.amount}</td>
+       <td>${actionMenu(index)}</td>`;
+  }
+
+  // VEHICLE TABLE
+  if(item.type === "Vehicle"){
+    let row = document.querySelector("#vehicleTab table").insertRow();
+    row.innerHTML =
+      `<td>${item.id}</td>
+       <td>${formatDate(item.date)}</td>
+       <td>${item.details}</td>
+       <td>-</td>
+       <td>-</td>
+       <td>${item.amount}</td>
+       <td>${actionMenu(index)}</td>`;
+  }
+
+  // STAFF TABLE
+  if(item.type === "Staff"){
+    let row = document.querySelector("#staffTab table").insertRow();
+    row.innerHTML =
+      `<td>${item.id}</td>
+       <td>${formatDate(item.date)}</td>
+       <td>${item.details}</td>
+       <td>${item.amount}</td>
+       <td>${actionMenu(index)}</td>`;
+  }
+
+});
+}
+
+function actionMenu(index){
+  return `
+    <div class="action-menu">
+      <button onclick="toggleMenu(this)">⋮</button>
+
+      <div class="menu">
+        <div onclick="viewData(${index})">View</div>
+        <div onclick="editData(${index})">Edit</div>
+        <div onclick="deleteData(${index})">Delete</div>
+      </div>
+    </div>
+  `;
+}
+
+function addToAll(id, date, type, details, amount) {
+  let table = document.querySelector("#allTab table");
+  let row = table.insertRow();
+  row.innerHTML = `<td>${id}</td><td>${formatDate(date)}</td><td>${type}</td><td>${details}</td><td>${amount}</td>`;
+}
+
+function formatDate(date) {
+  let d = new Date(date);
+  let day = String(d.getDate()).padStart(2, '0');
+  let month = String(d.getMonth() + 1).padStart(2, '0');
+  let year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+function setTodayDate(){
+  let today = new Date().toISOString().split('T')[0];
+
+  document.querySelectorAll("#shopForm input[type='date'], #vehicleForm input[type='date'], #staffForm input[type='date']")
+    .forEach(input => input.value = today);
+}
+
+let currentID = 1;
+
+function generateID(){
+  let formattedID = String(currentID).padStart(3, '0');
+
+  document.getElementById("shop_id").value = formattedID;
+  document.getElementById("vehicle_id").value = formattedID;
+  document.getElementById("staff_id").value = formattedID;
+}
+
+function addExpenseForm() {
+
+  let id = document.getElementById("vehicle_id").value;
+  let date = document.getElementById("vehicle_date").value;
+  let name = document.getElementById("vehicle_name").value;
+  let number = document.getElementById("vehicle_number").value;
+
+  let newForm = document.createElement("div");
+  newForm.style.border = "2px solid #ddd";
+newForm.style.padding = "20px";
+newForm.style.marginTop = "25px";   // 🔥 more space
+newForm.style.borderRadius = "10px";
+newForm.style.background = "#ffffff";  // 🔥 white card look
+newForm.style.width = "100%";
+
+  newForm.innerHTML = `
+    <div class="row">
+      <div class="field"><label>ID</label><input value="${id}" readonly></div>
+      <div class="field"><label>Date</label><input type="date" value="${date}" readonly></div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Vehicle Name</label><input value="${name}" readonly></div>
+      <div class="field"><label>Vehicle Number</label><input value="${number}" readonly></div>
+    </div>
+
+    <div class="row">
+      <div class="field"><label>Repair</label><input></div>
+      <div class="field"><label>Rupees</label><input></div>
+    </div>
+  `;
+
+  document.getElementById("extraVehicleForms").appendChild(newForm);
+}
+
+function toggleMenu(btn) {
+  let menu = btn.nextElementSibling;
+
+  // Close all menus first
+  document.querySelectorAll(".menu").forEach(m => m.style.display = "none");
+
+  // Toggle current
+  menu.style.display = menu.style.display === "block" ? "none" : "block";
+}
+
+// VIEW
+function viewData(index) {
+  let data = JSON.parse(localStorage.getItem("expenses"));
+  let item = data[index];
+
+  alert(
+    `ID: ${item.id}
+Date: ${formatDate(item.date)}
+Type: ${item.type}
+Details: ${item.details}
+Amount: ${item.amount}`
+  );
+}
+
+// DELETE
+function deleteData(index) {
+  let data = JSON.parse(localStorage.getItem("expenses"));
+
+  if(confirm("Delete this record?")) {
+    data.splice(index, 1);
+    localStorage.setItem("expenses", JSON.stringify(data));
+    loadTable();
+  }
+}
+
+// EDIT
+function editData(index) {
+  let data = JSON.parse(localStorage.getItem("expenses"));
+  let item = data[index];
+
+  // Open form page
+  openForm();
+
+  // Select correct tab
+  let tabs = document.querySelectorAll(".form-tab");
+  tabs.forEach(t => {
+    if(t.innerText.toLowerCase() === item.type.toLowerCase()){
+      t.click();
+    }
+  });
+
+  // Fill data based on type
+  if(item.type === "Shop"){
+    let inputs = document.querySelectorAll("#shopForm input");
+    inputs[0].value = item.id;
+    inputs[1].value = item.date;
+    inputs[2].value = item.details;
+    inputs[3].value = item.amount;
+  }
+
+  if(item.type === "Vehicle"){
+    let inputs = document.querySelectorAll("#vehicleForm input");
+    inputs[0].value = item.id;
+    inputs[1].value = item.date;
+
+    // split details (name - repair)
+    let parts = item.details.split(" - ");
+    inputs[2].value = parts[0] || "";
+    inputs[4].value = parts[1] || "";
+
+    inputs[5].value = item.amount;
+  }
+
+  if(item.type === "Staff"){
+    let inputs = document.querySelectorAll("#staffForm input");
+    inputs[0].value = item.id;
+    inputs[1].value = item.date;
+    inputs[2].value = item.details;
+    inputs[3].value = item.amount;
+  }
+
+  // 🔥 IMPORTANT: Remove old data (so it updates instead of duplicate)
+  data.splice(index, 1);
+  localStorage.setItem("expenses", JSON.stringify(data));
+}
+
+window.onload = loadTable;
+
+<<<<<<< HEAD
+>>>>>>> a25f8a814e4746a0d5cc2ac9feb2f0025b166dfa
+=======
+>>>>>>> lathushiya
+>>>>>>> 62314dc51efa77e1f12c7beff39cfb4e5bcecc37
+</script>
+
+{% endblock %}

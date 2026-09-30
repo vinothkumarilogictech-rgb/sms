@@ -1,0 +1,878 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    background: #f7f1ea !important;
+  }
+  .sale-shell {
+    display: grid;
+    gap: 16px;
+    width: min(100%, 1080px);
+    margin: 0 auto;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    padding: 0 16px;
+  }
+  .sale-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    width: 100%;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .sale-main,
+  .sale-side {
+    display: grid;
+    gap: 16px;
+  }
+  .sale-card {
+    background: #dcc4ef;
+    border: 1px solid #c4a8df;
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: 0 18px 34px rgba(102, 73, 143, 0.10);
+  }
+  .sale-card.sale-card-vehicle-theme {
+    background: #dcc4ef !important;
+    border-color: #c4a8df !important;
+  }
+  .sale-main {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+  .sale-card h3 {
+    margin: 0 0 14px;
+    font-size: 1.05rem;
+    color: #3f2265;
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.34);
+    border: 1px solid #c4a8df;
+  }
+  .sale-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .sale-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .sale-card label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #43295f;
+  }
+  .sale-card input,
+  .sale-card textarea,
+  .sale-card select {
+    width: 100%;
+    border: 1px solid #d8b8ef;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: inherit;
+    background: #fff;
+    color: #2d2140;
+  }
+  .sale-card input:focus,
+  .sale-card textarea:focus,
+  .sale-card select:focus {
+    outline: none;
+    border-color: #b892de;
+    box-shadow: 0 0 0 3px rgba(111, 61, 145, 0.14);
+  }
+  .sale-card textarea {
+    min-height: 88px;
+    resize: vertical;
+  }
+  .sale-proof {
+    display: grid;
+    gap: 8px;
+  }
+  .sale-proof-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #4a2370;
+    text-decoration: none;
+  }
+  .sale-proof-link:hover {
+    text-decoration: underline;
+  }
+  .vehicle-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .vehicle-box {
+    border: 1px solid #c4a8df;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.82);
+    padding: 12px;
+  }
+  .sale-card.sale-card-vehicle-theme .vehicle-box {
+    background: rgba(255, 255, 255, 0.82) !important;
+    border-color: #c4a8df !important;
+  }
+  .vehicle-box span {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6f5b7d;
+    margin-bottom: 4px;
+  }
+  .vehicle-box strong {
+    display: block;
+    font-size: 1rem;
+    line-height: 1.3;
+    color: #2d2140;
+    word-break: break-word;
+  }
+  .vehicle-box strong a {
+    color: #4a2370;
+  }
+  .vehicle-box strong a:hover {
+    color: #2457d6;
+  }
+  .vehicle-gallery {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .vehicle-gallery img,
+  .vehicle-placeholder {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 16px;
+    border: 1px solid #c4a8df;
+    background: rgba(255, 255, 255, 0.82);
+  }
+  .vehicle-placeholder {
+    display: grid;
+    place-items: center;
+    color: #6f5b7d;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .summary-total {
+    padding: 16px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid #c4a8df;
+    min-width: 0;
+    width: 100%;
+    max-width: 320px;
+    box-shadow: none;
+  }
+  .sale-card.sale-card-vehicle-theme .summary-total {
+    border-color: #c4a8df !important;
+    background: rgba(255, 255, 255, 0.82) !important;
+  }
+  .summary-total-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+  .summary-total span {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #6f5b7d;
+    letter-spacing: 0.05em;
+  }
+  .summary-total strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 2rem;
+    color: #2d2140;
+  }
+  .summary-note {
+    font-size: 0.84rem;
+    color: #76687f;
+    margin: 0;
+  }
+  .sale-alert {
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-weight: 700;
+  }
+  .sale-alert-error {
+    background: #fff1f2;
+    color: #9f1239;
+    border: 1px solid #fecdd3;
+  }
+  .sale-alert-success {
+    background: #f3eafb;
+    color: #4a2370;
+    border: 1px solid #d8c0ef;
+  }
+  .sale-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .sale-head-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+
+.sale-shell .page-head {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.sale-shell .page-head
+  > div:first-child {
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+  .sale-back-btn {
+    border: 1px solid #d1b5ee;
+    background: linear-gradient(135deg, #f3e8ff, #e8d8fb);
+    color: #4a2370;
+    box-shadow: 0 8px 18px rgba(111, 61, 145, 0.14);
+  }
+  .sale-back-btn:hover,
+  .sale-back-btn:active {
+    background: linear-gradient(135deg, #ebdefe, #ddc8fb);
+    border-color: #bf9fe7;
+    color: #3f2265;
+  }
+  .sale-save {
+    min-width: 140px;
+    background: #2457d6;
+    border-color: #2457d6;
+  }
+  .sale-save:hover,
+  .sale-save:active {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+  }
+  .sale-card a {
+    color: #4a2370;
+  }
+  .sale-card a:hover {
+    color: #2457d6;
+  }
+  .sale-shell .muted {
+    color: #6f5b7d !important;
+  }
+  @media (max-width: 1080px) {
+    .sale-layout {
+      grid-template-columns: 1fr;
+    }
+    .sale-grid,
+    .sale-grid-2,
+    .vehicle-gallery,
+    .summary-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 700px) {
+    .sale-grid,
+    .sale-grid-2,
+    .vehicle-summary,
+    .vehicle-gallery,
+    .summary-grid {
+      grid-template-columns: 1fr;
+    }
+    .summary-total {
+      min-width: 0;
+      width: min(100%, 320px);
+    }
+    .sale-proof-link span {
+    word-break: break-all;
+  }
+  }
+</style>
+
+<section class="sale-shell">
+  <div class="page-head">
+    <div>
+      <h1>Vehicle Sale : {{ next_order_code or "NEW" }}</h1>
+      <p class="muted" style="margin:6px 0 0;">Select a vehicle from inventory, auto-load its details, and save the same sale view back into this screen.</p>
+    </div>
+    <div class="sale-head-actions">
+      <button type="button" class="btn tiny sale-back-btn" onclick="history.back()"><i class="bi bi-arrow-left"></i> Back</button>
+    </div>
+  </div>
+
+  {% if saved %}
+  <div class="sale-alert sale-alert-success">Vehicle sale saved. The same order details are now loaded back into this page.</div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="sale-layout">
+    <input type="hidden" name="sale_id" value="{{ form_data.sale_id or '' }}">
+    <input type="hidden" name="vehicle_id" id="vehicle-id" value="{{ form_data.vehicle_id or '' }}">
+
+    <div class="sale-main">
+      <section class="sale-card sale-card-vehicle-theme" id="buyer-details">
+        <h3>Buyer Details</h3>
+        <div class="sale-grid">
+          <label>
+            Customer Name
+            <input type="text" name="customer_name" value="{{ form_data.customer_name or '' }}" placeholder="Customer name" required>
+          </label>
+          <label>
+            Customer ID
+            <input type="text" name="customer_identifier" value="{{ form_data.customer_identifier or '' }}" placeholder="Customer ID" required>
+          </label>
+          <label>
+            Reference Date
+            <input type="date" name="customer_id_proof_ref" value="{{ form_data.customer_id_proof_ref or '' }}" required>
+          </label>
+          <label>
+            Customer Phone Number
+            <input
+              type="text"
+              name="customer_phone"
+              value="{{ form_data.customer_phone or '' }}"
+              inputmode="tel"
+              placeholder="Phone number"
+              required
+            >
+          </label>
+        </div>
+
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <label>
+            Customer Address
+            <textarea name="customer_address" placeholder="Customer address">{{ form_data.customer_address or '' }}</textarea>
+          </label>
+          <div class="sale-proof">
+            <label>
+              Customer ID Proof (Aadhar)
+              <input type="file" name="customer_id_proof_file" accept="image/*,.pdf">
+            </label>
+            {% if sale_record and sale_record.customer_id_proof_url %}
+            <a class="sale-proof-link" href="{{ sale_record.customer_id_proof_url }}" target="_blank" rel="noopener">
+              <i class="bi bi-paperclip"></i>
+              <span>{{ sale_record.customer_id_proof_filename }}</span>
+            </a>
+            {% else %}
+            <p class="summary-note">Upload Aadhaar, PAN, or another ID proof.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <div class="sale-proof">
+            <label>
+              Customer Photo
+              <input type="file" name="customer_photo_file" accept="image/*">
+            </label>
+            {% if sale_record and sale_record.customer_photo_url %}
+            <a class="sale-proof-link" href="{{ sale_record.customer_photo_url }}" target="_blank" rel="noopener">
+              <i class="bi bi-paperclip"></i>
+              <span>{{ sale_record.customer_photo_filename }}</span>
+            </a>
+            {% else %}
+            <p class="summary-note">Upload a photo of the customer.</p>
+            {% endif %}
+          </div>
+          <div class="sale-proof">
+            <label>
+              Customer With Bike (Sale Proof)
+              <input type="file" name="customer_with_bike_photo_file" accept="image/*">
+            </label>
+            {% if sale_record and sale_record.customer_with_bike_photo_url %}
+            <a class="sale-proof-link" href="{{ sale_record.customer_with_bike_photo_url }}" target="_blank" rel="noopener">
+              <i class="bi bi-paperclip"></i>
+              <span>{{ sale_record.customer_with_bike_photo_filename }}</span>
+            </a>
+            {% else %}
+            <p class="summary-note">Upload a photo of the customer with the bike at handover, as sale proof.</p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <section class="sale-card sale-card-vehicle-theme">
+        <h3>Vehicle Details</h3>
+        <div class="sale-grid">
+          <label>
+            Vehicle Name
+            <input
+              type="text"
+              name="vehicle_name"
+              id="vehicle-name-input"
+              list="vehicle-name-list"
+              value="{{ form_data.vehicle_name or '' }}"
+              placeholder="Enter vehicle name"
+              autocomplete="off"
+            >
+          </label>
+          <label>
+            Vehicle Number
+            <input
+              type="text"
+              name="vehicle_number"
+              id="vehicle-number-input"
+              list="vehicle-number-list"
+              value="{{ form_data.vehicle_number or '' }}"
+              placeholder="Enter vehicle number"
+              autocomplete="off"
+            >
+          </label>
+          <label>
+            Order Date
+            <input type="text" name="order_date" value="{{ form_data.order_date or '' }}" readonly>
+          </label>
+        </div>
+
+        <div class="vehicle-summary" style="margin-top: 14px;">
+          <div class="vehicle-box">
+            <span>Model Year</span>
+            <strong id="vehicle-model">{{ selected_vehicle.model_year or "-" if selected_vehicle else "-" }}</strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Chassis No</span>
+            <strong id="vehicle-registration">{{ selected_vehicle.registration_no or "-" if selected_vehicle else "-" }}</strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Owners</span>
+            <strong id="vehicle-owners">{{ selected_vehicle.owners or "-" if selected_vehicle else "-" }}</strong>
+          </div>
+        </div>
+
+        <div class="vehicle-summary" style="margin-top: 12px;">
+          <div class="vehicle-box">
+            <span>RC Book</span>
+            <strong id="doc-rc">
+              {% if selected_vehicle and selected_vehicle.rc_book_url %}<a href="{{ selected_vehicle.rc_book_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
+            </strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Insurance Document</span>
+            <strong id="doc-insurance">
+              {% if selected_vehicle and selected_vehicle.insurance_document_url %}<a href="{{ selected_vehicle.insurance_document_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
+            </strong>
+          </div>
+          <div class="vehicle-box">
+            <span>RC Book (Back)</span>
+            <strong id="doc-rc-back">
+              {% if selected_vehicle and selected_vehicle.rc_book_back_url %}<a href="{{ selected_vehicle.rc_book_back_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
+            </strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Customer ID Proof</span>
+            <strong>
+              {% if sale_record and sale_record.customer_id_proof_url %}
+              <a href="{{ sale_record.customer_id_proof_url }}" target="_blank" rel="noopener">View document</a>
+              {% else %}
+              -
+              {% endif %}
+            </strong>
+          </div>
+        </div>
+
+        <div class="vehicle-gallery" id="vehicle-gallery">
+          {% if selected_vehicle and selected_vehicle.image_urls %}
+            {% for image_url in selected_vehicle.image_urls[:4] %}
+            <img src="{{ image_url }}" alt="Bike image {{ loop.index }}">
+            {% endfor %}
+          {% else %}
+            {% for _ in range(4) %}
+            <div class="vehicle-placeholder">No image</div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="sale-card sale-card-vehicle-theme">
+        <h3>Purchase Details</h3>
+        <div class="vehicle-summary">
+          <div class="vehicle-box">
+            <span>Purchase Price</span>
+            <strong id="purchase-price">{{ "%.2f"|format(selected_vehicle.purchase_price or 0) if selected_vehicle else "0.00" }}</strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Expense Price</span>
+            <strong id="purchase-expense">{{ "%.2f"|format(selected_vehicle.repair_cost or 0) if selected_vehicle else "0.00" }}</strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Total Price</span>
+            <strong id="purchase-total">{{ "%.2f"|format(selected_vehicle.purchase_total_cost or 0) if selected_vehicle else "0.00" }}</strong>
+          </div>
+          <div class="vehicle-box">
+            <span>Selling Price</span>
+            <strong id="purchase-selling">{{ "%.2f"|format(selected_vehicle.selling_price or 0) if selected_vehicle else "0.00" }}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="sale-card sale-card-vehicle-theme">
+        <h3>Settlement Details</h3>
+        <div class="summary-grid">
+          <label>
+            Vehicle Selling Price
+            <input type="number" step="0.01" min="0" name="selling_price" id="summary-selling-price" value="{{ '%.2f'|format(selected_vehicle.selling_price or 0) if selected_vehicle else '0.00' }}">
+          </label>
+          <label>
+            Expense Price
+            <input type="number" step="0.01" min="0" name="repair_cost" id="summary-repair-cost" value="{{ '%.2f'|format(selected_vehicle.repair_cost or 0) if selected_vehicle else '0.00' }}">
+          </label>
+          <label>
+            Final Before GST
+            <input type="number" step="0.01" min="0" name="subtotal_amount" id="summary-subtotal" value="{{ '%.2f'|format(selected_vehicle.subtotal_amount or 0) if selected_vehicle else '0.00' }}">
+          </label>
+          <label>
+            Discount %
+            <input type="number" step="0.01" min="0" name="discount_percent" id="discount-percent" value="0.00">
+            <input type="hidden" name="discount_amount" id="discount-amount" value="{{ form_data.discount_amount or '0.00' }}">
+          </label>
+          <label>
+            GST %
+            <input type="number" step="0.01" min="0" name="gst_percent" id="gst-percent" value="{{ form_data.gst_percent or '0.00' }}">
+          </label>
+          <label>
+            GST Amount
+            <input type="number" step="0.01" min="0" name="gst_amount" id="gst-amount" value="0.00">
+          </label>
+          <label>
+            Advance Amount
+            <input type="number" step="0.01" min="0" name="advance_amount" id="advance-amount" value="{{ form_data.advance_amount or '0.00' }}">
+          </label>
+          <label>
+            Payment Method
+            <select name="payment_method" id="payment-method" required>
+              {% for option in ["Cash", "UPI", "Bank", "GPay", "Card", "Finance"] %}
+              <option value="{{ option }}" {% if (form_data.payment_method or 'Cash') == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label data-finance-payment-field hidden>
+            Finance Name
+            <input type="text" name="payment_finance_name" value="{{ form_data.payment_finance_name or '' }}" placeholder="Finance name" disabled>
+          </label>
+          <label data-finance-payment-field hidden>
+            Commission Amount
+            <input type="number" step="0.01" min="0" name="payment_commission_amount" value="{{ form_data.payment_commission_amount or '' }}" placeholder="0.00" disabled>
+          </label>
+
+        </div>
+
+        <div class="summary-total-row">
+          <div class="summary-total">
+            <span>Total Amount</span>
+            <strong id="summary-total">Rs 0.00</strong>
+          </div>
+        </div>
+
+        <div class="sale-actions" style="margin-top: 14px; gap: 10px;">
+          <button type="submit" class="btn primary sale-save">Save</button>
+        </div>
+      </section>
+    </div>
+  </form>
+</section>
+
+<datalist id="vehicle-name-list">
+  {% for vehicle in vehicles %}
+  <option value="{{ vehicle.vehicle_name }}"></option>
+  {% endfor %}
+</datalist>
+
+<datalist id="vehicle-number-list">
+  {% for vehicle in vehicles %}
+  <option value="{{ vehicle.vehicle_number }}"></option>
+  {% endfor %}
+</datalist>
+
+<script>
+  const vehicles = {{ vehicles_json|tojson }};
+  const vehicleIdInput = document.getElementById("vehicle-id");
+  const vehicleNameInput = document.getElementById("vehicle-name-input");
+  const vehicleNumberInput = document.getElementById("vehicle-number-input");
+  const modelEl = document.getElementById("vehicle-model");
+  const registrationEl = document.getElementById("vehicle-registration");
+  const ownersEl = document.getElementById("vehicle-owners");
+  const purchasePriceEl = document.getElementById("purchase-price");
+  const purchaseExpenseEl = document.getElementById("purchase-expense");
+  const purchaseTotalEl = document.getElementById("purchase-total");
+  const purchaseSellingEl = document.getElementById("purchase-selling");
+  const galleryEl = document.getElementById("vehicle-gallery");
+  const docRcEl = document.getElementById("doc-rc");
+  const docInsuranceEl = document.getElementById("doc-insurance");
+  const docRcBackEl = document.getElementById("doc-rc-back");
+  const summarySellingEl = document.getElementById("summary-selling-price");
+  const summaryRepairEl = document.getElementById("summary-repair-cost");
+  const summarySubtotalEl = document.getElementById("summary-subtotal");
+  const discountPercentInput = document.getElementById("discount-percent");
+  const discountInput = document.getElementById("discount-amount");
+  const gstPercentInput = document.getElementById("gst-percent");
+  const gstAmountEl = document.getElementById("gst-amount");
+  const summaryTotalEl = document.getElementById("summary-total");
+  const paymentMethodInput = document.getElementById("payment-method");
+  const financePaymentFields = document.querySelectorAll("[data-finance-payment-field]");
+  let gstMode = "percent"; // percent | amount
+
+  function syncFinancePaymentFields() {
+    const isFinance = paymentMethodInput.value === "Finance";
+    financePaymentFields.forEach((field) => {
+      const input = field.querySelector("input");
+      field.hidden = !isFinance;
+      input.disabled = !isFinance;
+      input.required = isFinance;
+      if (!isFinance) input.value = "";
+    });
+  }
+
+  function asMoney(value) {
+    const num = Number.parseFloat(value || 0);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  function findVehicleById(id) {
+    return vehicles.find((vehicle) => String(vehicle.id) === String(id)) || null;
+  }
+
+  function findVehicleByField(field, value) {
+    const text = String(value || "").trim().toLowerCase();
+    if (!text) return null;
+    return vehicles.find((vehicle) => String(vehicle[field] || "").trim().toLowerCase() === text) || null;
+  }
+
+  function formatMoney(value) {
+    return asMoney(value).toFixed(2);
+  }
+
+  function discountAmountFromPercent(subtotal) {
+    const percent = Math.max(asMoney(discountPercentInput.value), 0);
+    return Math.min(subtotal, subtotal * percent / 100);
+  }
+
+  function syncDiscountPercentFromAmount() {
+    const subtotal = asMoney(summarySubtotalEl.value);
+    const discountAmount = Math.min(asMoney(discountInput.value), subtotal);
+    const percent = subtotal > 0 ? (discountAmount * 100 / subtotal) : 0;
+    discountPercentInput.value = formatMoney(percent);
+  }
+
+  const hasExistingSale = {{ 'true' if sale_record else 'false' }};
+
+  function renderVehicle(vehicle, options = {}) {
+    const preserveSummary = Boolean(options.preserveSummary);
+    if (!vehicle) {
+      vehicleIdInput.value = "";
+      modelEl.textContent = "-";
+      registrationEl.textContent = "-";
+      ownersEl.textContent = "-";
+      if (purchasePriceEl) purchasePriceEl.textContent = "0.00";
+      if (purchaseExpenseEl) purchaseExpenseEl.textContent = "0.00";
+      if (purchaseTotalEl) purchaseTotalEl.textContent = "0.00";
+      if (purchaseSellingEl) purchaseSellingEl.textContent = "0.00";
+      summarySellingEl.value = "0.00";
+      summaryRepairEl.value = "0.00";
+      summarySubtotalEl.value = "0.00";
+      discountInput.value = "0.00";
+      discountPercentInput.value = "0.00";
+      gstPercentInput.value = "0.00";
+      if (docRcEl) docRcEl.textContent = "-";
+      if (docInsuranceEl) docInsuranceEl.textContent = "-";
+      if (docRcBackEl) docRcBackEl.textContent = "-";
+      galleryEl.innerHTML = "";
+      for (let i = 0; i < 4; i += 1) {
+        const placeholder = document.createElement("div");
+        placeholder.className = "vehicle-placeholder";
+        placeholder.textContent = "No image";
+        galleryEl.appendChild(placeholder);
+      }
+      updateSummary();
+      return;
+    }
+
+    vehicleIdInput.value = vehicle.id || "";
+    vehicleNameInput.value = vehicle.vehicle_name || "";
+    vehicleNumberInput.value = vehicle.vehicle_number || "";
+    modelEl.textContent = vehicle.model_year || "-";
+    registrationEl.textContent = vehicle.registration_no || "-";
+    ownersEl.textContent = vehicle.owners || "-";
+    if (purchasePriceEl) purchasePriceEl.textContent = formatMoney(vehicle.purchase_price);
+    if (purchaseExpenseEl) purchaseExpenseEl.textContent = formatMoney(vehicle.repair_cost);
+    if (purchaseTotalEl) purchaseTotalEl.textContent = formatMoney(vehicle.purchase_total_cost);
+    if (purchaseSellingEl) purchaseSellingEl.textContent = formatMoney(vehicle.selling_price);
+   if (!preserveSummary) {
+  summarySellingEl.value = formatMoney(vehicle.selling_price);
+  summaryRepairEl.value = formatMoney(vehicle.repair_cost);
+
+  // Final Before GST should be based only on Selling Price
+  summarySubtotalEl.value = formatMoney(vehicle.selling_price);
+      syncDiscountPercentFromAmount();
+      if (vehicle.sale_gst_enabled) {
+        if ((vehicle.sale_gst_mode || "percent") === "amount") {
+          const subtotal = asMoney(summarySubtotalEl.value);
+          const taxable = subtotal - discountAmountFromPercent(subtotal);
+          const percent = taxable > 0 ? (asMoney(vehicle.sale_gst_value) * 100 / taxable) : 0;
+          gstPercentInput.value = formatMoney(percent);
+        } else {
+          gstPercentInput.value = formatMoney(vehicle.sale_gst_value);
+        }
+      } else {
+        gstPercentInput.value = "0.00";
+      }
+    }
+    if (docRcEl) docRcEl.innerHTML = vehicle.rc_book_url ? `<a href="${vehicle.rc_book_url}" target="_blank" rel="noopener">View document</a>` : "-";
+    if (docInsuranceEl) docInsuranceEl.innerHTML = vehicle.insurance_document_url ? `<a href="${vehicle.insurance_document_url}" target="_blank" rel="noopener">View document</a>` : "-";
+    if (docRcBackEl) docRcBackEl.innerHTML = vehicle.rc_book_back_url ? `<a href="${vehicle.rc_book_back_url}" target="_blank" rel="noopener">View document</a>` : "-";
+
+    galleryEl.innerHTML = "";
+    const images = Array.isArray(vehicle.image_urls) ? vehicle.image_urls.slice(0, 4) : [];
+    if (images.length) {
+      images.forEach((src, index) => {
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = `Bike image ${index + 1}`;
+        galleryEl.appendChild(img);
+      });
+      for (let i = images.length; i < 4; i += 1) {
+        const placeholder = document.createElement("div");
+        placeholder.className = "vehicle-placeholder";
+        placeholder.textContent = "No image";
+        galleryEl.appendChild(placeholder);
+      }
+    } else {
+      for (let i = 0; i < 4; i += 1) {
+        const placeholder = document.createElement("div");
+        placeholder.className = "vehicle-placeholder";
+        placeholder.textContent = "No image";
+        galleryEl.appendChild(placeholder);
+      }
+    }
+    updateSummary();
+  }
+
+function recalcSubtotal() {
+  const selling = asMoney(summarySellingEl.value);
+
+  // Expense/repair cost is NOT part of customer sale total.
+  summarySubtotalEl.value = formatMoney(selling);
+
+  updateSummary();
+}
+
+  function updateSummary() {
+    const subtotal = asMoney(summarySubtotalEl.value);
+    const discount = discountAmountFromPercent(subtotal);
+    discountInput.value = formatMoney(discount);
+    const taxable = Math.max(subtotal - discount, 0);
+
+    let gstAmount = 0;
+    if (gstMode === "amount") {
+      gstAmount = Math.max(asMoney(gstAmountEl.value), 0);
+      if (document.activeElement !== gstPercentInput) {
+        const percent = taxable > 0 ? (gstAmount * 100 / taxable) : 0;
+        gstPercentInput.value = formatMoney(percent);
+      }
+    } else {
+      const gstPercent = Math.max(asMoney(gstPercentInput.value), 0);
+      gstAmount = taxable * gstPercent / 100;
+      if (document.activeElement !== gstAmountEl) {
+        gstAmountEl.value = formatMoney(gstAmount);
+      }
+    }
+    const total = taxable + gstAmount;
+    summaryTotalEl.textContent = `Rs ${formatMoney(total)}`;
+  }
+
+  function handleVehicleLookup(sourceField) {
+    const vehicle = sourceField === "name"
+      ? findVehicleByField("vehicle_name", vehicleNameInput.value)
+      : findVehicleByField("vehicle_number", vehicleNumberInput.value);
+    renderVehicle(vehicle);
+  }
+
+  vehicleNameInput.addEventListener("change", () => handleVehicleLookup("name"));
+  vehicleNumberInput.addEventListener("change", () => handleVehicleLookup("number"));
+  vehicleNameInput.addEventListener("blur", () => handleVehicleLookup("name"));
+  vehicleNumberInput.addEventListener("blur", () => handleVehicleLookup("number"));
+  summarySellingEl.addEventListener("input", recalcSubtotal);
+  summarySubtotalEl.addEventListener("input", updateSummary);
+  discountPercentInput.addEventListener("input", updateSummary);
+  gstPercentInput.addEventListener("input", () => {
+    gstMode = "percent";
+    updateSummary();
+  });
+  gstAmountEl.addEventListener("input", () => {
+    gstMode = "amount";
+    updateSummary();
+  });
+  paymentMethodInput.addEventListener("change", syncFinancePaymentFields);
+  syncFinancePaymentFields();
+
+  const initialVehicle = findVehicleById(vehicleIdInput.value)
+    || findVehicleByField("vehicle_number", vehicleNumberInput.value)
+    || findVehicleByField("vehicle_name", vehicleNameInput.value);
+
+  // Fallback: read vehicle_id from URL query string if hidden input is empty
+  if (!vehicleIdInput.value) {
+    const urlVid = new URLSearchParams(window.location.search).get("vehicle_id");
+    if (urlVid) vehicleIdInput.value = urlVid;
+  }
+
+  const resolvedInitialVehicle = initialVehicle || findVehicleById(vehicleIdInput.value);
+
+  if (resolvedInitialVehicle) {
+    renderVehicle(resolvedInitialVehicle, { preserveSummary: hasExistingSale });
+    if (hasExistingSale) {
+      syncDiscountPercentFromAmount();
+      updateSummary();
+    }
+  } else {
+    syncDiscountPercentFromAmount();
+    updateSummary();
+  }
+
+  const existingOrderId = {{ (sale_record.order_id if sale_record and sale_record.order_id else None)|tojson }};
+
+  function openPrint(url) {
+    if (!url) return;
+    const printWindow = window.open(url, "_blank");
+    if (!printWindow) return;
+
+    const triggerPrint = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (err) {
+        // Ignore print trigger errors to avoid interrupting flow.
+      }
+    };
+
+    printWindow.addEventListener("load", () => {
+      setTimeout(triggerPrint, 250);
+      setTimeout(triggerPrint, 900);
+    }, { once: true });
+    setTimeout(triggerPrint, 1400);
+  }
+
+  function printReceipt() {
+    if (existingOrderId) {
+      openPrint(`/orders/${existingOrderId}/print/a4`);
+      return;
+    }
+    window.print();
+  }
+
+</script>
+{% endblock %}

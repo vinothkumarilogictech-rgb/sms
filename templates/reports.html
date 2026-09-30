@@ -150,7 +150,15 @@ main.container {
 .report-panel[data-type="sales"] .list-table .list-row > div:nth-child(7),
 .report-panel[data-type="sales"] .list-table .list-head > div:nth-child(7),
 .report-panel[data-type="expenses"] .list-table .list-row > div:nth-child(4),
-.report-panel[data-type="expenses"] .list-table .list-head > div:nth-child(4) {
+.report-panel[data-type="expenses"] .list-table .list-head > div:nth-child(4),
+.report-panel[data-type="sales_summary"] .list-table .list-row > div:nth-child(5),
+.report-panel[data-type="sales_summary"] .list-table .list-head > div:nth-child(5),
+.report-panel[data-type="sales_summary"] .list-table .list-row > div:nth-child(6),
+.report-panel[data-type="sales_summary"] .list-table .list-head > div:nth-child(6),
+.report-panel[data-type="sales_summary"] .list-table .list-row > div:nth-child(7),
+.report-panel[data-type="sales_summary"] .list-table .list-head > div:nth-child(7),
+.report-panel[data-type="sales_summary"] .list-table .list-row > div:nth-child(8),
+.report-panel[data-type="sales_summary"] .list-table .list-head > div:nth-child(8) {
   text-align: right;
   padding-right: 16px;
 }
@@ -195,6 +203,8 @@ main.container {
     <button class="tab-chip active" type="button" data-type="vehicles">Vehicles</button>
     <button class="tab-chip" type="button" data-type="expenses">Expenses</button>
     <button class="tab-chip" type="button" data-type="sales">Sales</button>
+    <button class="tab-chip" type="button" data-type="repairs">Repairs</button>
+    <button class="tab-chip" type="button" data-type="sales_summary">Sales Summary</button>
   </div>
 
   <form method="post" action="{{ url_for('reports') }}" id="reportFilterForm">
@@ -367,6 +377,97 @@ main.container {
     {% endif %}
   </div>
 
+  <!-- REPAIRS -->
+  <div class="report-panel" data-type="repairs">
+    <div class="card-header">
+      <h3>Repairs</h3>
+    </div>
+    {% if repair_items %}
+    <div class="list-table compact" style="--list-cols: 1fr 1.2fr 1.3fr 1.5fr 2fr 1fr 0.8fr;">
+      <div class="list-row list-head">
+        <div>Date</div>
+        <div>Repair ID</div>
+        <div>Vehicle No</div>
+        <div>Vehicle</div>
+        <div>Description</div>
+        <div>Cost</div>
+        <div style="text-align:center;">Action</div>
+      </div>
+      {% for r in repair_items %}
+      <div class="list-row">
+        <div>{{ r.created_at|date_only }}</div>
+        <div><strong>{{ r.ref_no or '-' }}</strong></div>
+        <div><strong>{{ r.vehicle_number or '-' }}</strong></div>
+        <div>{{ r.vehicle_name or '-' }}</div>
+        <div>{{ r.description or '-' }}</div>
+        <div>&#8377; {{ "%.2f"|format(r.amount|float) }}</div>
+        <div class="report-actions" style="display:flex; justify-content:center;">
+          {% if r.open_href %}
+          <a class="report-action-btn report-open-btn" href="{{ r.open_href }}">Open</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No repairs found.</p>
+    {% endif %}
+  </div>
+
+  <!-- SALES SUMMARY -->
+  <div class="report-panel" data-type="sales_summary">
+    <div class="card-header">
+      <h3>Sales Summary</h3>
+    </div>
+    {% if sales_summary_list %}
+    <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+    <div class="list-table compact" style="--list-cols: 90px 100px 110px 120px 100px 100px 110px 110px 70px; min-width: 910px; width: max-content;">
+      <div class="list-row list-head">
+        <div>Sale</div>
+        <div>Date</div>
+        <div>Vehicle No</div>
+        <div>Vehicle</div>
+        <div style="text-align:right; white-space:nowrap;">Purchase</div>
+        <div style="text-align:right; white-space:nowrap;">Repair</div>
+        <div style="text-align:right; white-space:nowrap;">Selling</div>
+        <div style="text-align:right; white-space:nowrap;">Profit</div>
+        <div style="text-align:center;">Action</div>
+      </div>
+      {% for s in sales_summary_list %}
+      <div class="list-row">
+        <div>{{ s.sale_code or '-' }}</div>
+        <div>{{ s.created_at|date_only }}</div>
+        <div><strong>{{ s.vehicle_number or '-' }}</strong></div>
+        <div><strong>{{ s.vehicle_name or '-' }}</strong></div>
+        <div style="text-align:right; white-space:nowrap;">&#8377; {{ "%.2f"|format(s.purchase_cost|float) }}</div>
+        <div style="text-align:right; white-space:nowrap;">&#8377; {{ "%.2f"|format(s.repair_cost|float) }}</div>
+        <div style="text-align:right; white-space:nowrap;">&#8377; {{ "%.2f"|format(s.selling_amount|float) }}</div>
+        <div style="text-align:right; white-space:nowrap; {{ 'color:#1a7d33; font-weight:700;' if (s.profit|float) >= 0 else 'color:#b3261e; font-weight:700;' }}">&#8377; {{ "%.2f"|format(s.profit|float) }}</div>
+        <div class="report-actions" style="display:flex; justify-content:center;">
+          {% if s.open_href %}
+          <a class="report-action-btn report-open-btn" href="{{ s.open_href }}">Open</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="list-row" style="font-weight:700; background: rgba(255,255,255,0.35);">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div>Total</div>
+        <div style="text-align:right; white-space:nowrap;">&#8377; {{ "%.2f"|format(sales_summary_totals.purchase_cost|float) }}</div>
+        <div style="text-align:right; white-space:nowrap;">&#8377; {{ "%.2f"|format(sales_summary_totals.repair_cost|float) }}</div>
+        <div style="text-align:right; white-space:nowrap;">&#8377; {{ "%.2f"|format(sales_summary_totals.selling_amount|float) }}</div>
+        <div style="text-align:right; white-space:nowrap; {{ 'color:#1a7d33;' if (sales_summary_totals.profit|float) >= 0 else 'color:#b3261e;' }}">&#8377; {{ "%.2f"|format(sales_summary_totals.profit|float) }}</div>
+        <div></div>
+      </div>
+    </div>
+    </div>
+    {% else %}
+    <p class="muted">No sales found.</p>
+    {% endif %}
+  </div>
+
 </section>
 
 <iframe
@@ -464,7 +565,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  const validTypes = new Set(["vehicles", "expenses", "sales"]);
+  const validTypes = new Set(["vehicles", "expenses", "sales", "repairs", "sales_summary"]);
   const requestedType = (reportTypeInput?.value || "vehicles").toLowerCase();
   const activeType = validTypes.has(requestedType) ? requestedType : "vehicles";
 

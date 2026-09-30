@@ -15,6 +15,94 @@
   .tab-panel[data-panel="orders"] .orders-table .list-row:not(.list-head) {
     background: rgba(255, 255, 255, 0.34) !important;
   }
+
+  .orders-page-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .orders-head-filters .orders-head-filter-group {
+    grid-template-columns: minmax(240px, 1fr) 180px 180px 130px;
+    gap: 10px;
+  }
+
+  .orders-head-input,
+  .orders-head-search-btn,
+  .orders-head-actions .btn {
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
+  }
+
+  .orders-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .orders-export-btn {
+    width: 132px;
+    min-width: 132px;
+    padding: 0 12px;
+    border-color: #9c75bd !important;
+    background: #f5edfb !important;
+    color: #4a1768 !important;
+    border-radius: 12px;
+    white-space: nowrap;
+    font-weight: 700;
+    box-shadow: none;
+  }
+
+  .orders-export-btn i {
+    font-size: 1rem;
+  }
+
+  .orders-export-btn:hover,
+  .orders-export-btn:active,
+  .orders-export-btn:focus-visible {
+    border-color: #4a1768 !important;
+    background: #4a1768 !important;
+    color: #fff !important;
+  }
+
+  .orders-head-actions .orders-head-new-order-btn {
+    width: 132px;
+    min-width: 132px;
+    padding: 0 12px;
+  }
+
+  @media (max-width: 900px) {
+    .orders-page-head {
+      display: flex;
+      flex-flow: row nowrap;
+      align-items: center;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .orders-head-filters {
+      flex: 0 0 750px;
+      width: 750px;
+    }
+
+    .orders-head-filters .orders-head-filter-group {
+      grid-template-columns: 240px 170px 170px 140px;
+    }
+
+    .orders-head-actions {
+      width: auto;
+    }
+
+    .orders-head-actions .orders-head-new-order-btn,
+    .orders-head-actions .orders-export-btn {
+      width: auto;
+      flex: 0 0 auto;
+    }
+  }
 </style>
 <div class="page-head orders-page-head">
   <div class="orders-head-filters">
@@ -28,7 +116,12 @@
       <button class="btn primary orders-head-search-btn" type="button" id="orders-head-search-btn">Search</button>
     </div>
   </div>
-  <a class="btn primary orders-head-new-order-btn" href="{{ url_for('order_new') }}"><i class="bi bi-bag-check"></i> + Add Sale</a>
+  <div class="orders-head-actions">
+    <a class="btn ghost orders-export-btn" href="{{ url_for('orders_download') }}" id="download-orders">
+      <i class="bi bi-download" aria-hidden="true"></i> Export Excel
+    </a>
+    <a class="btn primary orders-head-new-order-btn" href="{{ url_for('order_new') }}"><i class="bi bi-bag-check"></i> + Add Sale</a>
+  </div>
 </div>
 
 {# Charts removed: show graphs only on dashboard #}
@@ -1001,8 +1094,21 @@
     if (downloadBtn) {
       downloadBtn.addEventListener("click", (event) => {
         event.preventDefault();
+        const exportUrl = new URL(downloadBtn.href, window.location.origin);
+        const fromDate = (fromInput?.value || "").trim();
+        const toDate = (toInput?.value || "").trim();
+        const search = (searchInput?.value || "").trim();
+        if (fromDate) exportUrl.searchParams.set("from", fromDate);
+        if (toDate) exportUrl.searchParams.set("to", toDate);
+        if (search) exportUrl.searchParams.set("q", search);
+
+        const selectedStatuses = Array.from(statusFilterItems).filter((input) => input.checked);
+        if (selectedStatuses.length > 0 && selectedStatuses.length < statusFilterItems.length) {
+          selectedStatuses.forEach((input) => exportUrl.searchParams.append("status", input.value));
+        }
+
         if (!downloadModal || !downloadBar || !downloadValue) {
-          window.location.href = downloadBtn.href;
+          window.location.href = exportUrl.toString();
           return;
         }
         downloadModal.classList.remove("hidden");
@@ -1016,7 +1122,7 @@
           downloadValue.textContent = `${progress.toFixed(0)}%`;
           if (progress >= 100) {
             clearInterval(timer);
-            window.location.href = downloadBtn.href;
+            window.location.href = exportUrl.toString();
             setTimeout(() => downloadModal.classList.add("hidden"), 300);
           }
         }, 50);
