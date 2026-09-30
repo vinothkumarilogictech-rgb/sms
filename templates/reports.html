@@ -205,6 +205,7 @@ main.container {
     <button class="tab-chip" type="button" data-type="sales">Sales</button>
     <button class="tab-chip" type="button" data-type="repairs">Repairs</button>
     <button class="tab-chip" type="button" data-type="sales_summary">Sales Summary</button>
+    <button class="tab-chip" type="button" data-type="expense_summary">Expense Summary</button>
   </div>
 
   <form method="post" action="{{ url_for('reports') }}" id="reportFilterForm">
@@ -256,6 +257,21 @@ main.container {
 
       <button class="btn primary" type="button" id="reportPrintBtn">Print</button>
       <button class="btn ghost"   type="button" id="reportPrintExcelBtn">Print Excel</button>
+    </div>
+
+    <div id="expenseSummaryFilters" class="report-filter-row" style="display:none; margin-top:12px;">
+      <select class="filter-input" name="expense_category" id="expenseSummaryCategory">
+        <option value="">Select Category</option>
+        {% for category in expense_summary_categories or [] %}
+        <option value="{{ category }}" {% if selected_expense_category|lower == category|lower %}selected{% endif %}>{{ category }}</option>
+        {% endfor %}
+      </select>
+      <select class="filter-input" name="expense_month" id="expenseSummaryMonth">
+        {% for month_key in expense_summary_months or [] %}
+        <option value="{{ month_key }}" {% if selected_expense_month == month_key %}selected{% endif %}>{{ month_key[5:7] }}/{{ month_key[0:4] }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary" type="submit">View Expense Summary</button>
     </div>
 
   </form>
@@ -414,6 +430,62 @@ main.container {
     {% endif %}
   </div>
 
+  <!-- EXPENSE SUMMARY -->
+  <div class="report-panel" data-type="expense_summary">
+    <div class="card-header">
+      <h3>Expense Summary</h3>
+    </div>
+
+    {% if selected_expense_category %}
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:16px;">
+      <div class="card" style="padding:16px; margin:0;">
+        <div class="muted" style="font-size:.82rem;">Category</div>
+        <strong style="font-size:1.05rem;">{{ selected_expense_category }}</strong>
+      </div>
+      <div class="card" style="padding:16px; margin:0;">
+        <div class="muted" style="font-size:.82rem;">Month</div>
+        <strong style="font-size:1.05rem;">{{ selected_expense_month[5:7] }}/{{ selected_expense_month[0:4] }}</strong>
+      </div>
+      <div class="card" style="padding:16px; margin:0;">
+        <div class="muted" style="font-size:.82rem;">Overall Expense</div>
+        <strong style="font-size:1.35rem;">&#8377; {{ "%.2f"|format(expense_summary_total|float) }}</strong>
+      </div>
+    </div>
+
+    {% if expense_summary_breakdown %}
+    <div class="list-table compact" style="--list-cols: 2fr 1fr 100px;">
+      <div class="list-row list-head">
+        <div>Expense Name</div>
+        <div style="text-align:right;">Amount</div>
+        <div style="text-align:right;">Count</div>
+      </div>
+      {% for item in expense_summary_breakdown %}
+      <div class="list-row">
+        <div><strong>{{ item.name }}</strong></div>
+        <div style="text-align:right;">&#8377; {{ "%.2f"|format(item.amount|float) }}</div>
+        <div style="text-align:right;">{{ item.count }}</div>
+      </div>
+      {% endfor %}
+      <div class="list-row" style="font-weight:700; background:rgba(255,255,255,0.35);">
+        <div>Monthly Total</div>
+        <div style="text-align:right;">&#8377; {{ "%.2f"|format(expense_summary_total|float) }}</div>
+        <div style="text-align:right;">{{ expense_summary_count }}</div>
+      </div>
+    </div>
+    {% else %}
+    <div class="card" style="padding:18px; margin:0; text-align:center;">
+      <strong>&#8377; 0.00</strong>
+      <div class="muted" style="margin-top:6px;">No expenses found for the selected category and month.</div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="card" style="padding:18px; margin:0;">
+      <strong>Select a category</strong>
+      <div class="muted" style="margin-top:6px;">Choose an expense category and month above to view the monthly total.</div>
+    </div>
+    {% endif %}
+  </div>
+
   <!-- SALES SUMMARY -->
   <div class="report-panel" data-type="sales_summary">
     <div class="card-header">
@@ -507,6 +579,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const rowPrintButtons = document.querySelectorAll(".js-row-print");
   const paymentModeWrap = document.getElementById("paymentModeWrap");
   const statusWrap = document.getElementById("statusWrap");
+  const expenseSummaryFilters = document.getElementById("expenseSummaryFilters");
   const statusSelect = document.getElementById("reportStatus");
   const downloadFormatInput = document.getElementById("downloadFormat");
   const reportDownloadBtn = document.getElementById("reportDownloadBtn");
@@ -528,6 +601,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     if (paymentModeWrap) {
       paymentModeWrap.style.display = (type === "sales") ? "" : "none";
+    }
+    if (expenseSummaryFilters) {
+      expenseSummaryFilters.style.display = (type === "expense_summary") ? "flex" : "none";
     }
     if (statusWrap) {
       statusWrap.style.display = (type === "vehicles" || type === "sales") ? "" : "none";
@@ -565,7 +641,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  const validTypes = new Set(["vehicles", "expenses", "sales", "repairs", "sales_summary"]);
+  const validTypes = new Set(["vehicles", "expenses", "sales", "repairs", "sales_summary", "expense_summary"]);
   const requestedType = (reportTypeInput?.value || "vehicles").toLowerCase();
   const activeType = validTypes.has(requestedType) ? requestedType : "vehicles";
 
@@ -578,6 +654,17 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   syncPanels(activeType);
+
+  const expenseSummaryCategory = document.getElementById("expenseSummaryCategory");
+  const expenseSummaryMonth = document.getElementById("expenseSummaryMonth");
+  [expenseSummaryCategory, expenseSummaryMonth].forEach((control) => {
+    if (control) {
+      control.addEventListener("change", () => {
+        if (reportTypeInput) reportTypeInput.value = "expense_summary";
+        if (reportForm) reportForm.submit();
+      });
+    }
+  });
 
   const closeDownloadModal = () => {
     if (downloadModal) downloadModal.classList.add("hidden");
