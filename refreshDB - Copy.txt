@@ -1,0 +1,42 @@
+BEGIN TRANSACTION;
+
+-- ===== Orders related =====
+DELETE FROM order_images;
+DELETE FROM order_items;
+DELETE FROM order_material_items;
+DELETE FROM orders;
+
+-- ===== Measurements =====
+DELETE FROM measurements;
+
+-- ===== Gallery =====
+DELETE FROM gallery_items;
+DELETE FROM gallery_categories;
+
+-- ===== Measurements setup =====
+DELETE FROM measurement_fields;
+DELETE FROM measurement_labels;
+DELETE FROM subcategories;
+DELETE FROM categories;
+
+-- ===== Vendor purchases =====
+DELETE FROM vendor_purchase_images;
+DELETE FROM vendor_purchase_items;
+DELETE FROM vendor_purchase_orders;
+DELETE FROM vendors;
+
+-- ===== Salaries & expenses =====
+DELETE FROM salaries;
+DELETE FROM expenses;
+
+-- ===== Inventory =====
+DELETE FROM inventory;
+
+-- ===== Master data =====
+DELETE FROM uoms;
+DELETE FROM tailors;
+DELETE FROM customers;
+DELETE FROM requirement_icons;
+DELETE FROM app_settings;
+
+COMMIT TRANSACTION;

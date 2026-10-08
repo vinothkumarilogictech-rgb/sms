@@ -429,6 +429,7 @@
             <a class="btn ghost" href="{{ url_for('order_new', vehicle_id=v.id) }}">Sell</a>
             <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=v.id) }}">Add Repair</a>
             <button class="btn ghost" type="button" data-share-url="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Share</button>
+            <a class="btn ghost js-service-open-btn" href="{{ url_for('service_add', vehicle_id=v.id) }}" data-vehicle-id="{{ v.id }}" data-vehicle-name="{{ v.vehicle_name or '' }}" data-vehicle-number="{{ v.vehicle_number or '' }}" data-model-year="{{ v.model_year or '' }}" onclick="return openVehicleServiceModal(this, event);">Service</a>
           </div>
         </div>
         <div class="inv-card-media" aria-hidden="true">
@@ -492,6 +493,7 @@
           <a class="inv-action-box" href="{{ url_for('order_new', vehicle_id=v.id) }}">Sell</a>
           <a class="inv-action-box" href="{{ url_for('expense_repair_add', vehicle_id=v.id) }}">Add Repair</a>
           <button class="inv-action-box" type="button" data-share-url="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Share</button>
+          <a class="inv-action-box js-service-open-btn" href="{{ url_for('service_add', vehicle_id=v.id) }}" data-vehicle-id="{{ v.id }}" data-vehicle-name="{{ v.vehicle_name or '' }}" data-vehicle-number="{{ v.vehicle_number or '' }}" data-model-year="{{ v.model_year or '' }}" onclick="return openVehicleServiceModal(this, event);">Service</a>
         </div>
       </div>
       {% endfor %}
@@ -540,6 +542,7 @@
             {% endif %}
             <a class="btn ghost" href="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">View Vehicle</a>
             <button class="btn ghost" type="button" data-share-url="{{ url_for('inventory_vehicle_edit', vehicle_id=v.id, mode='view') }}">Share</button>
+            <a class="btn ghost js-service-open-btn" href="{{ url_for('service_add', vehicle_id=v.id) }}" data-vehicle-id="{{ v.id }}" data-vehicle-name="{{ v.vehicle_name or '' }}" data-vehicle-number="{{ v.vehicle_number or '' }}" data-model-year="{{ v.model_year or '' }}" onclick="return openVehicleServiceModal(this, event);">Service</a>
           </div>
         </div>
         <div class="inv-card-media" aria-hidden="true">
@@ -1038,4 +1041,276 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
+<!-- SERVICE ENTRY MODAL -->
+<div class="sale-modal-backdrop" id="serviceEntryModal" role="dialog" aria-modal="true" aria-labelledby="serviceModalTitle" style="display:none; position:fixed; inset:0; z-index:10050; background:rgba(15, 23, 42, 0.52); align-items:center; justify-content:center; padding:16px; box-sizing:border-box; overflow-x:hidden;">
+  <div class="sale-modal" style="width:min(520px, 96vw); max-width:96vw; max-height:90vh; overflow-y:auto; overflow-x:hidden; background:#fff; border-radius:20px; border:1px solid #dcbef0; box-shadow:0 24px 60px rgba(62, 11, 99, 0.25); box-sizing:border-box;">
+    <div class="sale-modal-head" style="background:#f4ebfa; border-bottom:1px solid #dcbef0; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; box-sizing:border-box;">
+      <h2 id="serviceModalTitle" style="margin:0; font-size:1.1rem; font-weight:800; color:#3f2265; display:flex; align-items:center; gap:8px;">
+        <i class="bi bi-gear-wide-connected" style="color:#6f3d91;"></i> Record Vehicle Service
+      </h2>
+      <button class="sale-modal-close" type="button" aria-label="Close" id="serviceModalClose" onclick="closeVehicleServiceModal()" style="width:34px; height:34px; border-radius:50%; border:1px solid #dcbef0; background:#fff; cursor:pointer; display:grid; place-items:center; color:#3f2265; flex-shrink:0;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    
+    <div style="padding:18px 20px; box-sizing:border-box; min-width:0; width:100%;">
+      <!-- Vehicle Information Banner -->
+      <div id="serviceVehicleBanner" style="background:linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%); border:1px solid #dcbef0; border-radius:14px; padding:12px 14px; margin-bottom:16px; box-sizing:border-box; min-width:0;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px 12px; font-size:0.9rem; min-width:0;">
+          <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;"><span style="color:#6f5b7d; font-weight:600;">Vehicle Name:</span> <strong id="modalVehicleName" style="color:#3f2265;">-</strong></div>
+          <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;"><span style="color:#6f5b7d; font-weight:600;">Reg No:</span> <strong id="modalVehicleNumber" style="color:#3f2265;">-</strong></div>
+          <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;"><span style="color:#6f5b7d; font-weight:600;">Model:</span> <strong id="modalVehicleModel" style="color:#3f2265;">-</strong></div>
+        </div>
+      </div>
+
+      <!-- Alert for success / error messages -->
+      <div id="serviceModalAlert" style="display:none; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:0.9rem; font-weight:600; word-break:break-word; overflow-wrap:anywhere; box-sizing:border-box;"></div>
+
+      <form id="serviceEntryForm" style="display:grid; gap:14px; min-width:0; width:100%; box-sizing:border-box;">
+        <input type="hidden" name="vehicle_id" id="serviceVehicleId" value="" />
+
+        <div style="min-width:0; width:100%; box-sizing:border-box;">
+          <label for="serviceDate" style="display:block; font-size:0.88rem; font-weight:700; color:#3f2265; margin-bottom:4px;">
+            Service Date <span style="color:#b91c1c;">*</span>
+          </label>
+          <input type="date" id="serviceDate" name="service_date" required class="filter-input" style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:8px 12px; min-height:42px; background:#fffdfd; box-sizing:border-box;" />
+        </div>
+
+        <div style="min-width:0; width:100%; box-sizing:border-box;">
+          <label for="serviceDoneBy" style="display:block; font-size:0.88rem; font-weight:700; color:#3f2265; margin-bottom:4px;">
+            Service Done By / Person Name <span style="color:#b91c1c;">*</span>
+          </label>
+          <input type="text" id="serviceDoneBy" name="service_done_by" required placeholder="e.g. Kumar / Mechanic name" class="filter-input" style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:8px 12px; min-height:42px; background:#fffdfd; box-sizing:border-box;" />
+        </div>
+
+        <div style="min-width:0; width:100%; box-sizing:border-box;">
+          <label for="serviceAmount" style="display:block; font-size:0.88rem; font-weight:700; color:#3f2265; margin-bottom:4px;">
+            Service Amount (&#8377;) <span style="color:#b91c1c;">*</span>
+          </label>
+          <div style="position:relative; width:100%; box-sizing:border-box;">
+            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-weight:700; color:#6f5b7d;">&#8377;</span>
+            <input type="number" id="serviceAmount" name="amount" required step="0.01" min="0" placeholder="0.00" class="filter-input" style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:8px 12px 8px 30px; min-height:42px; background:#fffdfd; box-sizing:border-box;" />
+          </div>
+        </div>
+
+        <div style="min-width:0; width:100%; box-sizing:border-box;">
+          <label for="serviceRemarks" style="display:block; font-size:0.88rem; font-weight:700; color:#3f2265; margin-bottom:4px;">
+            Remarks <span style="color:#6f5b7d; font-weight:normal; font-size:0.82rem;">(Optional)</span>
+          </label>
+          <textarea id="serviceRemarks" name="remarks" rows="3" placeholder="Oil change, parts serviced..." data-tamil-suggest-wired="1" data-no-translit="true" style="width:100%; max-width:100%; min-width:0; min-height:80px; max-height:220px; border:1px solid #d8c0ef; border-radius:10px; padding:8px 12px; background:#fffdfd; box-sizing:border-box; font-family:inherit; resize:vertical; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; overflow-y:auto; overflow-x:hidden; line-height:1.45;"></textarea>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px; flex-wrap:wrap; box-sizing:border-box;">
+          <button type="button" class="btn ghost" id="serviceModalCancel" onclick="closeVehicleServiceModal()" style="min-width:90px;">Cancel</button>
+          <button type="submit" class="btn primary" id="serviceModalSubmit" style="min-width:130px;">
+            <span id="serviceSubmitSpinner" style="display:none;" class="spinner-border spinner-border-sm"></span>
+            <span id="serviceSubmitText">Save Service</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── VEHICLE SERVICE MODAL LOGIC ──
+window.openVehicleServiceModal = function(triggerEl, e) {
+  if (e) {
+    try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+  }
+  const modal = document.getElementById("serviceEntryModal");
+  const vId = (triggerEl && triggerEl.getAttribute ? triggerEl.getAttribute("data-vehicle-id") : triggerEl) || "";
+  const vName = (triggerEl && triggerEl.getAttribute ? triggerEl.getAttribute("data-vehicle-name") : "") || "";
+  const vNum = (triggerEl && triggerEl.getAttribute ? triggerEl.getAttribute("data-vehicle-number") : "") || "";
+  const vMod = (triggerEl && triggerEl.getAttribute ? triggerEl.getAttribute("data-model-year") : "") || "";
+
+  if (!modal) {
+    const href = (triggerEl && triggerEl.getAttribute ? triggerEl.getAttribute("href") : "") || ("/service/add?vehicle_id=" + encodeURIComponent(vId));
+    window.location.href = href;
+    return false;
+  }
+
+  const vIdInput = document.getElementById("serviceVehicleId");
+  const dateInput = document.getElementById("serviceDate");
+  const doneByInput = document.getElementById("serviceDoneBy");
+  const amountInput = document.getElementById("serviceAmount");
+  const remarksInput = document.getElementById("serviceRemarks");
+
+  const nameEl = document.getElementById("modalVehicleName");
+  const numberEl = document.getElementById("modalVehicleNumber");
+  const modelEl = document.getElementById("modalVehicleModel");
+  const alertBox = document.getElementById("serviceModalAlert");
+
+  if (vIdInput) vIdInput.value = vId;
+  if (nameEl) nameEl.textContent = vName || "-";
+  if (numberEl) numberEl.textContent = vNum || "-";
+  if (modelEl) modelEl.textContent = vMod || "-";
+
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  if (dateInput) dateInput.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  if (doneByInput) doneByInput.value = "";
+  if (amountInput) amountInput.value = "";
+  if (remarksInput) {
+    remarksInput.value = "";
+    remarksInput.dataset.tamilSuggestWired = "1";
+    remarksInput.dataset.noTranslit = "true";
+    const oldBox = remarksInput.parentElement?.querySelector(".tamil-suggestion-box");
+    if (oldBox) oldBox.remove();
+  }
+
+  if (alertBox) alertBox.style.display = "none";
+  const submitBtn = document.getElementById("serviceModalSubmit");
+  const submitText = document.getElementById("serviceSubmitText");
+  if (submitBtn) submitBtn.disabled = false;
+  if (submitText) submitText.textContent = "Save Service";
+
+  modal.style.display = "flex";
+  setTimeout(() => {
+    if (doneByInput) doneByInput.focus();
+  }, 100);
+  return false;
+};
+
+window.closeVehicleServiceModal = function() {
+  const modal = document.getElementById("serviceEntryModal");
+  if (modal) modal.style.display = "none";
+};
+
+(function initServiceModal() {
+  function bindHandlers() {
+    const modal = document.getElementById("serviceEntryModal");
+    const form = document.getElementById("serviceEntryForm");
+    const closeBtn = document.getElementById("serviceModalClose");
+    const cancelBtn = document.getElementById("serviceModalCancel");
+    const submitBtn = document.getElementById("serviceModalSubmit");
+    const submitText = document.getElementById("serviceSubmitText");
+    const alertBox = document.getElementById("serviceModalAlert");
+
+    const vIdInput = document.getElementById("serviceVehicleId");
+    const dateInput = document.getElementById("serviceDate");
+    const doneByInput = document.getElementById("serviceDoneBy");
+    const amountInput = document.getElementById("serviceAmount");
+    const remarksInput = document.getElementById("serviceRemarks");
+
+    if (closeBtn) closeBtn.onclick = window.closeVehicleServiceModal;
+    if (cancelBtn) cancelBtn.onclick = window.closeVehicleServiceModal;
+    if (modal) {
+      modal.onclick = function(e) {
+        if (e.target === modal) window.closeVehicleServiceModal();
+      };
+    }
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape") window.closeVehicleServiceModal();
+    });
+
+    if (remarksInput && !remarksInput.dataset.guardBound) {
+      remarksInput.dataset.guardBound = "true";
+      remarksInput.addEventListener("keydown", function(e) {
+        if (e.key === " " || e.key === "Spacebar") {
+          e.stopPropagation();
+        }
+      });
+    }
+
+    document.addEventListener("click", function(e) {
+      const btn = e.target.closest(".js-service-open-btn");
+      if (btn) {
+        window.openVehicleServiceModal(btn, e);
+      }
+    });
+
+    if (form && !form.dataset.bound) {
+      form.dataset.bound = "true";
+      form.addEventListener("submit", async function(e) {
+        e.preventDefault();
+        if (alertBox) alertBox.style.display = "none";
+
+        const vehicleId = (vIdInput ? vIdInput.value : "").trim();
+        const sDate = (dateInput ? dateInput.value : "").trim();
+        const sDoneBy = (doneByInput ? doneByInput.value : "").trim();
+        const sAmount = (amountInput ? amountInput.value : "").trim();
+        const sRemarks = (remarksInput ? remarksInput.value : "").trim();
+
+        function showMsg(msg, isSuccess) {
+          if (!alertBox) return;
+          alertBox.textContent = msg;
+          alertBox.style.display = "block";
+          if (isSuccess) {
+            alertBox.style.background = "#dcfce7";
+            alertBox.style.border = "1px solid #86efac";
+            alertBox.style.color = "#166534";
+          } else {
+            alertBox.style.background = "#fee2e2";
+            alertBox.style.border = "1px solid #fca5a5";
+            alertBox.style.color = "#991b1b";
+          }
+        }
+
+        if (!vehicleId) {
+          showMsg("Vehicle ID is missing.", false);
+          return;
+        }
+        if (!sDate) {
+          showMsg("Service date is required.", false);
+          return;
+        }
+        if (!sDoneBy) {
+          showMsg("Service Done By / Person Name is required.", false);
+          return;
+        }
+        if (!sAmount || isNaN(parseFloat(sAmount)) || parseFloat(sAmount) < 0) {
+          showMsg("Service Amount must be a valid number greater than or equal to 0.", false);
+          return;
+        }
+
+        if (submitBtn) submitBtn.disabled = true;
+        if (submitText) submitText.textContent = "Saving...";
+
+        try {
+          const payload = {
+            vehicle_id: parseInt(vehicleId, 10),
+            service_date: sDate,
+            service_done_by: sDoneBy,
+            amount: parseFloat(sAmount),
+            remarks: sRemarks
+          };
+
+          const res = await fetch("/api/services", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          const data = await res.json();
+          if (res.ok && (data.ok || data.success)) {
+            showMsg("Service added successfully", true);
+            if (submitText) submitText.textContent = "Saved!";
+            setTimeout(() => {
+              window.closeVehicleServiceModal();
+              if (submitBtn) submitBtn.disabled = false;
+              if (submitText) submitText.textContent = "Save Service";
+            }, 1200);
+          } else {
+            showMsg(data.error || data.message || "Failed to add service. Please try again.", false);
+            if (submitBtn) submitBtn.disabled = false;
+            if (submitText) submitText.textContent = "Save Service";
+          }
+        } catch (err) {
+          showMsg("A network error occurred. Please check your connection.", false);
+          if (submitBtn) submitBtn.disabled = false;
+          if (submitText) submitText.textContent = "Save Service";
+        }
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindHandlers);
+  } else {
+    bindHandlers();
+  }
+})();
+</script>
 {% endblock %}

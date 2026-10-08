@@ -287,7 +287,7 @@ function replaceTokenInTextarea(textarea, start, end, replacement, trailing = ""
 
 function wireTamilNotesSuggestions(container) {
   container.querySelectorAll('textarea[name="measure_notes"], textarea[name="notes"], textarea[placeholder*="notes"], textarea[placeholder*="Notes"]').forEach((textarea) => {
-    if (textarea.dataset.tamilSuggestWired === "1") {
+    if (textarea.dataset.tamilSuggestWired === "1" || textarea.id === "serviceRemarks" || textarea.dataset.noTranslit === "true") {
       return;
     }
     textarea.dataset.tamilSuggestWired = "1";

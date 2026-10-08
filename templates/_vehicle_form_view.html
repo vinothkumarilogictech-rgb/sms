@@ -22,7 +22,10 @@
   .veh-head-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
   .veh-two-col { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr); gap: 16px; align-items: start; }
   .veh-two-col.reverse { grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr); }
-  .veh-pane { border: 1px solid #dcbef0; border-radius: 18px; background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%); padding: 14px; min-width: 0; height: 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48); }
+  .veh-pane { border: 1px solid #dcbef0; border-radius: 18px; background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%); padding: 14px; min-width: 0; height: 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48); overflow-x: hidden; box-sizing: border-box; }
+  .veh-service-table .list-row > div { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+  .veh-expenses-stack { display: flex !important; flex-direction: column !important; gap: 20px !important; width: 100% !important; box-sizing: border-box !important; }
+  .veh-expenses-stack > .veh-pane { width: 100% !important; height: auto !important; box-sizing: border-box !important; }
   .veh-pane-title { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .veh-pane-title i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 12px; background: #f2ebff; color: #3d66e0; }
   .veh-pane-title strong { display: block; color: #3f2265; font-size: 1rem; }
@@ -149,9 +152,11 @@
     <a class="btn ghost js-back-button" href="{{ url_for('inventory', tab='vehicles') }}" data-fallback="{{ url_for('inventory', tab='vehicles') }}">Back</a>
     {% if view_only %}
     <a class="btn primary" href="{{ url_for('inventory_vehicle_edit', vehicle_id=vehicle.id, mode='edit') }}"><i class="bi bi-pencil-square"></i> Edit</a>
+    <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Service</a>
     {% endif %}
     {% if not view_only %}
     <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-wrench-adjustable"></i> Add Repair</a>
+    <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Service</a>
     <form method="post" action="{{ url_for('inventory_delete', vehicle_id=vehicle.id) }}" onsubmit="return confirm('Do you want to delete this vehicle?');">
       <button class="btn ghost hover-red-fill" type="submit"><i class="bi bi-trash"></i> Delete</button>
     </form>
@@ -621,8 +626,8 @@
       <span>Vehicle Expenses</span>
     </div>
 
-    <div class="veh-two-col reverse">
-      <div class="veh-pane">
+    <div class="veh-expenses-stack" style="display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box;">
+      <div class="veh-pane" style="width: 100%; box-sizing: border-box; height: auto;">
         <div class="veh-pane-title">
           <i class="bi bi-tools"></i>
           <div>
@@ -632,28 +637,30 @@
 
         {% set repair_rows = repairs or [] %}
         {% if repair_rows %}
-        <div class="list-table" style="--list-cols: 0.9fr 1.6fr 0.7fr 0.9fr;">
-          <div class="list-row list-head">
-            <div>Date</div>
-            <div>Expenses For</div>
-            <div style="text-align:right;">Cost</div>
-            <div>Paymode</div>
-          </div>
-          {% set repair_total = 0.0 %}
-          {% for r in repair_rows %}
-          {% set repair_total = repair_total + ((r.cost or 0)|float) %}
-          <div class="list-row">
-            <div>{{ r.repair_date|date_dmy if r.repair_date else (r.created_at|date_dmy if r.created_at else '-') }}</div>
-            <div>{{ r.description or 'Repair' }}</div>
-            <div style="text-align:right;">&#8377; {{ "%.2f"|format(r.cost or 0) }}</div>
-            <div>{{ r.payment_mode or '-' }}</div>
-          </div>
-          {% endfor %}
-          <div class="list-row" style="font-weight:900;">
-            <div></div>
-            <div>Total</div>
-            <div style="text-align:right;">&#8377; {{ "%.2f"|format(repair_total or 0) }}</div>
-            <div></div>
+        <div style="width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; min-width:0; box-sizing:border-box;">
+          <div class="list-table" style="--list-cols: minmax(90px, 1fr) minmax(160px, 2fr) minmax(90px, 1fr) minmax(100px, 1fr); width:100%; min-width:440px; box-sizing:border-box;">
+            <div class="list-row list-head">
+              <div>Date</div>
+              <div>Expenses For</div>
+              <div style="text-align:right;">Cost</div>
+              <div>Paymode</div>
+            </div>
+            {% set repair_total = 0.0 %}
+            {% for r in repair_rows %}
+            {% set repair_total = repair_total + ((r.cost or 0)|float) %}
+            <div class="list-row">
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ r.repair_date|date_dmy if r.repair_date else (r.created_at|date_dmy if r.created_at else '-') }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ r.description or 'Repair' }}</div>
+              <div style="text-align:right; min-width:0; word-break:break-word; overflow-wrap:anywhere;">&#8377; {{ "%.2f"|format(r.cost or 0) }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ r.payment_mode or '-' }}</div>
+            </div>
+            {% endfor %}
+            <div class="list-row" style="font-weight:900;">
+              <div></div>
+              <div>Total</div>
+              <div style="text-align:right;">&#8377; {{ "%.2f"|format(repair_total or 0) }}</div>
+              <div></div>
+            </div>
           </div>
         </div>
         {% else %}
@@ -662,7 +669,52 @@
 
         <div class="veh-head-actions" style="margin-top: 12px;">
           <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-plus-circle"></i> Add Repair</a>
+          <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Add Service</a>
           <a class="btn primary" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}"><i class="bi bi-bag-check"></i> Sold Out</a>
+        </div>
+      </div>
+      <div class="veh-pane" style="width: 100%; box-sizing: border-box; height: auto;">
+        <div class="veh-pane-title">
+          <i class="bi bi-gear-wide-connected"></i>
+          <div>
+            <strong>Vehicle Services</strong>
+          </div>
+        </div>
+
+        {% set service_rows = services or [] %}
+        {% if service_rows %}
+        <div class="veh-service-table-wrap" style="width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; min-width:0; box-sizing:border-box;">
+          <div class="list-table veh-service-table" style="--list-cols: minmax(95px, 1.1fr) minmax(140px, 1.4fr) minmax(95px, 1.1fr) minmax(160px, 2.4fr); width:100%; min-width:480px; box-sizing:border-box;">
+            <div class="list-row list-head">
+              <div>Date</div>
+              <div>Done By</div>
+              <div style="text-align:right;">Amount</div>
+              <div>Remarks</div>
+            </div>
+            {% set service_total = 0.0 %}
+            {% for s in service_rows %}
+            {% set service_total = service_total + ((s.amount or 0)|float) %}
+            <div class="list-row">
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ (s.service_date or s.created_at)|date_only_dmy }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ s.service_done_by or '-' }}</div>
+              <div style="text-align:right; min-width:0; word-break:break-word; overflow-wrap:anywhere;">&#8377; {{ "%.2f"|format(s.amount or 0) }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ s.remarks or '-' }}</div>
+            </div>
+            {% endfor %}
+            <div class="list-row" style="font-weight:900;">
+              <div></div>
+              <div>Total</div>
+              <div style="text-align:right;">&#8377; {{ "%.2f"|format(service_total or 0) }}</div>
+              <div></div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="muted" style="margin: 0;">No service records found.</p>
+        {% endif %}
+
+        <div class="veh-head-actions" style="margin-top: 12px;">
+          <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-plus-circle"></i> Add Service</a>
         </div>
       </div>
     </div>

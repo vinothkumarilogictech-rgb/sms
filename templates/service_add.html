@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .service-add-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .service-add-card {
+    background: #bf9fe7;
+    border: 1px solid #b18adf;
+    border-radius: 22px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 16px 30px rgba(62, 11, 99, 0.08);
+  }
+  .service-add-card label,
+  .service-add-title {
+    color: #3f2265;
+    font-weight: 700;
+  }
+  .service-add-card input,
+  .service-add-card select,
+  .service-add-card textarea {
+    background: #fffdfd;
+  }
+  #vehicleSummaryCard {
+    background: #fffdfd !important;
+    border: 1px solid #dcc4ef !important;
+    border-radius: 18px !important;
+  }
+  .service-add-error {
+    background: #fff1f5 !important;
+    border: 1px solid #efc2d7 !important;
+    color: #9b2c5d !important;
+  }
+</style>
+
+<div class="page-head">
+  <div>
+    <h1>Record Vehicle Service</h1>
+    <p>Add a service record for a vehicle</p>
+  </div>
+  <div class="service-add-actions">
+    <a class="btn ghost js-back-button"
+       href="{{ url_for('inventory', tab='vehicles') }}"
+       data-fallback="{{ url_for('inventory', tab='vehicles') }}">Back</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="alert service-add-error" style="padding:14px 18px; border-radius:12px; margin-bottom:16px;">
+  ⚠️ {{ error }}
+</div>
+{% endif %}
+
+<section class="card service-add-card">
+  <form class="stack" method="post" id="serviceForm">
+
+    <!-- Vehicle Selection -->
+    <label>
+      Vehicle <span style="color:#b91c1c;">*</span>
+      {% if prefill_vehicle %}
+      <input type="text" readonly
+             value="{{ prefill_vehicle.vehicle_name }} ({{ prefill_vehicle.vehicle_number }})"
+             style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:10px 14px; background:#f7f2fb;" />
+      <input type="hidden" name="vehicle_id" value="{{ prefill_vehicle.id }}" />
+      {% else %}
+      <select name="vehicle_id" id="serviceVehicleSelect" required
+              style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:10px 14px; min-height:42px;">
+        <option value="">-- Select a Vehicle --</option>
+        {% for v in vehicles %}
+        <option value="{{ v.id }}" data-name="{{ v.vehicle_name }}" data-number="{{ v.vehicle_number }}" data-year="{{ v.model_year or '' }}">
+          {{ v.vehicle_name }} - {{ v.vehicle_number }} {% if v.model_year %}({{ v.model_year }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% endif %}
+    </label>
+
+    <!-- Vehicle summary banner -->
+    {% if prefill_vehicle %}
+    <div id="vehicleSummaryCard" style="display:flex; padding:14px 18px; align-items:center; gap:16px; margin: 4px 0 10px;">
+      <div>
+        <div style="font-weight:800; font-size:1.05rem; color:#3f2265;">{{ prefill_vehicle.vehicle_name }}</div>
+        <div class="muted" style="font-size:0.88rem; margin-top:2px;">
+          <span><strong>Reg No:</strong> {{ prefill_vehicle.vehicle_number }}</span>
+          {% if prefill_vehicle.model_year %}
+          <span style="margin-left:14px;"><strong>Model:</strong> {{ prefill_vehicle.model_year }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <label>
+      Service Date <span style="color:#b91c1c;">*</span>
+      <input type="date" name="service_date"
+             value="{{ today or '' }}"
+             required style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:10px 14px;">
+    </label>
+
+    <label>
+      Service Done By / Person Name <span style="color:#b91c1c;">*</span>
+      <input type="text" name="service_done_by" placeholder="e.g. Kumar / Mechanic name" required
+             style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:10px 14px;">
+    </label>
+
+    <label>
+      Service Amount (&#8377;) <span style="color:#b91c1c;">*</span>
+      <div style="position:relative;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-weight:700; color:#6f5b7d;">&#8377;</span>
+        <input type="number" name="amount" step="0.01" min="0" placeholder="0.00" required
+               style="width:100%; border:1px solid #d8c0ef; border-radius:10px; padding:10px 14px 10px 32px; box-sizing:border-box;">
+      </div>
+    </label>
+
+    <label>
+      Remarks <span style="color:#6f5b7d; font-weight:normal; font-size:0.82rem;">(Optional)</span>
+      <textarea id="serviceRemarks" name="remarks" rows="3" placeholder="Describe service work (e.g. Oil change, brake pad replacement)..." data-tamil-suggest-wired="1" data-no-translit="true"
+                style="width:100%; max-width:100%; box-sizing:border-box; border:1px solid #d8c0ef; border-radius:10px; padding:10px 14px; resize:vertical; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere;"></textarea>
+    </label>
+
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:10px;">
+      <a class="btn ghost" href="{{ url_for('inventory', tab='vehicles') }}">Cancel</a>
+      <button class="btn primary" type="submit" id="saveServiceBtn">
+        <i class="bi bi-check2-circle"></i> Save Service
+      </button>
+    </div>
+
+  </form>
+</section>
+
+<script>
+  document.getElementById("serviceForm")?.addEventListener("submit", function() {
+    const btn = document.getElementById("saveServiceBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+    }
+  });
+</script>
+{% endblock %}

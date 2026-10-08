@@ -154,9 +154,7 @@
       width: 100%;
     }
     .quick-vehicle-label.is-hidden {
-      display: grid !important;
-      visibility: hidden;
-      pointer-events: none;
+      display: none !important;
     }
   </style>
 
@@ -191,6 +189,15 @@
         <label>
           Expense no
           <input type="text" value="{{ quick_expense_no or '' }}" readonly>
+        </label>
+
+        <label>
+          Date
+          <input type="date"
+                 name="expense_date"
+                 id="quickExpenseDate"
+                 value="{{ (quick_form.get('expense_date') if quick_form else '') or today_date }}"
+                 required>
         </label>
 
         <label id="quickCategoryLabel" class="{% if quick_form and quick_form.get('is_repair') == '1' %}is-hidden{% endif %}">
