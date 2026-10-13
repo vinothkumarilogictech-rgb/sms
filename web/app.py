@@ -312,6 +312,8 @@ def _sync_bundled_static_assets() -> None:
     persistent_static = os.path.join(APP_DIR, "static")
     if not os.path.isdir(bundled_static):
         return
+    if os.path.abspath(bundled_static) == os.path.abspath(persistent_static):
+        return
     for root, _dirs, files in os.walk(bundled_static):
         rel = os.path.relpath(root, bundled_static)
         dest_root = persistent_static if rel == "." else os.path.join(persistent_static, rel)
@@ -332,6 +334,8 @@ app = Flask(
     static_url_path="/static",
 )
 CORS(app)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 
 # Route Flask's own app.logger (used by the app.logger.exception(...) calls
 # already in this file) into the same rotating log files, instead of
@@ -812,6 +816,7 @@ def build_sql_server_connection_string(database_name: str | None = None) -> str:
             f"DATABASE={database};"
             "Trusted_Connection=yes;"
             f"TrustServerCertificate={trust_cert};"
+            "MARS_Connection=yes;"
         )
     user = os.getenv("DB_USERNAME")
     password = os.getenv("DB_PASSWORD")
@@ -821,6 +826,7 @@ def build_sql_server_connection_string(database_name: str | None = None) -> str:
         f"DATABASE={database};"
         f"UID={user};PWD={password};"
         f"TrustServerCertificate={trust_cert};"
+        "MARS_Connection=yes;"
     )
 
 
@@ -1069,6 +1075,11 @@ class CompatCursor:
                 if not self._cursor.nextset():
                     break
             self.lastrowid = int(row[0]) if row and row[0] is not None else None
+            try:
+                while self._cursor.nextset():
+                    pass
+            except Exception:
+                pass
             return self
         self._cursor.execute(query, params)
         return self
@@ -1940,6 +1951,43 @@ def jinja_date_only_dmy(value) -> str:
     return date_only_dmy(value)
 
 
+def normalize_service_date(val: str | None) -> str | None:
+    if not val:
+        return None
+    val_str = str(val).strip()
+    if not val_str or val_str == "-":
+        return None
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", val_str)
+    if m:
+        try:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+        except Exception:
+            return None
+    m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})", val_str)
+    if m:
+        try:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+        except Exception:
+            return None
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})", val_str)
+    if m:
+        try:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+        except Exception:
+            return None
+    try:
+        parsed = date_only(val_str)
+        if parsed and parsed != "-" and re.match(r"^\d{4}-\d{2}-\d{2}$", parsed):
+            return parsed
+    except Exception:
+        pass
+    return None
+
+
+
 def date_dmy(value) -> str:
     iso = date_only(value)
     if not iso or iso == "-":
@@ -1977,6 +2025,55 @@ def datetime_display(value) -> str:
 @app.template_filter("datetime_display")
 def jinja_datetime_display(value) -> str:
     return datetime_display(value)
+
+
+def as_display_datetime(value) -> str:
+    return datetime_display(value)
+
+
+def as_html_datetime_local(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%dT%H:%M")
+    text = str(value).strip()
+    if not text:
+        return ""
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})", text)
+    if m:
+        return f"{m.group(1)}T{m.group(2)}"
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).strftime("%Y-%m-%dT%H:%M")
+    except ValueError:
+        pass
+    d = date_only(text)
+    return f"{d}T00:00" if d and d != "-" else ""
+
+
+def parse_order_datetime(val: str | None, fallback=None) -> str:
+    text = str(val or "").strip()
+    if text:
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?", text)
+        if m:
+            sec = m.group(3) or "00"
+            return f"{m.group(1)} {m.group(2)}:{sec}"
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+        d = date_only(text)
+        if d and d != "-":
+            return f"{d} 00:00:00"
+    if fallback is not None:
+        if isinstance(fallback, datetime):
+            return fallback.strftime("%Y-%m-%d %H:%M:%S")
+        fb_text = str(fallback).strip()
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?", fb_text)
+        if m:
+            sec = m.group(3) or "00"
+            return f"{m.group(1)} {m.group(2)}:{sec}"
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def normalize_payment_mode(mode: str | None, default: str = "Cash") -> str:
@@ -2885,6 +2982,7 @@ def init_db(database_name: str | None = None):
             hypothecation NVARCHAR(255),
             remarks NVARCHAR(MAX),
             fine_details NVARCHAR(MAX),
+            fine_amount INT,
             created_at DATETIME2,
             updated_at DATETIME2,
             purchase_mode NVARCHAR(50),
@@ -2936,6 +3034,24 @@ def init_db(database_name: str | None = None):
             repair_kit_costs NVARCHAR(MAX),
             payment_mode NVARCHAR(50),
             created_at DATETIME2,
+            FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+        )
+    {end()}
+    """)
+
+    # ---------- Vehicle Services ----------
+    create(f"""
+    {table_not_exists('vehicle_services')}
+        CREATE TABLE vehicle_services (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            vehicle_id INT NOT NULL,
+            service_date DATE NOT NULL,
+            service_done_by NVARCHAR(255) NOT NULL,
+            amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            remarks NVARCHAR(MAX) NULL,
+            branch_code NVARCHAR(50) NULL,
+            created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+            updated_at DATETIME2 NULL,
             FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
         )
     {end()}
@@ -3105,6 +3221,8 @@ def init_db(database_name: str | None = None):
             ALTER TABLE vehicles ADD remarks NVARCHAR(MAX) NULL;
         IF COL_LENGTH('vehicles', 'fine_details') IS NULL
             ALTER TABLE vehicles ADD fine_details NVARCHAR(MAX) NULL;
+        IF COL_LENGTH('vehicles', 'fine_amount') IS NULL
+            ALTER TABLE vehicles ADD fine_amount INT NULL;
         IF COL_LENGTH('vehicles', 'created_at') IS NULL
             ALTER TABLE vehicles ADD created_at DATETIME2 NULL;
         IF COL_LENGTH('vehicles', 'updated_at') IS NULL
@@ -3271,6 +3389,28 @@ def init_db(database_name: str | None = None):
             ALTER TABLE vehicle_repairs ADD payment_mode NVARCHAR(50) NULL;
         IF COL_LENGTH('vehicle_repairs', 'created_at') IS NULL
             ALTER TABLE vehicle_repairs ADD created_at DATETIME2 NULL;
+    END
+    """)
+
+    create("""
+    IF OBJECT_ID('vehicle_services', 'U') IS NOT NULL
+    BEGIN
+        IF COL_LENGTH('vehicle_services', 'vehicle_id') IS NULL
+            ALTER TABLE vehicle_services ADD vehicle_id INT NULL;
+        IF COL_LENGTH('vehicle_services', 'service_date') IS NULL
+            ALTER TABLE vehicle_services ADD service_date DATE NULL;
+        IF COL_LENGTH('vehicle_services', 'service_done_by') IS NULL
+            ALTER TABLE vehicle_services ADD service_done_by NVARCHAR(255) NULL;
+        IF COL_LENGTH('vehicle_services', 'amount') IS NULL
+            ALTER TABLE vehicle_services ADD amount DECIMAL(10,2) NULL;
+        IF COL_LENGTH('vehicle_services', 'remarks') IS NULL
+            ALTER TABLE vehicle_services ADD remarks NVARCHAR(MAX) NULL;
+        IF COL_LENGTH('vehicle_services', 'branch_code') IS NULL
+            ALTER TABLE vehicle_services ADD branch_code NVARCHAR(50) NULL;
+        IF COL_LENGTH('vehicle_services', 'created_at') IS NULL
+            ALTER TABLE vehicle_services ADD created_at DATETIME2 NULL;
+        IF COL_LENGTH('vehicle_services', 'updated_at') IS NULL
+            ALTER TABLE vehicle_services ADD updated_at DATETIME2 NULL;
     END
     """)
 
@@ -7082,12 +7222,14 @@ def upsert_customer(
             return False
 
         try:
+            next_code_row = cur.execute("SELECT COALESCE(MAX(customer_code), 0) + 1 FROM customers").fetchone()
+            cust_code = int(next_code_row[0]) if next_code_row and next_code_row[0] is not None else 1
             cur.execute(
                 """
-                INSERT INTO customers (name, phone, address, notes, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO customers (name, phone, address, notes, created_at, customer_code)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (customer_name, phone, customer_address, customer_notes, now_str()),
+                (customer_name, phone, customer_address, customer_notes, now_str(), cust_code),
             )
         except Exception as exc:
             # Race-safe / normalization-safe: if a duplicate slips in, update existing instead.
@@ -7522,6 +7664,8 @@ ENDPOINT_PERMISSION_MAP = {
     "expense_category_add": "expense",
     "expense_repair_add": "vehicle_expense",
     "expense_repair_delete": "expense",
+    "service_add": "inventory",
+    "api_add_service": "inventory",
     "tailors": "staff_management",
     "tailor_add": "staff_management",
     "tailor_edit": "staff_management",
@@ -8577,7 +8721,8 @@ def build_dashboard_widget_manager_context(conn) -> dict:
             SELECT
                 COALESCE(SUM(COALESCE(vso.total_amount, 0)), 0) AS total_revenue,
                 COALESCE(SUM(COALESCE(v.purchase_price, 0)), 0) AS total_purchase_expense,
-                COALESCE(SUM(COALESCE(vso.repair_cost, 0)), 0) AS total_repair
+                COALESCE(SUM(COALESCE(vso.repair_cost, 0)), 0) AS total_repair,
+                COALESCE(SUM(COALESCE(vso.payment_commission_amount, 0)), 0) AS total_commission
             FROM vehicle_sale_orders vso
             JOIN vehicles v ON v.id = vso.vehicle_id
             LEFT JOIN orders o ON o.id = vso.order_id
@@ -8585,7 +8730,12 @@ def build_dashboard_widget_manager_context(conn) -> dict:
               AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
             """
         ).fetchone()
-        metric_values["profit"] = float(profit_row["total_revenue"] or 0) - float(profit_row["total_purchase_expense"] or 0) - float(profit_row["total_repair"] or 0)
+        metric_values["profit"] = (
+            float(profit_row["total_revenue"] or 0)
+            - float(profit_row["total_purchase_expense"] or 0)
+            - float(profit_row["total_repair"] or 0)
+            + float(profit_row["total_commission"] or 0)
+        )
     except Exception:
         metric_values["profit"] = 0.0
     vehicle_name_sales_rows: list[sqlite3.Row] = []
@@ -9317,7 +9467,8 @@ def dashboard():
             COUNT(*) AS total_sales,
             COALESCE(SUM(COALESCE(vso.total_amount, 0)), 0) AS total_revenue,
             COALESCE(SUM(COALESCE(v.purchase_price, 0)), 0) AS total_purchase_expense,
-            COALESCE(SUM(COALESCE(vso.repair_cost, 0)), 0) AS total_repair
+            COALESCE(SUM(COALESCE(vso.repair_cost, 0)), 0) AS total_repair,
+            COALESCE(SUM(COALESCE(vso.payment_commission_amount, 0)), 0) AS total_commission
         FROM vehicle_sale_orders vso
         JOIN vehicles v ON v.id = vso.vehicle_id
         LEFT JOIN orders o ON o.id = vso.order_id
@@ -9712,7 +9863,8 @@ def dashboard():
     total_purchase_expense = float(vehicle_sales_summary["total_purchase_expense"] or 0)
     revenue_value = float(vehicle_sales_summary["total_revenue"] or 0)
     total_cost_value = total_purchase_expense + total_repair_amount
-    total_profit = revenue_value - total_cost_value
+    total_commission_value = float(vehicle_sales_summary["total_commission"] or 0)
+    total_profit = revenue_value - total_cost_value + total_commission_value
     metric_values["profit"] = float(total_profit or 0.0)
     metric_values["today_sales"] = float(today_vehicle_sales_count or 0.0)
 
@@ -9829,7 +9981,8 @@ def dashboard():
             SELECT
                 strftime('{fmt}', vso.created_at) AS bucket,
                 COALESCE(SUM(COALESCE(vso.total_amount, 0)), 0) AS revenue_total,
-                COALESCE(SUM(COALESCE(v.purchase_price, 0) + COALESCE(vso.repair_cost, 0)), 0) AS expense_total
+                COALESCE(SUM(COALESCE(v.purchase_price, 0) + COALESCE(vso.repair_cost, 0)), 0) AS expense_total,
+                COALESCE(SUM(COALESCE(vso.payment_commission_amount, 0)), 0) AS commission_total
             FROM vehicle_sale_orders vso
             JOIN vehicles v ON v.id = vso.vehicle_id
             LEFT JOIN orders o ON o.id = vso.order_id
@@ -9843,6 +9996,7 @@ def dashboard():
             row["bucket"]: {
                 "revenue": float(row["revenue_total"] or 0),
                 "expense": float(row["expense_total"] or 0),
+                "commission": float(row["commission_total"] or 0),
             }
             for row in rows
         }
@@ -9852,7 +10006,9 @@ def dashboard():
     vehicle_financials = vehicle_financial_map(profit_start.isoformat(), profit_end.isoformat(), profit_fmt)
     revenue_values = [vehicle_financials.get(key, {}).get("revenue", 0) for key in profit_keys]
     profit_values = [
-        vehicle_financials.get(key, {}).get("revenue", 0) - vehicle_financials.get(key, {}).get("expense", 0)
+        vehicle_financials.get(key, {}).get("revenue", 0)
+        - vehicle_financials.get(key, {}).get("expense", 0)
+        + vehicle_financials.get(key, {}).get("commission", 0)
         for key in profit_keys
     ]
     expense_values = [vehicle_financials.get(key, {}).get("expense", 0) for key in profit_keys]
@@ -10937,7 +11093,8 @@ def dashboard_chart_data():
             SELECT
                 strftime('{fmt}', vso.created_at) AS bucket,
                 COALESCE(SUM(COALESCE(vso.total_amount, 0)), 0) AS revenue_total,
-                COALESCE(SUM(COALESCE(v.purchase_price, 0) + COALESCE(vso.repair_cost, 0)), 0) AS expense_total
+                COALESCE(SUM(COALESCE(v.purchase_price, 0) + COALESCE(vso.repair_cost, 0)), 0) AS expense_total,
+                COALESCE(SUM(COALESCE(vso.payment_commission_amount, 0)), 0) AS commission_total
             FROM vehicle_sale_orders vso
             JOIN vehicles v ON v.id = vso.vehicle_id
             LEFT JOIN orders o ON o.id = vso.order_id
@@ -10951,6 +11108,7 @@ def dashboard_chart_data():
             row["bucket"]: {
                 "revenue": float(row["revenue_total"] or 0),
                 "expense": float(row["expense_total"] or 0),
+                "commission": float(row["commission_total"] or 0),
             }
             for row in rows
         }
@@ -10960,7 +11118,9 @@ def dashboard_chart_data():
     vehicle_financials = vehicle_financial_map(profit_start.isoformat(), profit_end.isoformat(), profit_fmt)
     revenue_values = [vehicle_financials.get(key, {}).get("revenue", 0) for key in profit_keys]
     profit_values = [
-        vehicle_financials.get(key, {}).get("revenue", 0) - vehicle_financials.get(key, {}).get("expense", 0)
+        vehicle_financials.get(key, {}).get("revenue", 0)
+        - vehicle_financials.get(key, {}).get("expense", 0)
+        + vehicle_financials.get(key, {}).get("commission", 0)
         for key in profit_keys
     ]
     expense_values = [vehicle_financials.get(key, {}).get("expense", 0) for key in profit_keys]
@@ -11137,21 +11297,154 @@ def build_dashboard_search_results(
     *,
     from_date: str = "",
     to_date: str = "",
-) -> list[dict[str, str]]:
+) -> list[dict]:
     q = (q or "").strip()
     if not q:
         return []
 
     date_filter_active = bool(from_date and to_date)
     q_like = f"%{q}%"
-    q_compact = re.sub(r"[^a-z0-9]+", "", q.lower())
+    q_compact = re.sub(r"[^a-zA-Z0-9]+", "", q).lower()
     q_digits_only = re.sub(r"\D+", "", q)
     q_numeric_value = int(q_digits_only) if q_digits_only else None
-    search_results: list[dict[str, str]] = []
+    search_results: list[dict] = []
 
+    # 1. VEHICLE SEARCH ACROSS ALL STATUSES (Available, Sold, In Repair, In Progress, etc.)
+    try:
+        vehicle_sql = """
+            SELECT TOP 25
+                v.id,
+                v.vehicle_name,
+                v.vehicle_number,
+                v.registration_no,
+                v.model_year,
+                v.status,
+                v.purchase_price,
+                v.selling_price,
+                v.purchase_customer_name,
+                v.purchase_customer_phone,
+                COALESCE(
+                    (SELECT SUM(COALESCE(r.total_cost, r.cost, 0))
+                     FROM vehicle_repairs r
+                     WHERE r.vehicle_id = v.id),
+                    0
+                ) AS repair_cost,
+                (SELECT TOP 1 vso.order_id
+                 FROM vehicle_sale_orders vso
+                 WHERE vso.vehicle_id = v.id
+                 ORDER BY ISNULL(vso.updated_at, vso.created_at) DESC, vso.id DESC) AS sale_order_id,
+                (SELECT TOP 1 vso.total_amount
+                 FROM vehicle_sale_orders vso
+                 WHERE vso.vehicle_id = v.id
+                 ORDER BY ISNULL(vso.updated_at, vso.created_at) DESC, vso.id DESC) AS sale_total_amount,
+                (SELECT TOP 1 vso.customer_name
+                 FROM vehicle_sale_orders vso
+                 WHERE vso.vehicle_id = v.id
+                 ORDER BY ISNULL(vso.updated_at, vso.created_at) DESC, vso.id DESC) AS buyer_name
+            FROM vehicles v
+            WHERE LOWER(COALESCE(v.status, 'available')) <> 'transferred'
+              AND (
+                  ISNULL(v.vehicle_name, '') LIKE ?
+                  OR ISNULL(v.vehicle_number, '') LIKE ?
+                  OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.vehicle_number, '')), '-', ''), ' ', ''), '.', '') LIKE ?
+                  OR ISNULL(v.registration_no, '') LIKE ?
+                  OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.registration_no, '')), '-', ''), ' ', ''), '.', '') LIKE ?
+                  OR ISNULL(v.status, '') LIKE ?
+                  OR ISNULL(v.purchase_customer_name, '') LIKE ?
+                  OR ISNULL(v.purchase_customer_phone, '') LIKE ?
+                  OR EXISTS (
+                      SELECT 1 FROM vehicle_sale_orders vso
+                      WHERE vso.vehicle_id = v.id
+                        AND (
+                            ISNULL(vso.customer_name, '') LIKE ?
+                            OR ISNULL(vso.sale_code, '') LIKE ?
+                        )
+                  )
+                  OR (? IS NOT NULL AND v.id = ?)
+              )
+            ORDER BY
+                CASE
+                    WHEN LOWER(ISNULL(v.vehicle_number, '')) = LOWER(?) THEN 0
+                    WHEN LOWER(ISNULL(v.vehicle_name, '')) = LOWER(?) THEN 1
+                    ELSE 2
+                END,
+                ISNULL(v.updated_at, v.created_at) DESC, v.id DESC
+        """
+        vehicle_rows = conn.execute(
+            vehicle_sql,
+            (
+                q_like,
+                q_like,
+                f"%{q_compact}%",
+                q_like,
+                f"%{q_compact}%",
+                q_like,
+                q_like,
+                q_like,
+                q_like,
+                q_like,
+                q_numeric_value,
+                q_numeric_value,
+                q,
+                q,
+            ),
+        ).fetchall()
+
+        for row in vehicle_rows:
+            st_raw = normalize_vehicle_status(row.get("status"))
+            st_label = vehicle_status_label(st_raw)
+            p_cost = float(row.get("purchase_price") or 0)
+            r_cost = float(row.get("repair_cost") or 0)
+            s_price = float(row.get("sale_total_amount") or row.get("selling_price") or 0)
+            buyer = row.get("buyer_name") or ""
+            owner = row.get("purchase_customer_name") or ""
+            owner_phone = row.get("purchase_customer_phone") or ""
+
+            parts = [f"Status: {st_label}"]
+            if row.get("model_year"):
+                parts.append(f"Year: {row['model_year']}")
+            if p_cost > 0:
+                parts.append(f"Cost: ₹{p_cost:,.0f}")
+            if r_cost > 0:
+                parts.append(f"Repairs: ₹{r_cost:,.0f}")
+            if st_raw == "sold":
+                if s_price > 0:
+                    parts.append(f"Sold: ₹{s_price:,.0f}")
+                if buyer:
+                    parts.append(f"Buyer: {buyer}")
+            elif owner:
+                parts.append(f"Owner: {owner}")
+
+            search_results.append({
+                "id": int(row["id"]),
+                "href": url_for("inventory_vehicle_edit", vehicle_id=row["id"], mode="view"),
+                "title": f"{row['vehicle_name']} ({row['vehicle_number']})",
+                "vehicle_name": row.get("vehicle_name") or "",
+                "vehicle_number": row.get("vehicle_number") or "",
+                "registration_no": row.get("registration_no") or "",
+                "model_year": row.get("model_year"),
+                "status": st_label,
+                "status_raw": st_raw,
+                "purchase_price": p_cost,
+                "repair_cost": r_cost,
+                "selling_price": s_price,
+                "sale_order_id": row.get("sale_order_id"),
+                "sale_total_amount": float(row["sale_total_amount"]) if row.get("sale_total_amount") is not None else None,
+                "buyer_name": buyer,
+                "rc_owner_name": owner,
+                "rc_owner_phone": owner_phone,
+                "purchase_customer_name": owner,
+                "purchase_customer_phone": owner_phone,
+                "subtitle": " · ".join(parts),
+                "meta": f"Vehicle · {st_label}",
+            })
+    except Exception as exc:
+        traceback.print_exc()
+
+    # 2. CUSTOMER SEARCH
     try:
         customer_sql = """
-            SELECT TOP 8
+            SELECT TOP 6
                 c.id,
                 c.name,
                 c.phone,
@@ -11182,9 +11475,20 @@ def build_dashboard_search_results(
     except Exception:
         pass
 
+    # 3. ORDER SEARCH
     try:
-        order_sql = """
-            SELECT orders.*, customers.name, customers.phone
+        order_params = [
+            q_like, q_like, q_like, q_like, q_like, q_like, q_like, q_like, q_like,
+            q_like, q_like, q_like,
+            q_numeric_value, q_numeric_value, q_numeric_value, q_numeric_value,
+        ]
+        order_date_clause = ""
+        if date_filter_active:
+            order_date_clause = " AND CAST(orders.created_at AS DATE) BETWEEN ? AND ?"
+            order_params.extend([from_date, to_date])
+
+        order_sql = f"""
+            SELECT TOP 8 orders.*, customers.name, customers.phone
             FROM orders
             JOIN customers ON (
                 customers.id = orders.customer_id
@@ -11221,29 +11525,9 @@ def build_dashboard_search_results(
                     OR ISNULL(orders.customer_display_id, -1) = ?
                 ))
             )
+            {order_date_clause}
+            ORDER BY orders.created_at DESC
         """
-        order_params = [
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_numeric_value,
-            q_numeric_value,
-            q_numeric_value,
-            q_numeric_value,
-        ]
-        if date_filter_active:
-            order_sql += " AND date(orders.created_at) BETWEEN ? AND ?"
-            order_params.extend([from_date, to_date])
-        order_sql += " ORDER BY orders.created_at DESC LIMIT 12"
         order_rows = conn.execute(order_sql, tuple(order_params)).fetchall()
         search_results.extend(
             {
@@ -11257,95 +11541,6 @@ def build_dashboard_search_results(
     except Exception:
         pass
 
-    try:
-        vehicle_sql = """
-            SELECT TOP 12
-                v.id,
-                v.vehicle_name,
-                v.vehicle_number,
-                v.registration_no,
-                v.current_fc,
-                v.notes,
-                v.purchase_customer_name,
-                v.purchase_customer_phone,
-                v.purchase_customer_address,
-                v.purchase_customer_id,
-                v.purchase_mode,
-                v.purchase_id_proof_ref,
-                v.purchase_finance_company,
-                v.purchase_finance_yard_ref,
-                v.purchase_finance_settlement_date,
-                v.purchase_agent_name,
-                v.purchase_agent_broker_details,
-                v.purchase_branch_from_branch,
-                v.purchase_branch_transfer_id,
-                v.purchase_branch_handled_by
-            FROM vehicles v
-            WHERE
-                ISNULL(v.vehicle_name, '') LIKE ?
-                OR ISNULL(v.vehicle_number, '') LIKE ?
-                OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.vehicle_number, '')), '-', ''), ' ', ''), '.', '') LIKE ?
-                OR ISNULL(v.registration_no, '') LIKE ?
-                OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.registration_no, '')), '-', ''), ' ', ''), '.', '') LIKE ?
-                OR ISNULL(v.current_fc, '') LIKE ?
-                OR ISNULL(v.notes, '') LIKE ?
-                OR ISNULL(v.purchase_customer_name, '') LIKE ?
-                OR ISNULL(v.purchase_customer_phone, '') LIKE ?
-                OR ISNULL(v.purchase_customer_address, '') LIKE ?
-                OR ISNULL(v.purchase_customer_id, '') LIKE ?
-                OR ISNULL(v.purchase_mode, '') LIKE ?
-                OR ISNULL(v.purchase_id_proof_ref, '') LIKE ?
-                OR ISNULL(v.purchase_finance_company, '') LIKE ?
-                OR ISNULL(v.purchase_finance_yard_ref, '') LIKE ?
-                OR ISNULL(v.purchase_finance_settlement_date, '') LIKE ?
-                OR ISNULL(v.purchase_agent_name, '') LIKE ?
-                OR ISNULL(v.purchase_agent_broker_details, '') LIKE ?
-                OR ISNULL(v.purchase_branch_from_branch, '') LIKE ?
-                OR ISNULL(v.purchase_branch_transfer_id, '') LIKE ?
-                OR ISNULL(v.purchase_branch_handled_by, '') LIKE ?
-                OR (? IS NOT NULL AND v.id = ?)
-            ORDER BY ISNULL(v.updated_at, v.created_at) DESC, v.id DESC
-        """
-        vehicle_rows = conn.execute(
-            vehicle_sql,
-            (
-                q_like,
-                q_like,
-                f"%{q_compact}%",
-                q_like,
-                f"%{q_compact}%",
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_numeric_value,
-                q_numeric_value,
-            ),
-        ).fetchall()
-        search_results.extend(
-            {
-                "href": url_for("inventory_vehicle_edit", vehicle_id=row["id"], mode="view"),
-                "title": f"{row['vehicle_name']} ({row['vehicle_number']})",
-                "subtitle": f"{derive_vehicle_brand(row.get('vehicle_name'))} · {row.get('registration_no') or row.get('purchase_customer_name') or '-'} · {row.get('purchase_customer_phone') or row.get('current_fc') or '-'}",
-                "meta": "Vehicle",
-            }
-            for row in vehicle_rows
-        )
-    except Exception:
-        pass
-
     deduped_results = []
     seen_search_keys: set[tuple[str, str]] = set()
     for item in search_results:
@@ -11354,7 +11549,7 @@ def build_dashboard_search_results(
             continue
         seen_search_keys.add(key)
         deduped_results.append(item)
-    return deduped_results[:20]
+    return deduped_results[:30]
 
 
 def get_insurance_expiry_notifications(conn, limit: int = 12):
@@ -12473,6 +12668,121 @@ def generate_repairs_report_80mm(from_date, to_date, q: str = ""):
     doc.build(elements, onFirstPage=header_draw, onLaterPages=header_draw)
     return redirect(url_for("static", filename=f"reports/repairs_report_{ts}.pdf"))
 
+def generate_service_report_80mm(from_date, to_date, q: str = ""):
+    conn = get_db()
+    service_query = """
+        SELECT s.id, s.service_date, s.service_done_by, s.amount, s.remarks,
+               v.vehicle_name, v.vehicle_number, v.model_year
+        FROM vehicle_services s
+        JOIN vehicles v ON v.id = s.vehicle_id
+        WHERE s.service_date BETWEEN ? AND ?
+    """
+    raw_f = from_date.split(" ")[0] if " " in from_date else from_date
+    raw_t = to_date.split(" ")[0] if " " in to_date else to_date
+    f_d = normalize_service_date(raw_f) or raw_f
+    t_d = normalize_service_date(raw_t) or raw_t
+    params: list[str] = [f_d, t_d]
+    if q:
+        service_query += """ AND (
+            LOWER(COALESCE(v.vehicle_name, '')) LIKE ?
+            OR LOWER(COALESCE(v.vehicle_number, '')) LIKE ?
+            OR LOWER(COALESCE(s.service_done_by, '')) LIKE ?
+            OR LOWER(COALESCE(s.remarks, '')) LIKE ?
+        )"""
+        like = f"%{q.lower()}%"
+        params.extend([like, like, like, like])
+    service_query += " ORDER BY s.service_date DESC, s.id DESC"
+    rows = conn.execute(service_query, tuple(params)).fetchall()
+    conn.close()
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_path = os.path.join(REPORT_DIR, f"service_report_{ts}.pdf")
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    doc = SimpleDocTemplate(
+        file_path,
+        pagesize=A4,
+        leftMargin=24,
+        rightMargin=24,
+        topMargin=REPORT_TOP_MARGIN,
+        bottomMargin=24,
+    )
+
+    regular_report_font, bold_report_font = get_reportlab_tamil_fonts()
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        name="ReportTitleService",
+        parent=styles["Heading2"],
+        fontName=bold_report_font,
+        fontSize=15,
+        leading=18,
+        spaceAfter=6,
+    )
+    subtitle_style = ParagraphStyle(
+        name="ReportSubtitleService",
+        parent=styles["Normal"],
+        fontName=regular_report_font,
+        fontSize=10,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=12,
+    )
+
+    elements = []
+    elements.append(Paragraph("Vehicle Service Report", title_style))
+    elements.append(Paragraph(f"From {from_date} To {to_date}", subtitle_style))
+
+    table_data = [["Date", "Vehicle", "Reg No", "Model", "Done By", "Amount", "Remarks"]]
+    total_amt = 0.0
+    for r in rows:
+        amt = float(r["amount"] or 0)
+        total_amt += amt
+        table_data.append([
+            format_report_date(r["service_date"]),
+            str(r["vehicle_name"] or "-"),
+            str(r["vehicle_number"] or "-"),
+            str(r["model_year"] or "-"),
+            str(r["service_done_by"] or "-"),
+            f"{amt:.2f}",
+            str(r["remarks"] or "-"),
+        ])
+
+    if len(table_data) == 1:
+        elements.append(Paragraph("No vehicle service records found for selected date range.", subtitle_style))
+    else:
+        table_data.append([
+            "Total", "", "", "", f"Count: {len(rows)}", f"{total_amt:.2f}", ""
+        ])
+        col_widths = [60, 80, 75, 50, 80, 65, 130]
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#dcc4ef")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("FONTNAME", (0, 0), (-1, 0), bold_report_font),
+                    ("FONTNAME", (0, 1), (-1, -1), regular_report_font),
+                    ("FONTNAME", (0, -1), (-1, -1), bold_report_font),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                    ("ALIGN", (5, 1), (5, -1), "RIGHT"),
+                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                    ("ALIGN", (0, 1), (0, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#b5b5b5")),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#fafafa")]),
+                    ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f1e5fa")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        elements.append(table)
+
+    header_draw = build_report_page_header()
+    doc.build(elements, onFirstPage=header_draw, onLaterPages=header_draw)
+    return redirect(url_for("static", filename=f"reports/service_report_{ts}.pdf"))
+
 def generate_expenses_report_80mm(from_date, to_date, q: str = ""):
     # expand date range to full day
     from_dt = from_date + " 00:00:00"
@@ -12556,6 +12866,53 @@ def generate_expenses_report_80mm(from_date, to_date, q: str = ""):
 
     return redirect(url_for("static", filename=f"reports/expenses_report_{ts}.pdf"))
 
+def get_expense_summary_data(conn, category: str, month_key: str) -> dict:
+    category = (category or "").strip()
+    month_key = (month_key or "").strip()
+    if not category or not month_key:
+        return {"total": 0.0, "breakdown": [], "count": 0}
+
+    try:
+        month_start = datetime.strptime(month_key + "-01", "%Y-%m-%d")
+    except ValueError:
+        return {"total": 0.0, "breakdown": [], "count": 0}
+
+    if month_start.month == 12:
+        next_month = month_start.replace(year=month_start.year + 1, month=1)
+    else:
+        next_month = month_start.replace(month=month_start.month + 1)
+
+    rows = conn.execute(
+        """
+        SELECT
+            COALESCE(NULLIF(LTRIM(RTRIM(e.expense_name)), ''), 'Unnamed Expense') AS expense_name,
+            COALESCE(SUM(COALESCE(e.amount, 0)), 0) AS total_amount,
+            COUNT(*) AS expense_count
+        FROM expenses e
+        WHERE LOWER(COALESCE(e.category, '')) = LOWER(?)
+          AND e.created_at >= ?
+          AND e.created_at < ?
+        GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(e.expense_name)), ''), 'Unnamed Expense')
+        ORDER BY total_amount DESC, expense_name ASC
+        """,
+        (category, month_start.strftime("%Y-%m-%d 00:00:00"), next_month.strftime("%Y-%m-%d 00:00:00")),
+    ).fetchall()
+
+    breakdown = [
+        {
+            "name": row["expense_name"] or "Unnamed Expense",
+            "amount": round(float(row["total_amount"] or 0), 2),
+            "count": int(row["expense_count"] or 0),
+        }
+        for row in rows
+    ]
+    return {
+        "total": round(sum(item["amount"] for item in breakdown), 2),
+        "breakdown": breakdown,
+        "count": sum(item["count"] for item in breakdown),
+    }
+
+
 @app.route("/reports", methods=["GET", "POST"])
 def reports():
     def resolve_range_bounds(key: str) -> tuple[date, date]:
@@ -12575,7 +12932,7 @@ def reports():
         return f"{from_d} 00:00:00", f"{to_d} 23:59:59"
 
     selected_type = (request.args.get("type") or "").strip().lower()
-    if selected_type not in {"vehicles", "expenses", "sales", "repairs", "sales_summary"}:
+    if selected_type not in {"vehicles", "expenses", "sales", "repairs", "sales_summary", "service"}:
         selected_type = "vehicles"
 
     selected_range = (request.args.get("range") or "").strip().lower() or "month"
@@ -12601,8 +12958,31 @@ def reports():
     repair_items: list[dict] = []
     vehicle_sales_list: list[dict] = []
     sales_summary_list: list[dict] = []
+    service_items: list[dict] = []
     preview_data = None
     payment_mode = ""
+
+    ensure_expenses_category_column(conn)
+    ensure_expense_categories_table(conn)
+    expense_summary_categories = [
+        row["name"] for row in conn.execute(
+            "SELECT name FROM expense_categories ORDER BY name"
+        ).fetchall() if row["name"]
+    ]
+    expense_summary_month_rows = conn.execute(
+        """
+        SELECT DISTINCT CONVERT(char(7), created_at, 120) AS month_key
+        FROM expenses
+        WHERE created_at IS NOT NULL
+        ORDER BY month_key DESC
+        """
+    ).fetchall()
+    expense_summary_months = [row["month_key"] for row in expense_summary_month_rows if row["month_key"]]
+    current_month_key = date.today().strftime("%Y-%m")
+    if current_month_key not in expense_summary_months:
+        expense_summary_months.insert(0, current_month_key)
+    selected_expense_category = (request.args.get("expense_category") or "").strip()
+    selected_expense_month = (request.args.get("expense_month") or "").strip() or current_month_key
 
     def fetch_vehicle_list(from_dt: str, to_dt: str, *, q: str = "", status_filter: str = ""):
         query = """
@@ -12785,6 +13165,7 @@ def reports():
                 vso.vehicle_number,
                 v.purchase_price AS purchase_cost,
                 vso.repair_cost AS repair_cost,
+                COALESCE(vso.payment_commission_amount, 0) AS commission_amount,
                 vso.total_amount AS selling_amount
             FROM vehicle_sale_orders vso
             JOIN vehicles v ON v.id = vso.vehicle_id
@@ -12806,7 +13187,8 @@ def reports():
             purchase_cost = float(data.get("purchase_cost") or 0)
             repair_cost = float(data.get("repair_cost") or 0)
             selling_amount = float(data.get("selling_amount") or 0)
-            profit = round(selling_amount - purchase_cost - repair_cost, 2)
+            commission_amount = float(data.get("commission_amount") or 0)
+            profit = round(selling_amount - purchase_cost - repair_cost + commission_amount, 2)
             open_href = ""
             if data.get("order_id"):
                 open_href = url_for("order_detail", order_id=data.get("order_id"), sale_id=data.get("id"), source="orders")
@@ -12828,6 +13210,58 @@ def reports():
             )
         return out
 
+    def fetch_service_items(from_dt: str, to_dt: str, *, q: str = "") -> list[dict]:
+        raw_f = from_dt.split(" ")[0] if " " in from_dt else from_dt
+        raw_t = to_dt.split(" ")[0] if " " in to_dt else to_dt
+        f_d = normalize_service_date(raw_f) or raw_f
+        t_d = normalize_service_date(raw_t) or raw_t
+        service_query = """
+            SELECT TOP 800
+                s.id,
+                s.vehicle_id,
+                s.service_date,
+                s.service_done_by,
+                s.amount,
+                s.remarks,
+                s.created_at,
+                v.vehicle_name,
+                v.vehicle_number,
+                v.model_year
+            FROM vehicle_services s
+            JOIN vehicles v ON v.id = s.vehicle_id
+            WHERE s.service_date BETWEEN ? AND ?
+        """
+        params: list[str] = [f_d, t_d]
+        if q:
+            service_query += """ AND (
+                LOWER(COALESCE(v.vehicle_number, '')) LIKE ?
+                OR LOWER(COALESCE(v.vehicle_name, '')) LIKE ?
+                OR LOWER(COALESCE(s.service_done_by, '')) LIKE ?
+                OR LOWER(COALESCE(s.remarks, '')) LIKE ?
+            )"""
+            like = f"%{q.lower()}%"
+            params.extend([like, like, like, like])
+        service_query += " ORDER BY s.service_date DESC, s.id DESC"
+        service_rows = conn.execute(service_query, tuple(params)).fetchall()
+        items: list[dict] = []
+        for row in service_rows:
+            r = dict(row)
+            items.append(
+                {
+                    "id": r.get("id"),
+                    "vehicle_id": r.get("vehicle_id"),
+                    "service_date": r.get("service_date"),
+                    "service_done_by": r.get("service_done_by") or "",
+                    "amount": float(r.get("amount") or 0),
+                    "remarks": r.get("remarks") or "",
+                    "vehicle_name": r.get("vehicle_name") or "",
+                    "vehicle_number": r.get("vehicle_number") or "",
+                    "model_year": r.get("model_year") or "",
+                    "created_at": r.get("created_at"),
+                }
+            )
+        return items
+
     if request.method == "POST":
         report_type = (request.form.get("type") or "vehicles").strip().lower()
         from_date = (request.form.get("from_date") or "").strip() or from_date
@@ -12836,6 +13270,8 @@ def reports():
         payment_mode = request.form.get("payment_mode", "").strip()
         q = (request.form.get("q") or "").strip()
         status_filter = (request.form.get("status") or "").strip().title()
+        selected_expense_category = (request.form.get("expense_category") or "").strip()
+        selected_expense_month = (request.form.get("expense_month") or "").strip() or current_month_key
         form_data = {**form_data, **{k: (request.form.get(k) or "") for k in ["type", "from_date", "to_date", "q", "status", "payment_mode"]}}
 
         from_dt, to_dt = as_dt_bounds(from_date, to_date)
@@ -12852,6 +13288,10 @@ def reports():
             sales_summary_list = fetch_sales_summary_list(from_dt, to_dt, q=q)
         except Exception:
             sales_summary_list = []
+        try:
+            service_items = fetch_service_items(from_dt, to_dt, q=q)
+        except Exception:
+            service_items = []
 
     else:
         from_dt, to_dt = as_dt_bounds(from_date, to_date)
@@ -12875,6 +13315,10 @@ def reports():
             sales_summary_list = fetch_sales_summary_list(from_dt, to_dt)
         except Exception:
             sales_summary_list = []
+        try:
+            service_items = fetch_service_items(from_dt, to_dt)
+        except Exception:
+            service_items = []
 
     report_files = []
     try:
@@ -12892,6 +13336,15 @@ def reports():
         "profit": round(sum(float(r.get("profit") or 0) for r in sales_summary_list), 2),
     }
 
+    total_service_amount = round(sum(float(s.get("amount") or 0) for s in service_items), 2)
+    total_services_count = len(service_items)
+
+    if selected_expense_category and selected_expense_category not in expense_summary_categories:
+        selected_expense_category = ""
+    expense_summary_data = get_expense_summary_data(
+        conn, selected_expense_category, selected_expense_month
+    )
+
     conn.close()
     return render_template(
         "reports.html",
@@ -12904,9 +13357,19 @@ def reports():
         vehicle_list=vehicle_list,
         expense_items=expense_items,
         repair_items=repair_items,
+        service_items=service_items,
+        total_service_amount=total_service_amount,
+        total_services_count=total_services_count,
         vehicle_sales_list=vehicle_sales_list,
         sales_summary_list=sales_summary_list,
         sales_summary_totals=sales_summary_totals,
+        expense_summary_categories=expense_summary_categories,
+        expense_summary_months=expense_summary_months,
+        selected_expense_category=selected_expense_category,
+        selected_expense_month=selected_expense_month,
+        expense_summary_total=expense_summary_data["total"],
+        expense_summary_breakdown=expense_summary_data["breakdown"],
+        expense_summary_count=expense_summary_data["count"],
         report_files=report_files[:30],
     )
 
@@ -12942,6 +13405,9 @@ def report_generate():
     if rtype == "repairs":
         return generate_repairs_report_80mm(from_date, to_date, q=q)
 
+    if rtype == "service":
+        return generate_service_report_80mm(from_date, to_date, q=q)
+
     if rtype == "vehicles":
         return generate_vehicle_inventory_report(from_date, to_date, q=q, status_filter=status_filter)
 
@@ -12968,7 +13434,7 @@ def reports_export_excel():
     q = (request.form.get("q") or "").strip()
     status_filter = (request.form.get("status") or "").strip().title()
 
-    if rtype in {"orders", "expenses", "vendors", "vehicles", "sales", "repairs", "sales_summary"} and (not from_date or not to_date):
+    if rtype in {"orders", "expenses", "vendors", "vehicles", "sales", "repairs", "sales_summary", "service"} and (not from_date or not to_date):
         return redirect(url_for("reports"))
 
     from_dt = f"{from_date} 00:00:00"
@@ -13194,6 +13660,7 @@ def reports_export_excel():
                 vso.vehicle_number,
                 v.purchase_price AS purchase_cost,
                 vso.repair_cost AS repair_cost,
+                COALESCE(vso.payment_commission_amount, 0) AS commission_amount,
                 vso.total_amount AS selling_amount
             FROM vehicle_sale_orders vso
             JOIN vehicles v ON v.id = vso.vehicle_id
@@ -13214,7 +13681,8 @@ def reports_export_excel():
             purchase_cost = float(row["purchase_cost"] or 0)
             repair_cost = float(row["repair_cost"] or 0)
             selling_amount = float(row["selling_amount"] or 0)
-            profit = round(selling_amount - purchase_cost - repair_cost, 2)
+            commission_amount = float(row["commission_amount"] or 0)
+            profit = round(selling_amount - purchase_cost - repair_cost + commission_amount, 2)
             writer.writerow(
                 [
                     row["sale_code"] or "",
@@ -13267,6 +13735,49 @@ def reports_export_excel():
                     format_report_date(row["created_at"]),
                 ]
             )
+
+    elif rtype == "service":
+        raw_f = from_date.split(" ")[0] if " " in from_date else from_date
+        raw_t = to_date.split(" ")[0] if " " in to_date else to_date
+        f_d = normalize_service_date(raw_f) or raw_f
+        t_d = normalize_service_date(raw_t) or raw_t
+        service_query = """
+            SELECT s.service_date, v.vehicle_name, v.vehicle_number, v.model_year,
+                   s.service_done_by, s.amount, s.remarks
+            FROM vehicle_services s
+            JOIN vehicles v ON v.id = s.vehicle_id
+            WHERE s.service_date BETWEEN ? AND ?
+        """
+        params = [f_d, t_d]
+        if q:
+            service_query += """ AND (
+                LOWER(COALESCE(v.vehicle_number, '')) LIKE ?
+                OR LOWER(COALESCE(v.vehicle_name, '')) LIKE ?
+                OR LOWER(COALESCE(s.service_done_by, '')) LIKE ?
+                OR LOWER(COALESCE(s.remarks, '')) LIKE ?
+            )"""
+            like = f"%{q.lower()}%"
+            params.extend([like, like, like, like])
+        service_query += " ORDER BY s.service_date DESC, s.id DESC"
+        rows = conn.execute(service_query, tuple(params)).fetchall()
+        writer.writerow(["Service Date", "Vehicle", "Registration Number", "Model", "Service Done By", "Amount", "Remarks"])
+        total_amt = 0.0
+        for row in rows:
+            amt = float(row["amount"] or 0)
+            total_amt += amt
+            writer.writerow(
+                [
+                    format_report_date(row["service_date"]),
+                    row["vehicle_name"] or "",
+                    row["vehicle_number"] or "",
+                    row["model_year"] or "",
+                    row["service_done_by"] or "",
+                    f"{amt:.2f}",
+                    row["remarks"] or "",
+                ]
+            )
+        writer.writerow(["Total", "", "", "", f"Total Services: {len(rows)}", f"{total_amt:.2f}", ""])
+
     else:
         conn.close()
         return redirect(url_for("reports"))
@@ -13787,6 +14298,7 @@ def generate_sales_summary_report(from_date: str, to_date: str, *, q: str = ""):
             vso.vehicle_number,
             v.purchase_price AS purchase_cost,
             vso.repair_cost AS repair_cost,
+            COALESCE(vso.payment_commission_amount, 0) AS commission_amount,
             vso.total_amount AS selling_amount
         FROM vehicle_sale_orders vso
         JOIN vehicles v ON v.id = vso.vehicle_id
@@ -13813,7 +14325,8 @@ def generate_sales_summary_report(from_date: str, to_date: str, *, q: str = ""):
         purchase_cost = float(row["purchase_cost"] or 0)
         repair_cost = float(row["repair_cost"] or 0)
         selling_amount = float(row["selling_amount"] or 0)
-        profit = round(selling_amount - purchase_cost - repair_cost, 2)
+        commission_amount = float(row["commission_amount"] or 0)
+        profit = round(selling_amount - purchase_cost - repair_cost + commission_amount, 2)
         total_purchase += purchase_cost
         total_repair += repair_cost
         total_selling += selling_amount
@@ -15851,6 +16364,15 @@ def order_new():
         except (TypeError, ValueError):
             return default
 
+    def to_int(value, default=None):
+        raw = str(value or "").strip()
+        if not raw:
+            return default
+        try:
+            return int(float(raw))
+        except (ValueError, TypeError):
+            return default
+
     def as_display_datetime(value) -> str:
         if isinstance(value, datetime):
             return value.strftime("%Y-%m-%d %H:%M")
@@ -15858,6 +16380,34 @@ def order_new():
         if not text:
             return datetime.now().strftime("%Y-%m-%d %H:%M")
         return text[:16]
+
+    def as_html_datetime_local(value) -> str:
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%dT%H:%M")
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%dT00:00")
+        text = str(value or "").strip().replace(" ", "T")
+        m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})", text)
+        if m:
+            return m.group(1)
+        return datetime.now().strftime("%Y-%m-%dT%H:%M")
+
+    def parse_order_datetime(val: str | None, fallback=None) -> datetime:
+        raw = str(val or "").strip().replace("T", " ")
+        if raw:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(raw, fmt)
+                except ValueError:
+                    pass
+        if isinstance(fallback, datetime):
+            return fallback
+        if fallback:
+            try:
+                return datetime.strptime(str(fallback).replace("T", " ")[:19], "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                pass
+        return datetime.now()
 
     def build_vehicle_payload(row) -> dict:
         payload = build_gallery_vehicle_payload(row)
@@ -15922,7 +16472,27 @@ def order_new():
 
     def fetch_sale_record(target_id: int) -> dict | None:
         row = conn.execute(
-            "SELECT * FROM vehicle_sale_orders WHERE id = ?",
+            """
+            SELECT vso.*,
+                   v.purchase_customer_name,
+                   v.purchase_customer_phone,
+                   v.purchase_customer_id,
+                   v.purchase_customer_address,
+                   v.purchase_mode,
+                   v.purchase_reference,
+                   v.purchase_id_proof_filename,
+                   v.rc_book_filename AS v_rc_book_filename,
+                   v.rc_book_back_filename AS v_rc_book_back_filename,
+                   v.insurance_document_filename AS v_insurance_document_filename,
+                   v.puc_certificate_filename AS v_puc_certificate_filename,
+                   v.kms_driven,
+                   v.insurance_end_date,
+                   v.puc_valid_upto,
+                   v.current_fc AS v_current_fc
+            FROM vehicle_sale_orders vso
+            LEFT JOIN vehicles v ON v.id = vso.vehicle_id
+            WHERE vso.id = ?
+            """,
             (target_id,),
         ).fetchone()
         if not row:
@@ -15965,30 +16535,27 @@ def order_new():
             if data.get("customer_with_bike_photo_filename")
             else ""
         )
-        data["rc_book_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['rc_book_filename']}")
-            if data.get("rc_book_filename")
-            else ""
-        )
-        data["rc_book_back_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['rc_book_back_filename']}")
-            if data.get("rc_book_back_filename")
-            else ""
-        )
-        data["insurance_document_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['insurance_document_filename']}")
-            if data.get("insurance_document_filename")
-            else ""
-        )
-        data["puc_certificate_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['puc_certificate_filename']}")
-            if data.get("puc_certificate_filename")
-            else ""
-        )
+        rc_name = data.get("rc_book_filename") or data.get("v_rc_book_filename") or ""
+        rc_back_name = data.get("rc_book_back_filename") or data.get("v_rc_book_back_filename") or ""
+        ins_name = data.get("insurance_document_filename") or data.get("v_insurance_document_filename") or ""
+        puc_name = data.get("puc_certificate_filename") or data.get("v_puc_certificate_filename") or ""
+        seller_id_doc = data.get("purchase_id_proof_filename") or ""
+        data["rc_book_filename"] = rc_name
+        data["rc_book_back_filename"] = rc_back_name
+        data["insurance_document_filename"] = ins_name
+        data["puc_certificate_filename"] = puc_name
+        data["seller_id_proof_filename"] = seller_id_doc
+        data["rc_book_url"] = url_for("static", filename=f"uploads/vehicles/{rc_name}") if rc_name else ""
+        data["rc_book_back_url"] = url_for("static", filename=f"uploads/vehicles/{rc_back_name}") if rc_back_name else ""
+        data["insurance_document_url"] = url_for("static", filename=f"uploads/vehicles/{ins_name}") if ins_name else ""
+        data["puc_certificate_url"] = url_for("static", filename=f"uploads/vehicles/{puc_name}") if puc_name else ""
+        data["seller_id_proof_url"] = url_for("static", filename=f"uploads/vehicles/{seller_id_doc}") if seller_id_doc else ""
         return data
 
     sale_id_raw = (request.values.get("sale_id") or "").strip()
     sale_record = fetch_sale_record(int(sale_id_raw)) if sale_id_raw.isdigit() else None
+    prefill_vehicle_id = (request.values.get("vehicle_id") or "").strip()
+    prefill_vehicle = vehicle_map.get(int(prefill_vehicle_id)) if prefill_vehicle_id.isdigit() and int(prefill_vehicle_id) in vehicle_map else None
 
     def build_selected_vehicle(source_sale: dict | None, selected_id: int | None) -> dict | None:
         if selected_id and selected_id in vehicle_map:
@@ -16019,6 +16586,9 @@ def order_new():
             ],
         }
 
+    active_vehicle_id = str(sale_record["vehicle_id"]) if sale_record and sale_record.get("vehicle_id") else (str(prefill_vehicle["id"]) if prefill_vehicle else "")
+    active_vehicle = prefill_vehicle if (not sale_record and prefill_vehicle) else None
+
     form_data = {
         "sale_id": str(sale_record["id"]) if sale_record else "",
         "customer_name": sale_record.get("customer_name", "") if sale_record else "",
@@ -16026,12 +16596,34 @@ def order_new():
         "customer_phone": sale_record.get("customer_phone", "") if sale_record else "",
         "customer_address": sale_record.get("customer_address", "") if sale_record else "",
         "customer_id_proof_ref": date_only(sale_record.get("customer_id_proof_ref")) if sale_record else "",
-        "vehicle_id": str(sale_record["vehicle_id"]) if sale_record else "",
-        "vehicle_name": sale_record.get("vehicle_name", "") if sale_record else "",
-        "vehicle_number": sale_record.get("vehicle_number", "") if sale_record else "",
-        "selling_price": f"{as_money(sale_record.get('selling_price')):.2f}" if sale_record else "0.00",
-        "repair_cost": f"{as_money(sale_record.get('repair_cost')):.2f}" if sale_record else "0.00",
-        "subtotal_amount": f"{as_money(sale_record.get('subtotal_amount')):.2f}" if sale_record else "0.00",
+        "customer_id_proof_filename": sale_record.get("customer_id_proof_filename", "") if sale_record else "",
+        "customer_photo_filename": sale_record.get("customer_photo_filename", "") if sale_record else "",
+        "customer_with_bike_photo_filename": sale_record.get("customer_with_bike_photo_filename", "") if sale_record else "",
+        "seller_name": sale_record.get("purchase_customer_name", "") if sale_record else (active_vehicle.get("purchase_customer_name", "") if active_vehicle else ""),
+        "seller_phone": sale_record.get("purchase_customer_phone", "") if sale_record else (active_vehicle.get("purchase_customer_phone", "") if active_vehicle else ""),
+        "seller_id": sale_record.get("purchase_customer_id", "") if sale_record else (active_vehicle.get("purchase_customer_id", "") if active_vehicle else ""),
+        "seller_address": sale_record.get("purchase_customer_address", "") if sale_record else (active_vehicle.get("purchase_customer_address", "") if active_vehicle else ""),
+        "seller_reference": sale_record.get("purchase_reference", "") if sale_record else (active_vehicle.get("purchase_reference", "") if active_vehicle else ""),
+        "seller_id_proof_filename": sale_record.get("purchase_id_proof_filename", "") if sale_record else (active_vehicle.get("purchase_id_proof_filename", "") if active_vehicle else ""),
+        "seller_id_proof_url": sale_record.get("seller_id_proof_url", "") if sale_record else (url_for("static", filename=f"uploads/vehicles/{active_vehicle['purchase_id_proof_filename']}") if (active_vehicle and active_vehicle.get("purchase_id_proof_filename")) else ""),
+        "purchase_mode": sale_record.get("purchase_mode", "") if sale_record else (active_vehicle.get("purchase_mode", "Direct") if active_vehicle else "Direct"),
+        "vehicle_id": active_vehicle_id,
+        "vehicle_name": sale_record.get("vehicle_name", "") if sale_record else (active_vehicle.get("vehicle_name", "") if active_vehicle else ""),
+        "vehicle_number": sale_record.get("vehicle_number", "") if sale_record else (active_vehicle.get("vehicle_number", "") if active_vehicle else ""),
+        "model_year": str(sale_record.get("model_year") or "") if sale_record else (str(active_vehicle.get("model_year") or "") if active_vehicle else ""),
+        "registration_no": sale_record.get("registration_no", "") if sale_record else (active_vehicle.get("registration_no", "") if active_vehicle else ""),
+        "owners": str(sale_record.get("owners") or "") if sale_record else (str(active_vehicle.get("owners") or "") if active_vehicle else ""),
+        "current_fc": sale_record.get("current_fc", "") if sale_record else (active_vehicle.get("current_fc", "") if active_vehicle else ""),
+        "kms_driven": sale_record.get("kms_driven", "") if sale_record else (active_vehicle.get("kms_driven", "") if active_vehicle else ""),
+        "insurance_end_date": date_only(sale_record.get("insurance_end_date")) if sale_record else (date_only(active_vehicle.get("insurance_end_date")) if active_vehicle else ""),
+        "puc_valid_upto": date_only(sale_record.get("puc_valid_upto")) if sale_record else (date_only(active_vehicle.get("puc_valid_upto")) if active_vehicle else ""),
+        "rc_book_filename": sale_record.get("rc_book_filename", "") if sale_record else (active_vehicle.get("rc_book_filename", "") if active_vehicle else ""),
+        "rc_book_back_filename": sale_record.get("rc_book_back_filename", "") if sale_record else (active_vehicle.get("rc_book_back_filename", "") if active_vehicle else ""),
+        "insurance_document_filename": sale_record.get("insurance_document_filename", "") if sale_record else (active_vehicle.get("insurance_document_filename", "") if active_vehicle else ""),
+        "puc_certificate_filename": sale_record.get("puc_certificate_filename", "") if sale_record else (active_vehicle.get("puc_certificate_filename", "") if active_vehicle else ""),
+        "selling_price": f"{as_money(sale_record.get('selling_price')):.2f}" if sale_record else (f"{as_money(active_vehicle.get('selling_price')):.2f}" if active_vehicle else "0.00"),
+        "repair_cost": f"{as_money(sale_record.get('repair_cost')):.2f}" if sale_record else (f"{as_money(active_vehicle.get('repair_cost')):.2f}" if active_vehicle else "0.00"),
+        "subtotal_amount": f"{as_money(sale_record.get('subtotal_amount')):.2f}" if sale_record else (f"{as_money(active_vehicle.get('selling_price')):.2f}" if active_vehicle else "0.00"),
         "discount_amount": f"{as_money(sale_record.get('discount_amount')):.2f}" if sale_record else "0.00",
         "gst_percent": f"{as_money(sale_record.get('gst_percent')):.2f}" if sale_record else "0.00",
         "gst_amount": f"{as_money(sale_record.get('gst_amount')):.2f}" if sale_record else "0.00",
@@ -16040,6 +16632,7 @@ def order_new():
         "payment_finance_name": sale_record.get("payment_finance_name", "") if sale_record else "",
         "payment_commission_amount": f"{as_money(sale_record.get('payment_commission_amount')):.2f}" if sale_record and sale_record.get("payment_commission_amount") is not None else "",
         "order_date": as_display_datetime(sale_record.get("created_at")) if sale_record else datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "order_date_local": as_html_datetime_local(sale_record.get("created_at")) if sale_record else datetime.now().strftime("%Y-%m-%dT%H:%M"),
     }
 
     def render_order_form(error: str | None = None):
@@ -16068,9 +16661,22 @@ def order_new():
             "customer_phone": normalize_phone_input(request.form.get("customer_phone")),
             "customer_address": (request.form.get("customer_address") or "").strip(),
             "customer_id_proof_ref": (request.form.get("customer_id_proof_ref") or "").strip(),
+            "seller_name": (request.form.get("seller_name") or "").strip(),
+            "seller_phone": (request.form.get("seller_phone") or "").strip(),
+            "seller_id": (request.form.get("seller_id") or "").strip(),
+            "seller_address": (request.form.get("seller_address") or "").strip(),
+            "seller_reference": (request.form.get("seller_reference") or "").strip(),
+            "purchase_mode": (request.form.get("purchase_mode") or "Direct").strip() or "Direct",
             "vehicle_id": (request.form.get("vehicle_id") or "").strip(),
             "vehicle_name": (request.form.get("vehicle_name") or "").strip(),
             "vehicle_number": (request.form.get("vehicle_number") or "").strip(),
+            "model_year": (request.form.get("model_year") or "").strip(),
+            "registration_no": (request.form.get("registration_no") or "").strip(),
+            "owners": (request.form.get("owners") or "").strip(),
+            "current_fc": (request.form.get("current_fc") or "").strip(),
+            "kms_driven": (request.form.get("kms_driven") or "").strip(),
+            "insurance_end_date": (request.form.get("insurance_end_date") or "").strip(),
+            "puc_valid_upto": (request.form.get("puc_valid_upto") or "").strip(),
             "selling_price": (request.form.get("selling_price") or "0").strip() or "0",
             "repair_cost": (request.form.get("repair_cost") or "0").strip() or "0",
             "subtotal_amount": (request.form.get("subtotal_amount") or "0").strip() or "0",
@@ -16084,15 +16690,9 @@ def order_new():
             "order_date": (request.form.get("order_date") or "").strip() or datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
 
+        # Essential mandatory validation: Customer Name, Phone, and Vehicle
         if not form_data["customer_name"] or not form_data["customer_phone"]:
             return render_order_form("Customer name and phone number are required.")
-        if not form_data["customer_identifier"]:
-            return render_order_form("Customer ID is required.")
-        if not form_data["customer_id_proof_ref"]:
-            return render_order_form("Customer ID reference date is required.")
-        customer_id_proof_ref = form_data["customer_id_proof_ref"][:10]
-        if date_only(customer_id_proof_ref) == "-":
-            return render_order_form("Customer ID reference date is invalid.")
 
         vehicle_id = int(form_data["vehicle_id"]) if form_data["vehicle_id"].isdigit() else 0
         vehicle = vehicle_map.get(vehicle_id)
@@ -16100,15 +16700,39 @@ def order_new():
             return render_order_form("Select a vehicle from inventory by name or vehicle number.")
 
         sale_record = fetch_sale_record(int(form_data["sale_id"])) if form_data["sale_id"].isdigit() else None
+
+        # Resolve order date for database storage (datetime2 for orders / vehicle_sale_orders)
+        order_date_dt = parse_order_datetime(
+            form_data.get("order_date"),
+            fallback=sale_record.get("created_at") if sale_record else None,
+        )
+        if isinstance(order_date_dt, datetime):
+            order_date_sql = order_date_dt.strftime("%Y-%m-%d %H:%M:%S")
+            order_due_date = order_date_dt.strftime("%Y-%m-%d")
+        else:
+            order_date_sql = str(order_date_dt)
+            order_due_date = order_date_sql[:10]
+
+        # Prevent duplicate sales for the same vehicle
+        if not sale_record:
+            current_veh_st = normalize_vehicle_status(vehicle.get("status"))
+            if current_veh_st == "sold":
+                return render_order_form("This vehicle has already been sold. Please select an available vehicle.")
+
+        # Optional reference date handling
+        customer_id_proof_ref = None
+        if form_data["customer_id_proof_ref"]:
+            ref_raw = form_data["customer_id_proof_ref"][:10]
+            if date_only(ref_raw) != "-":
+                customer_id_proof_ref = ref_raw
+
+        # Upload handling with fallback retention
         customer_id_proof_filename = save_vehicle_sale_upload(
             request.files.get("customer_id_proof_file"),
             fallback=sale_record.get("customer_id_proof_filename") if sale_record else None,
             customer_name=form_data["customer_name"],
             doc_label="id proof",
         )
-        if not customer_id_proof_filename:
-            return render_order_form("Customer ID proof is required.")
-
         customer_photo_filename = save_vehicle_sale_upload(
             request.files.get("customer_photo_file"),
             fallback=sale_record.get("customer_photo_filename") if sale_record else None,
@@ -16122,6 +16746,39 @@ def order_new():
             doc_label="customer with bike photo",
         )
 
+        veh_ident = form_data["vehicle_number"] or vehicle.get("vehicle_number") or str(vehicle_id)
+        rc_book_filename = save_vehicle_upload(
+            request.files.get("rc_book_file"),
+            fallback=vehicle.get("rc_book_filename") or (sale_record.get("rc_book_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="rc_book",
+        )
+        rc_book_back_filename = save_vehicle_upload(
+            request.files.get("rc_book_back_file"),
+            fallback=vehicle.get("rc_book_back_filename") or (sale_record.get("rc_book_back_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="rc_book_back",
+        )
+        insurance_document_filename = save_vehicle_upload(
+            request.files.get("insurance_document_file"),
+            fallback=vehicle.get("insurance_document_filename") or (sale_record.get("insurance_document_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="insurance",
+        )
+        puc_certificate_filename = save_vehicle_upload(
+            request.files.get("puc_certificate_file"),
+            fallback=vehicle.get("puc_certificate_filename") or (sale_record.get("puc_certificate_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="puc",
+        )
+        seller_id_proof_filename = save_vehicle_upload(
+            request.files.get("seller_id_proof_file"),
+            fallback=vehicle.get("purchase_id_proof_filename") or (sale_record.get("seller_id_proof_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="seller_id_proof",
+        )
+
+        # Numbers and amounts
         selling_price = round(max(as_money(form_data["selling_price"]), 0.0), 2)
         repair_cost = round(max(as_money(form_data["repair_cost"]), 0.0), 2)
         subtotal_amount = round(max(as_money(form_data["subtotal_amount"]), selling_price, 0.0), 2)
@@ -16136,8 +16793,9 @@ def order_new():
         elif gst_amount <= 0 and gst_percent > 0:
             gst_amount = round(taxable_amount * gst_percent / 100.0, 2)
         elif gst_percent <= 0 and gst_amount > 0:
-            gst_percent = round((gst_amount * 100.0 / taxable_amount), 2, ) if taxable_amount > 0 else 0.0
+            gst_percent = round((gst_amount * 100.0 / taxable_amount), 2) if taxable_amount > 0 else 0.0
         total_amount = round(taxable_amount + gst_amount, 2)
+
         payment_method = form_data["payment_method"]
         if payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}:
             payment_method = "Cash"
@@ -16149,275 +16807,370 @@ def order_new():
             if not form_data["payment_commission_amount"]:
                 return render_order_form("Commission amount is required for Finance payments.")
             payment_commission_amount = round(as_money(form_data["payment_commission_amount"]), 2)
-        else:
-            payment_finance_name = None
+
         purchase_price = round(as_money(vehicle.get("purchase_price")), 2)
         purchase_total_cost = round(purchase_price + repair_cost, 2)
 
+        model_year_val = to_int(form_data["model_year"]) if form_data["model_year"] else vehicle.get("model_year")
+        registration_no_val = form_data["registration_no"] or vehicle.get("registration_no") or None
+        owners_val = to_int(form_data["owners"]) if form_data["owners"] else vehicle.get("owners")
+        current_fc_val = form_data["current_fc"] or vehicle.get("current_fc") or None
+        kms_driven_val = form_data["kms_driven"] or vehicle.get("kms_driven") or None
+        insurance_end_date_val = (
+            form_data["insurance_end_date"][:10]
+            if (form_data["insurance_end_date"] and date_only(form_data["insurance_end_date"]) != "-")
+            else vehicle.get("insurance_end_date")
+        )
+        puc_valid_upto_val = (
+            form_data["puc_valid_upto"][:10]
+            if (form_data["puc_valid_upto"] and date_only(form_data["puc_valid_upto"]) != "-")
+            else vehicle.get("puc_valid_upto")
+        )
+        seller_name_val = form_data["seller_name"] or vehicle.get("purchase_customer_name") or None
+        seller_phone_val = form_data["seller_phone"] or vehicle.get("purchase_customer_phone") or None
+        seller_id_val = form_data["seller_id"] or vehicle.get("purchase_customer_id") or None
+        seller_address_val = form_data["seller_address"] or vehicle.get("purchase_customer_address") or None
+        seller_reference_val = form_data["seller_reference"] or vehicle.get("purchase_reference") or None
+        purchase_mode_val = form_data["purchase_mode"] or vehicle.get("purchase_mode") or "Direct"
+
         gallery_names = list(vehicle.get("gallery_images") or [])[:4]
         now = now_str()
+
         try:
             customer_id = upsert_customer(
                 conn,
                 form_data["customer_name"],
                 form_data["customer_phone"],
-                f"Customer ID: {form_data['customer_identifier']}",
+                f"Customer ID: {form_data['customer_identifier']}" if form_data["customer_identifier"] else None,
                 form_data["customer_address"] or None,
             )
         except ValueError as exc:
             return render_order_form(str(exc))
+
         order_customer_display_id = customer_display_id(customer_id)
         order_notes = "\n".join(
             line
             for line in [
                 f"Vehicle Number: {vehicle.get('vehicle_number') or ''}",
-                f"Customer ID: {form_data['customer_identifier']}",
+                f"Customer ID: {form_data['customer_identifier']}" if form_data["customer_identifier"] else "",
                 f"Payment method: {payment_method}",
                 f"Vehicle GST: {'Yes' if gst_amount > 0 else 'No'}",
             ]
             if line.strip()
         )
-        linked_order_id = int(sale_record.get("order_id") or 0) if sale_record else 0
-        if linked_order_id > 0:
-            conn.execute(
-                """
-                UPDATE orders
-                SET customer_id = ?, customer_display_id = ?, notes = ?, due_date = ?, status = ?,
-                    advance_amount = ?, discount_amount = ?, total_amount = ?, taxable_amount = ?,
-                    gst_percent = ?, gst_amount = ?, cgst_percent = ?, cgst_amount = ?, sgst_percent = ?, sgst_amount = ?
-                WHERE id = ?
-                """,
-                (
-                    customer_id,
-                    order_customer_display_id,
-                    order_notes,
-                    now[:10],
-                    "In-Progress",
-                    advance_amount,
-                    discount_amount,
-                    total_amount,
-                    taxable_amount,
-                    gst_percent,
-                    gst_amount,
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    linked_order_id,
-                ),
-            )
-        else:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO orders (
-                    customer_id, customer_display_id, order_no, invoice_id, due_date, status, priority,
-                    assigned_team, assigned_tailor, notes,
-                    advance_amount, discount_amount, total_amount, taxable_amount, gst_percent, gst_amount,
-                    cgst_percent, cgst_amount, sgst_percent, sgst_amount,
-                    order_type, order_material_source, inventory_applied, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    customer_id,
-                    order_customer_display_id,
-                    generate_order_no(conn, customer_id),
-                    generate_invoice_id(conn),
-                    now[:10],
-                    "In-Progress",
-                    "Normal",
-                    None,
-                    None,
-                    order_notes,
-                    advance_amount,
-                    discount_amount,
-                    total_amount,
-                    taxable_amount,
-                    gst_percent,
-                    gst_amount,
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    "Vehicle Sale",
-                    "inventory",
-                    0,
-                    now,
-                ),
-            )
-            linked_order_id = int(cur.lastrowid or 0)
 
-        if sale_record:
+        try:
+            linked_order_id = int(sale_record.get("order_id") or 0) if sale_record else 0
+            if linked_order_id > 0:
+                conn.execute(
+                    """
+                    UPDATE orders
+                    SET customer_id = ?, customer_display_id = ?, notes = ?, due_date = ?, status = ?,
+                        advance_amount = ?, paid_amount = ?, discount_amount = ?, total_amount = ?, taxable_amount = ?,
+                        gst_percent = ?, gst_amount = ?, cgst_percent = ?, cgst_amount = ?, sgst_percent = ?, sgst_amount = ?,
+                        created_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        customer_id,
+                        order_customer_display_id,
+                        order_notes,
+                        order_due_date,
+                        "In-Progress",
+                        advance_amount,
+                        selling_price,
+                        discount_amount,
+                        total_amount,
+                        taxable_amount,
+                        gst_percent,
+                        gst_amount,
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        order_date_sql,
+                        linked_order_id,
+                    ),
+                )
+            else:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO orders (
+                        customer_id, customer_display_id, order_no, invoice_id, due_date, status, priority,
+                        assigned_team, assigned_tailor, notes,
+                        advance_amount, paid_amount, discount_amount, total_amount, taxable_amount, gst_percent, gst_amount,
+                        cgst_percent, cgst_amount, sgst_percent, sgst_amount,
+                        order_type, order_material_source, inventory_applied, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        customer_id,
+                        order_customer_display_id,
+                        generate_order_no(conn, customer_id),
+                        generate_invoice_id(conn),
+                        order_due_date,
+                        "In-Progress",
+                        "Normal",
+                        None,
+                        None,
+                        order_notes,
+                        advance_amount,
+                        selling_price,
+                        discount_amount,
+                        total_amount,
+                        taxable_amount,
+                        gst_percent,
+                        gst_amount,
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        "Vehicle Sale",
+                        "inventory",
+                        0,
+                        order_date_sql,
+                    ),
+                )
+                linked_order_id = int(cur.lastrowid or 0)
+                if not linked_order_id:
+                    chk_o = conn.execute(
+                        "SELECT TOP 1 id FROM orders WHERE customer_id = ? ORDER BY id DESC",
+                        (customer_id,),
+                    ).fetchone()
+                    if chk_o and chk_o["id"]:
+                        linked_order_id = int(chk_o["id"])
+
+            if sale_record:
+                conn.execute(
+                    """
+                    UPDATE vehicle_sale_orders
+                    SET
+                        order_id = ?,
+                        customer_id = ?,
+                        customer_name = ?,
+                        customer_identifier = ?,
+                        customer_phone = ?,
+                        customer_address = ?,
+                        customer_id_proof_filename = ?,
+                        customer_id_proof_ref = ?,
+                        customer_photo_filename = ?,
+                        customer_with_bike_photo_filename = ?,
+                        vehicle_id = ?,
+                        vehicle_name = ?,
+                        vehicle_number = ?,
+                        model_year = ?,
+                        registration_no = ?,
+                        owners = ?,
+                        current_fc = ?,
+                        purchase_price = ?,
+                        selling_price = ?,
+                        repair_cost = ?,
+                        subtotal_amount = ?,
+                        purchase_total_cost = ?,
+                        discount_amount = ?,
+                        gst_percent = ?,
+                        gst_amount = ?,
+                        advance_amount = ?,
+                        total_amount = ?,
+                        payment_method = ?,
+                        payment_finance_name = ?,
+                        payment_commission_amount = ?,
+                        vehicle_image_filenames = ?,
+                        created_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        linked_order_id,
+                        customer_id,
+                        form_data["customer_name"],
+                        form_data["customer_identifier"] or None,
+                        form_data["customer_phone"],
+                        form_data["customer_address"] or None,
+                        customer_id_proof_filename,
+                        customer_id_proof_ref,
+                        customer_photo_filename,
+                        customer_with_bike_photo_filename,
+                        vehicle_id,
+                        vehicle.get("vehicle_name") or form_data["vehicle_name"],
+                        vehicle.get("vehicle_number") or form_data["vehicle_number"],
+                        model_year_val,
+                        registration_no_val,
+                        owners_val,
+                        current_fc_val,
+                        purchase_price,
+                        selling_price,
+                        repair_cost,
+                        subtotal_amount,
+                        purchase_total_cost,
+                        discount_amount,
+                        gst_percent,
+                        gst_amount,
+                        advance_amount,
+                        total_amount,
+                        payment_method,
+                        payment_finance_name,
+                        payment_commission_amount,
+                        ",".join(gallery_names) if gallery_names else None,
+                        order_date_sql,
+                        now,
+                        int(sale_record["id"]),
+                    ),
+                )
+                target_sale_id = int(sale_record["id"])
+            else:
+                sale_code = generate_vehicle_sale_code(conn)
+                cur_vso = conn.execute(
+                    """
+                    INSERT INTO vehicle_sale_orders (
+                        order_id,
+                        customer_id,
+                        sale_code,
+                        customer_name,
+                        customer_identifier,
+                        customer_phone,
+                        customer_address,
+                        customer_id_proof_filename,
+                        customer_id_proof_ref,
+                        customer_photo_filename,
+                        customer_with_bike_photo_filename,
+                        vehicle_id,
+                        vehicle_name,
+                        vehicle_number,
+                        model_year,
+                        registration_no,
+                        owners,
+                        current_fc,
+                        purchase_price,
+                        selling_price,
+                        repair_cost,
+                        subtotal_amount,
+                        purchase_total_cost,
+                        discount_amount,
+                        gst_percent,
+                        gst_amount,
+                        advance_amount,
+                        total_amount,
+                        payment_method,
+                        payment_finance_name,
+                        payment_commission_amount,
+                        vehicle_image_filenames,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        linked_order_id,
+                        customer_id,
+                        sale_code,
+                        form_data["customer_name"],
+                        form_data["customer_identifier"] or None,
+                        form_data["customer_phone"],
+                        form_data["customer_address"] or None,
+                        customer_id_proof_filename,
+                        customer_id_proof_ref,
+                        customer_photo_filename,
+                        customer_with_bike_photo_filename,
+                        vehicle_id,
+                        vehicle.get("vehicle_name") or form_data["vehicle_name"],
+                        vehicle.get("vehicle_number") or form_data["vehicle_number"],
+                        model_year_val,
+                        registration_no_val,
+                        owners_val,
+                        current_fc_val,
+                        purchase_price,
+                        selling_price,
+                        repair_cost,
+                        subtotal_amount,
+                        purchase_total_cost,
+                        discount_amount,
+                        gst_percent,
+                        gst_amount,
+                        advance_amount,
+                        total_amount,
+                        payment_method,
+                        payment_finance_name,
+                        payment_commission_amount,
+                        ",".join(gallery_names) if gallery_names else None,
+                        order_date_sql,
+                        now,
+                    ),
+                )
+                target_sale_id = int(cur_vso.lastrowid or 0)
+                if not target_sale_id:
+                    chk_s = conn.execute(
+                        """
+                        SELECT TOP 1 id
+                        FROM vehicle_sale_orders
+                        WHERE (order_id = ? AND order_id > 0) OR vehicle_id = ?
+                        ORDER BY id DESC
+                        """,
+                        (linked_order_id, vehicle_id),
+                    ).fetchone()
+                    if chk_s and chk_s["id"]:
+                        target_sale_id = int(chk_s["id"])
+
+            # Atomically update vehicle status to Sold along with vehicle and seller fields
             conn.execute(
                 """
-                UPDATE vehicle_sale_orders
-                SET
-                    order_id = ?,
-                    customer_id = ?,
-                    customer_name = ?,
-                    customer_identifier = ?,
-                    customer_phone = ?,
-                    customer_address = ?,
-                    customer_id_proof_filename = ?,
-                    customer_id_proof_ref = ?,
-                    customer_photo_filename = ?,
-                    customer_with_bike_photo_filename = ?,
-                    vehicle_id = ?,
-                    vehicle_name = ?,
-                    vehicle_number = ?,
-                    model_year = ?,
-                    registration_no = ?,
-                    owners = ?,
-                    current_fc = ?,
-                    purchase_price = ?,
+                UPDATE vehicles
+                SET status = 'Sold',
                     selling_price = ?,
-                    repair_cost = ?,
-                    subtotal_amount = ?,
-                    purchase_total_cost = ?,
-                    discount_amount = ?,
-                    gst_percent = ?,
-                    gst_amount = ?,
-                    advance_amount = ?,
-                    total_amount = ?,
-                    payment_method = ?,
-                    payment_finance_name = ?,
-                    payment_commission_amount = ?,
-                    vehicle_image_filenames = ?,
+                    model_year = COALESCE(?, model_year),
+                    registration_no = COALESCE(?, registration_no),
+                    owners = COALESCE(?, owners),
+                    current_fc = COALESCE(?, current_fc),
+                    purchase_customer_name = COALESCE(?, purchase_customer_name),
+                    purchase_customer_phone = COALESCE(?, purchase_customer_phone),
+                    purchase_customer_id = COALESCE(?, purchase_customer_id),
+                    purchase_customer_address = COALESCE(?, purchase_customer_address),
+                    purchase_reference = COALESCE(?, purchase_reference),
+                    purchase_id_proof_filename = COALESCE(?, purchase_id_proof_filename),
+                    kms_driven = COALESCE(?, kms_driven),
+                    insurance_end_date = COALESCE(?, insurance_end_date),
+                    puc_valid_upto = COALESCE(?, puc_valid_upto),
+                    purchase_mode = COALESCE(?, purchase_mode),
+                    rc_book_filename = COALESCE(?, rc_book_filename),
+                    rc_book_back_filename = COALESCE(?, rc_book_back_filename),
+                    insurance_document_filename = COALESCE(?, insurance_document_filename),
+                    puc_certificate_filename = COALESCE(?, puc_certificate_filename),
                     updated_at = ?
                 WHERE id = ?
                 """,
                 (
-                    linked_order_id,
-                    customer_id,
-                    form_data["customer_name"],
-                    form_data["customer_identifier"],
-                    form_data["customer_phone"],
-                    form_data["customer_address"] or None,
-                    customer_id_proof_filename,
-                    customer_id_proof_ref,
-                    customer_photo_filename,
-                    customer_with_bike_photo_filename,
-                    vehicle_id,
-                    vehicle.get("vehicle_name") or form_data["vehicle_name"],
-                    vehicle.get("vehicle_number") or form_data["vehicle_number"],
-                    vehicle.get("model_year"),
-                    vehicle.get("registration_no") or None,
-                    vehicle.get("owners"),
-                    vehicle.get("current_fc") or None,
-                    purchase_price,
                     selling_price,
-                    repair_cost,
-                    subtotal_amount,
-                    purchase_total_cost,
-                    discount_amount,
-                    gst_percent,
-                    gst_amount,
-                    advance_amount,
-                    total_amount,
-                    payment_method,
-                    payment_finance_name,
-                    payment_commission_amount,
-                    ",".join(gallery_names) if gallery_names else None,
+                    model_year_val,
+                    registration_no_val,
+                    owners_val,
+                    current_fc_val,
+                    seller_name_val,
+                    seller_phone_val,
+                    seller_id_val,
+                    seller_address_val,
+                    seller_reference_val,
+                    seller_id_proof_filename,
+                    kms_driven_val,
+                    insurance_end_date_val,
+                    puc_valid_upto_val,
+                    purchase_mode_val,
+                    rc_book_filename,
+                    rc_book_back_filename,
+                    insurance_document_filename,
+                    puc_certificate_filename,
                     now,
-                    int(sale_record["id"]),
+                    vehicle_id,
                 ),
             )
-            target_sale_id = int(sale_record["id"])
-        else:
-            sale_code = generate_vehicle_sale_code(conn)
-            conn.execute(
-                """
-                INSERT INTO vehicle_sale_orders (
-                    order_id,
-                    customer_id,
-                    sale_code,
-                    customer_name,
-                    customer_identifier,
-                    customer_phone,
-                    customer_address,
-                    customer_id_proof_filename,
-                    customer_id_proof_ref,
-                    customer_photo_filename,
-                    customer_with_bike_photo_filename,
-                    vehicle_id,
-                    vehicle_name,
-                    vehicle_number,
-                    model_year,
-                    registration_no,
-                    owners,
-                    current_fc,
-                    purchase_price,
-                    selling_price,
-                    repair_cost,
-                    subtotal_amount,
-                    purchase_total_cost,
-                    discount_amount,
-                    gst_percent,
-                    gst_amount,
-                    advance_amount,
-                    total_amount,
-                    payment_method,
-                    payment_finance_name,
-                    payment_commission_amount,
-                    vehicle_image_filenames,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    linked_order_id,
-                    customer_id,
-                    sale_code,
-                    form_data["customer_name"],
-                    form_data["customer_identifier"],
-                    form_data["customer_phone"],
-                    form_data["customer_address"] or None,
-                    customer_id_proof_filename,
-                    customer_id_proof_ref,
-                    customer_photo_filename,
-                    customer_with_bike_photo_filename,
-                    vehicle_id,
-                    vehicle.get("vehicle_name") or form_data["vehicle_name"],
-                    vehicle.get("vehicle_number") or form_data["vehicle_number"],
-                    vehicle.get("model_year"),
-                    vehicle.get("registration_no") or None,
-                    vehicle.get("owners"),
-                    vehicle.get("current_fc") or None,
-                    purchase_price,
-                    selling_price,
-                    repair_cost,
-                    subtotal_amount,
-                    purchase_total_cost,
-                    discount_amount,
-                    gst_percent,
-                    gst_amount,
-                    advance_amount,
-                    total_amount,
-                    payment_method,
-                    payment_finance_name,
-                    payment_commission_amount,
-                    ",".join(gallery_names) if gallery_names else None,
-                    now,
-                    now,
-                ),
-            )
-            inserted_row = conn.execute("SELECT CAST(SCOPE_IDENTITY() AS INT) AS id").fetchone()
-            target_sale_id = int(inserted_row["id"]) if inserted_row and inserted_row["id"] else 0
 
-        conn.execute(
-            """
-            UPDATE vehicles
-            SET status = ?, selling_price = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            ("Sold", selling_price, now, vehicle_id),
-        )
-
-        conn.commit()
-        conn.close()
-        return redirect(url_for("order_detail", order_id=linked_order_id, sale_id=target_sale_id, source="orders"))
+            conn.commit()
+            conn.close()
+            return redirect(url_for("order_detail", order_id=linked_order_id, sale_id=target_sale_id, source="orders"))
+        except Exception as e:
+            conn.rollback()
+            return render_order_form(f"Failed to record sale: {e}")
 
     return render_order_form()
     reseed_identity_if_empty(conn, "customers", seed=0)
@@ -18078,6 +18831,7 @@ def order_new_material():
         prefill_notes=prefill_notes,
     )
 
+@app.route("/expenses", methods=["GET", "POST"])
 @app.route("/expense", methods=["GET", "POST"])
 def expense_dashboard():
     raw_type = (request.args.get("type") or "").strip().lower()
@@ -18098,10 +18852,21 @@ def expense_dashboard():
         category_input = (request.form.get("category") or "").strip()
         vehicle_number_input = (request.form.get("vehicle_number") or "").strip()
         amount_raw = (request.form.get("amount") or "").strip()
+        expense_date_input = (request.form.get("expense_date") or "").strip()
         amount = 0.0
         error = None
 
-        if not description:
+        if not expense_date_input:
+            expense_date_input = datetime.now().date().isoformat()
+        else:
+            try:
+                parsed_expense_date = datetime.strptime(expense_date_input, "%Y-%m-%d").date()
+                if parsed_expense_date.year < 1900 or parsed_expense_date.year > 2100:
+                    error = "Please enter a valid expense date."
+            except (ValueError, TypeError):
+                error = "Please enter a valid expense date (YYYY-MM-DD)."
+
+        if not error and not description:
             error = "Description is required."
         if not error and not is_repair and not category_input:
             error = "Category is required."
@@ -18116,7 +18881,7 @@ def expense_dashboard():
             error = "Vehicle number is required for repair."
 
         if not error:
-            created_at = now_str()
+            created_at = f"{expense_date_input} {datetime.now().strftime('%H:%M:%S')}"
             try:
                 if is_repair:
                     vehicle_row = conn.execute(
@@ -18142,7 +18907,7 @@ def expense_dashboard():
                             vehicle_row.get("vehicle_number"),
                             created_at,
                         )
-                        repair_date = datetime.now().date().isoformat()
+                        repair_date = expense_date_input
                         conn.execute(
                             """
                             INSERT INTO vehicle_repairs
@@ -18174,7 +18939,7 @@ def expense_dashboard():
                         )
                         print("Rows updated:", update_cursor.rowcount)
                 else:
-                    create_expense_record(conn, description, amount, now_str(), category=category_input)
+                    create_expense_record(conn, description, amount, created_at, category=category_input)
                     add_expense_category_if_missing(conn, category_input)
             except Exception:
                 error = "Unable to save. Please try again."
@@ -18188,6 +18953,7 @@ def expense_dashboard():
                 "description": description,
                 "category": category_input,
                 "amount": amount_raw,
+                "expense_date": expense_date_input,
             }
             filter_type = "repair" if is_repair else "expense"
         else:
@@ -18262,14 +19028,16 @@ def expense_dashboard():
         if category_filter:
             expense_sql += " AND LOWER(COALESCE(e.category, '')) = LOWER(?)"
             expense_params.append(category_filter)
-        expense_sql += " ORDER BY e.created_at DESC"
+        expense_sql += " ORDER BY e.created_at DESC, e.id DESC"
         expenses = conn.execute(expense_sql, tuple(expense_params)).fetchall()
 
     quick_expense_no = generate_expense_no(conn)
     conn.close()
 
+    today_date = datetime.now().date().isoformat()
     return render_template(
         "expense_dashboard.html",
+        today_date=today_date,
         total_expense=total_expense,
         total_salary=total_salary,
         total_repair=total_repair,
@@ -19475,7 +20243,15 @@ def expense_add():
                 return render_expense_add("Expense amount is required", expense_no, close_connection=True)
             final_amount = float(expense_amount)
 
-        created_at = now_str()
+        expense_date_input = (request.form.get("expense_date") or "").strip()
+        if expense_date_input:
+            try:
+                datetime.strptime(expense_date_input, "%Y-%m-%d")
+                created_at = f"{expense_date_input} {datetime.now().strftime('%H:%M:%S')}"
+            except (ValueError, TypeError):
+                created_at = now_str()
+        else:
+            created_at = now_str()
         expense_id, expense_no = create_expense_record(conn, name, final_amount, created_at)
         cur = conn.cursor()
 
@@ -20019,6 +20795,8 @@ def order_detail(order_id: int):
             conn.close()
             return redirect(url_for("customer_detail", customer_id=customer_id, order_id=order_id, source=source))
 
+    sale_id_arg = (request.args.get("sale_id") or "").strip()
+    valid_sale_id = int(sale_id_arg) if (sale_id_arg.isdigit() and int(sale_id_arg) > 0) else None
     order = conn.execute(
         """
         SELECT orders.*, customers.name, customers.phone, customers.notes AS customer_notes
@@ -20028,41 +20806,250 @@ def order_detail(order_id: int):
         """,
         (order_id,),
     ).fetchone()
+
+    if not order and valid_sale_id:
+        vso_lookup = conn.execute(
+            "SELECT order_id FROM vehicle_sale_orders WHERE id = ?",
+            (valid_sale_id,),
+        ).fetchone()
+        if vso_lookup and vso_lookup["order_id"]:
+            order_id = int(vso_lookup["order_id"])
+            order = conn.execute(
+                """
+                SELECT orders.*, customers.name, customers.phone, customers.notes AS customer_notes
+                FROM orders
+                JOIN customers ON customers.id = orders.customer_id
+                WHERE orders.id = ?
+                """,
+                (order_id,),
+            ).fetchone()
+
     if not order:
         conn.close()
         return redirect(url_for("orders"))
-    if str(order["order_type"] or "").strip().lower() == "vehicle sale":
+
+    is_vehicle_sale = str(order["order_type"] or "").strip().lower() == "vehicle sale"
+    if not is_vehicle_sale:
+        vso_chk = conn.execute(
+            "SELECT TOP 1 id FROM vehicle_sale_orders WHERE order_id = ? OR (? IS NOT NULL AND id = ?)",
+            (order_id, valid_sale_id, valid_sale_id),
+        ).fetchone()
+        if vso_chk:
+            is_vehicle_sale = True
+
+    if is_vehicle_sale:
+        sale_where = "vso.id = ?" if valid_sale_id else "vso.order_id = ?"
+        sale_arg = valid_sale_id if valid_sale_id else order_id
         sale_row = conn.execute(
-    """
-    SELECT vso.*, v.photo_filename, v.vehicle_image_filenames, v.rc_book_filename,
-           v.insurance_document_filename, v.puc_certificate_filename, v.purchase_id_proof_filename,
-           v.sale_gst_enabled, v.sale_gst_mode, v.sale_gst_value,
-           v.purchase_mode, v.purchase_customer_name, v.purchase_customer_address,
-           v.purchase_customer_phone, v.purchase_customer_id, v.purchase_id_proof_ref,
-           v.purchase_reference
-    FROM vehicle_sale_orders vso
-    LEFT JOIN vehicles v ON v.id = vso.vehicle_id
-    WHERE vso.order_id = ?
-    """,
-    (order_id,),
-).fetchone()
+            f"""
+            SELECT vso.*,
+                   v.status AS v_status,
+                   v.photo_filename,
+                   v.vehicle_image_filenames AS v_vehicle_image_filenames,
+                   v.rc_book_filename AS v_rc_book_filename,
+                   v.rc_book_back_filename AS v_rc_book_back_filename,
+                   v.insurance_document_filename AS v_insurance_document_filename,
+                   v.puc_certificate_filename AS v_puc_certificate_filename,
+                   v.purchase_id_proof_filename AS v_purchase_id_proof_filename,
+                   v.sale_gst_enabled, v.sale_gst_mode, v.sale_gst_value,
+                   v.purchase_mode AS v_purchase_mode,
+                   v.purchase_customer_name AS v_purchase_customer_name,
+                   v.purchase_customer_address AS v_purchase_customer_address,
+                   v.purchase_customer_phone AS v_purchase_customer_phone,
+                   v.purchase_customer_id AS v_purchase_customer_id,
+                   v.purchase_id_proof_ref AS v_purchase_id_proof_ref,
+                   v.purchase_reference AS v_purchase_reference,
+                   v.model_year AS v_model_year,
+                   v.registration_no AS v_registration_no,
+                   v.chassis_no AS v_chassis_no,
+                   v.owners AS v_owners,
+                   v.current_fc AS v_current_fc,
+                   v.purchase_price AS v_purchase_price,
+                   v.kms_driven AS v_kms_driven,
+                   v.insurance AS v_insurance,
+                   v.insurance_end_date AS v_insurance_end_date,
+                   v.rc_book_end_date AS v_rc_book_end_date,
+                   v.puc_number AS v_puc_number,
+                   v.puc_valid_upto AS v_puc_valid_upto,
+                   v.fine_details AS v_fine_details,
+                   v.fine_amount AS v_fine_amount,
+                   v.remarks AS v_remarks,
+                   v.hypothecation AS v_hypothecation
+            FROM vehicle_sale_orders vso
+            LEFT JOIN vehicles v ON v.id = vso.vehicle_id
+            WHERE {sale_where}
+            ORDER BY vso.id DESC
+            """,
+            (sale_arg,),
+        ).fetchone()
+
+        if not sale_row and valid_sale_id and order_id:
+            sale_row = conn.execute(
+                f"""
+                SELECT vso.*,
+                       v.status AS v_status,
+                       v.photo_filename,
+                       v.vehicle_image_filenames AS v_vehicle_image_filenames,
+                       v.rc_book_filename AS v_rc_book_filename,
+                       v.rc_book_back_filename AS v_rc_book_back_filename,
+                       v.insurance_document_filename AS v_insurance_document_filename,
+                       v.puc_certificate_filename AS v_puc_certificate_filename,
+                       v.purchase_id_proof_filename AS v_purchase_id_proof_filename,
+                       v.sale_gst_enabled, v.sale_gst_mode, v.sale_gst_value,
+                       v.purchase_mode AS v_purchase_mode,
+                       v.purchase_customer_name AS v_purchase_customer_name,
+                       v.purchase_customer_address AS v_purchase_customer_address,
+                       v.purchase_customer_phone AS v_purchase_customer_phone,
+                       v.purchase_customer_id AS v_purchase_customer_id,
+                       v.purchase_id_proof_ref AS v_purchase_id_proof_ref,
+                       v.purchase_reference AS v_purchase_reference,
+                       v.model_year AS v_model_year,
+                       v.registration_no AS v_registration_no,
+                       v.chassis_no AS v_chassis_no,
+                       v.owners AS v_owners,
+                       v.current_fc AS v_current_fc,
+                       v.purchase_price AS v_purchase_price,
+                       v.kms_driven AS v_kms_driven,
+                       v.insurance AS v_insurance,
+                       v.insurance_end_date AS v_insurance_end_date,
+                       v.rc_book_end_date AS v_rc_book_end_date,
+                       v.puc_number AS v_puc_number,
+                       v.puc_valid_upto AS v_puc_valid_upto,
+                       v.fine_details AS v_fine_details,
+                       v.fine_amount AS v_fine_amount,
+                       v.remarks AS v_remarks,
+                       v.hypothecation AS v_hypothecation
+                FROM vehicle_sale_orders vso
+                LEFT JOIN vehicles v ON v.id = vso.vehicle_id
+                WHERE vso.order_id = ?
+                ORDER BY vso.id DESC
+                """,
+                (order_id,),
+            ).fetchone()
+
         repairs = []
+        services = []
         if sale_row and sale_row["vehicle_id"]:
             repairs = conn.execute(
                 """
-                SELECT repair_date, description, cost, payment_mode, created_at
+                SELECT repair_date, description, cost, total_cost, payment_mode, created_at
                 FROM vehicle_repairs
                 WHERE vehicle_id = ?
                 ORDER BY COALESCE(repair_date, CAST(created_at AS DATE)) DESC, created_at DESC
                 """,
                 (sale_row["vehicle_id"],),
             ).fetchall()
+            services = conn.execute(
+                """
+                SELECT service_date, service_done_by, amount, remarks, created_at
+                FROM vehicle_services
+                WHERE vehicle_id = ?
+                ORDER BY COALESCE(service_date, CAST(created_at AS DATE)) DESC, created_at DESC
+                """,
+                (sale_row["vehicle_id"],),
+            ).fetchall()
         conn.close()
+
+        sale_payload = None
+        if sale_row:
+            s_dict = dict(sale_row)
+            # Normalize seller details from vehicle if missing in vso
+            s_dict["purchase_mode"] = s_dict.get("purchase_mode") or s_dict.get("v_purchase_mode") or "Direct"
+            s_dict["purchase_customer_name"] = s_dict.get("purchase_customer_name") or s_dict.get("v_purchase_customer_name") or ""
+            s_dict["purchase_customer_phone"] = s_dict.get("purchase_customer_phone") or s_dict.get("v_purchase_customer_phone") or ""
+            s_dict["purchase_customer_id"] = s_dict.get("purchase_customer_id") or s_dict.get("v_purchase_customer_id") or ""
+            s_dict["purchase_customer_address"] = s_dict.get("purchase_customer_address") or s_dict.get("v_purchase_customer_address") or ""
+            s_dict["purchase_reference"] = s_dict.get("purchase_reference") or s_dict.get("v_purchase_reference") or ""
+            s_dict["purchase_id_proof_ref"] = s_dict.get("purchase_id_proof_ref") or s_dict.get("v_purchase_id_proof_ref") or ""
+            s_dict["purchase_id_proof_filename"] = s_dict.get("purchase_id_proof_filename") or s_dict.get("v_purchase_id_proof_filename") or ""
+            s_dict["seller_id_proof_filename"] = s_dict["purchase_id_proof_filename"]
+
+            # Normalize vehicle document filenames
+            s_dict["rc_book_filename"] = s_dict.get("rc_book_filename") or s_dict.get("v_rc_book_filename") or ""
+            s_dict["rc_book_back_filename"] = s_dict.get("rc_book_back_filename") or s_dict.get("v_rc_book_back_filename") or ""
+            s_dict["insurance_document_filename"] = s_dict.get("insurance_document_filename") or s_dict.get("v_insurance_document_filename") or ""
+            s_dict["puc_certificate_filename"] = s_dict.get("puc_certificate_filename") or s_dict.get("v_puc_certificate_filename") or ""
+
+            # Normalize vehicle images
+            s_dict["vehicle_image_filenames"] = s_dict.get("vehicle_image_filenames") or s_dict.get("v_vehicle_image_filenames") or ""
+
+            # Normalize vehicle attributes
+            s_dict["model_year"] = s_dict.get("model_year") or s_dict.get("v_model_year") or ""
+            s_dict["registration_no"] = s_dict.get("registration_no") or s_dict.get("v_registration_no") or s_dict.get("v_chassis_no") or ""
+            s_dict["owners"] = s_dict.get("owners") or s_dict.get("v_owners") or ""
+            s_dict["current_fc"] = s_dict.get("current_fc") or s_dict.get("v_current_fc") or ""
+            s_dict["kms_driven"] = s_dict.get("kms_driven") or s_dict.get("v_kms_driven") or ""
+            s_dict["insurance_end_date"] = s_dict.get("insurance_end_date") or s_dict.get("v_insurance_end_date") or ""
+            s_dict["puc_valid_upto"] = s_dict.get("puc_valid_upto") or s_dict.get("v_puc_valid_upto") or ""
+            s_dict["fine_details"] = s_dict.get("fine_details") or s_dict.get("v_fine_details") or ""
+            s_dict["fine_amount"] = s_dict.get("fine_amount") or s_dict.get("v_fine_amount") or ""
+            s_dict["remarks"] = s_dict.get("remarks") or s_dict.get("v_remarks") or ""
+            s_dict["hypothecation"] = s_dict.get("hypothecation") or s_dict.get("v_hypothecation") or ""
+            s_dict["purchase_price"] = float(s_dict.get("purchase_price") or s_dict.get("v_purchase_price") or 0)
+            s_dict["repair_cost"] = float(s_dict.get("repair_cost") or 0)
+            s_dict["purchase_total_cost"] = float(s_dict.get("purchase_total_cost") or (s_dict["purchase_price"] + s_dict["repair_cost"]))
+            s_dict["subtotal_amount"] = float(s_dict.get("subtotal_amount") or s_dict.get("selling_price") or 0)
+            s_dict["discount_amount"] = float(s_dict.get("discount_amount") or 0)
+            disc_pct = float(s_dict.get("discount_percent") or 0)
+            if disc_pct <= 0 and s_dict["subtotal_amount"] > 0 and s_dict["discount_amount"] > 0:
+                disc_pct = round((s_dict["discount_amount"] * 100.0) / s_dict["subtotal_amount"], 2)
+            s_dict["discount_percent"] = disc_pct
+            s_dict["gst_percent"] = float(s_dict.get("gst_percent") or 0)
+            s_dict["gst_amount"] = float(s_dict.get("gst_amount") or 0)
+            s_dict["payment_finance_name"] = s_dict.get("payment_finance_name") or ""
+            s_dict["payment_commission_amount"] = float(s_dict.get("payment_commission_amount") or s_dict.get("commission_amount") or 0)
+
+            # Compute payment status and balance amount
+            purchase_cost = float(s_dict.get("purchase_price") or s_dict.get("v_purchase_price") or 0.0)
+            selling_price = float(s_dict.get("selling_price") or 0.0)
+            paid_amt = selling_price
+            bal_amt = max(0.0, purchase_cost - paid_amt)
+            s_dict["paid_amount"] = paid_amt
+            s_dict["balance_amount"] = bal_amt
+
+            if purchase_cost <= 0 or bal_amt <= 0:
+                s_dict["payment_status"] = "Paid"
+            elif paid_amt > 0:
+                s_dict["payment_status"] = "Partial"
+            else:
+                s_dict["payment_status"] = "Unpaid"
+
+            s_dict["status"] = s_dict.get("v_status") or "Sold"
+            sale_payload = build_gallery_vehicle_payload(s_dict)
+            sale_payload["status"] = s_dict.get("status") or "Sold"
+            sale_payload["vehicle_status"] = s_dict.get("status") or "Sold"
+            sale_payload["paid_amount"] = paid_amt
+            sale_payload["balance_amount"] = bal_amt
+            sale_payload["payment_status"] = s_dict["payment_status"]
+            sale_payload["purchase_price"] = s_dict["purchase_price"]
+            sale_payload["repair_cost"] = s_dict["repair_cost"]
+            sale_payload["purchase_total_cost"] = s_dict["purchase_total_cost"]
+            sale_payload["subtotal_amount"] = s_dict["subtotal_amount"]
+            sale_payload["discount_amount"] = s_dict["discount_amount"]
+            sale_payload["discount_percent"] = s_dict["discount_percent"]
+            sale_payload["gst_percent"] = s_dict["gst_percent"]
+            sale_payload["gst_amount"] = s_dict["gst_amount"]
+            sale_payload["payment_finance_name"] = s_dict["payment_finance_name"]
+            sale_payload["payment_commission_amount"] = s_dict["payment_commission_amount"]
+            sale_payload["customer_id_proof_ref"] = s_dict.get("customer_id_proof_ref")
+            sale_payload["purchase_reference"] = s_dict["purchase_reference"]
+            sale_payload["purchase_id_proof_ref"] = s_dict["purchase_id_proof_ref"]
+            sale_payload["rc_book_back_filename"] = s_dict["rc_book_back_filename"]
+            sale_payload["seller_id_proof_filename"] = s_dict["seller_id_proof_filename"]
+            sale_payload["kms_driven"] = s_dict["kms_driven"]
+            sale_payload["insurance_end_date"] = s_dict["insurance_end_date"]
+            sale_payload["puc_valid_upto"] = s_dict["puc_valid_upto"]
+            sale_payload["fine_details"] = s_dict["fine_details"]
+            sale_payload["fine_amount"] = s_dict["fine_amount"]
+            sale_payload["remarks"] = s_dict["remarks"]
+            sale_payload["hypothecation"] = s_dict["hypothecation"]
+
         return render_template(
             "vehicle_sale_detail_gallery.html",
             order=order,
-            sale=(build_gallery_vehicle_payload(dict(sale_row)) if sale_row else None),
+            sale=sale_payload,
             repairs=repairs,
+            services=services,
         )
     if order and request.method == "GET":
         customer_id = order["customer_id"]
@@ -21398,6 +22385,30 @@ def order_cancel(order_id: int):
         "UPDATE orders SET status = ?, cancelled_at = ? WHERE id = ?",
         ("Cancelled", now_str(), order_id),
     )
+    try:
+        sale_order = conn.execute(
+            "SELECT vehicle_id FROM vehicle_sale_orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if sale_order and sale_order["vehicle_id"]:
+            vehicle_id_to_restore = sale_order["vehicle_id"]
+            other_active_sale = conn.execute(
+                """
+                SELECT TOP 1 vso.id
+                FROM vehicle_sale_orders vso
+                JOIN orders o ON o.id = vso.order_id
+                WHERE vso.vehicle_id = ? AND vso.order_id <> ?
+                  AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
+                """,
+                (vehicle_id_to_restore, order_id),
+            ).fetchone()
+            if not other_active_sale:
+                conn.execute(
+                    "UPDATE vehicles SET status = 'Available', updated_at = ? WHERE id = ?",
+                    (now_str(), vehicle_id_to_restore),
+                )
+    except Exception:
+        pass
     conn.commit()
     conn.close()
     if wants_json:
@@ -22984,6 +23995,7 @@ def create_branch_transfer_vehicle(
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -23008,7 +24020,7 @@ def create_branch_transfer_vehicle(
                 insurance_document_filename,
                 puc_certificate_filename
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 source_vehicle.get("vehicle_name"),
@@ -23034,6 +24046,7 @@ def create_branch_transfer_vehicle(
                 source_vehicle.get("hypothecation"),
                 source_vehicle.get("remarks"),
                 source_vehicle.get("fine_details"),
+                source_vehicle.get("fine_amount"),
                 source_vehicle.get("sale_gst_enabled") or 0,
                 source_vehicle.get("sale_gst_mode"),
                 source_vehicle.get("sale_gst_value"),
@@ -23259,7 +24272,7 @@ def inventory_add():
 
         vehicle_photo_error = validate_vehicle_image_uploads(
             uploaded_vehicle_photos,
-            min_files=1,
+            min_files=0,
             max_files=4,
         )
         if vehicle_photo_error:
@@ -23318,6 +24331,7 @@ def inventory_add():
         hypothecation = hypothecation_name if hypothecation_enabled else None
         remarks = (request.form.get("remarks") or "").strip() or None
         fine_details = (request.form.get("fine_details") or "").strip() or None
+        fine_amount = to_int(request.form.get("fine_amount"))
         sale_gst_enabled = 1 if request.form.get("sale_gst_enabled") == "1" else 0
         sale_gst_mode = get_setting("gst_value_mode", "percent").strip().lower()
         if sale_gst_mode not in {"percent", "amount"}:
@@ -23598,6 +24612,7 @@ def inventory_add():
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -23631,7 +24646,7 @@ def inventory_add():
                 insurance_document_filename,
                 puc_certificate_filename
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 vehicle_name,
@@ -23664,6 +24679,7 @@ def inventory_add():
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -23796,7 +24812,23 @@ def inventory_vehicle_edit(vehicle_id: int):
         conn.close()
         return redirect(url_for("inventory"))
     vehicle = build_gallery_vehicle_payload(vehicle)
-    repairs: list[sqlite3.Row] = []
+    try:
+        sale_info = conn.execute(
+            """
+            SELECT TOP 1 order_id, id AS sale_id
+            FROM vehicle_sale_orders
+            WHERE vehicle_id = ?
+            ORDER BY ISNULL(updated_at, created_at) DESC, id DESC
+            """,
+            (vehicle_id,),
+        ).fetchone()
+        if sale_info:
+            vehicle["sale_order_id"] = sale_info["order_id"]
+            vehicle["sale_id"] = sale_info["sale_id"]
+    except Exception:
+        pass
+    repairs: list = []
+    services: list = []
     if view_only:
         try:
             repairs = conn.execute(
@@ -23810,6 +24842,18 @@ def inventory_vehicle_edit(vehicle_id: int):
             ).fetchall()
         except Exception:
             repairs = []
+        try:
+            services = conn.execute(
+                """
+                SELECT id, service_date, service_done_by, amount, remarks, created_at
+                FROM vehicle_services
+                WHERE vehicle_id = ?
+                ORDER BY service_date DESC, id DESC
+                """,
+                (vehicle_id,),
+            ).fetchall()
+        except Exception:
+            services = []
 
     if request.method == "POST":
         if view_only:
@@ -23895,6 +24939,7 @@ def inventory_vehicle_edit(vehicle_id: int):
         hypothecation = hypothecation_name if hypothecation_enabled else None
         remarks = (request.form.get("remarks") or "").strip() or None
         fine_details = (request.form.get("fine_details") or "").strip() or None
+        fine_amount = to_int(request.form.get("fine_amount"))
         sale_gst_enabled = 1 if request.form.get("sale_gst_enabled") == "1" else 0
         sale_gst_mode = get_setting("gst_value_mode", "percent").strip().lower()
         if sale_gst_mode not in {"percent", "amount"}:
@@ -24178,17 +25223,8 @@ def inventory_vehicle_edit(vehicle_id: int):
                 )
 
         compact_gallery = [name for name in updated_slots if name]
-        if not compact_gallery:
-            conn.close()
-            return render_template(
-                "vehicle_edit.html",
-                vehicle=vehicle,
-                view_only=False,
-                error="At least one vehicle photo is required.",
-            )
-
-        photo_filename = compact_gallery[0]
-        gallery_photo_filenames = compact_gallery[1:]
+        photo_filename = compact_gallery[0] if compact_gallery else None
+        gallery_photo_filenames = compact_gallery[1:] if len(compact_gallery) > 1 else []
         purchase_id_proof_filename = save_vehicle_upload(
             purchase_id_proof_upload,
             fallback=vehicle.get("purchase_id_proof_filename"),
@@ -24259,6 +25295,7 @@ def inventory_vehicle_edit(vehicle_id: int):
                 hypothecation = ?,
                 remarks = ?,
                 fine_details = ?,
+                fine_amount = ?,
                 sale_gst_enabled = ?,
                 sale_gst_mode = ?,
                 sale_gst_value = ?,
@@ -24322,6 +25359,7 @@ def inventory_vehicle_edit(vehicle_id: int):
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -24356,14 +25394,49 @@ def inventory_vehicle_edit(vehicle_id: int):
                 vehicle_id,
             ),
         )
+        if selling_price is not None:
+            conn.execute(
+                """
+                UPDATE vehicle_sale_orders
+                SET selling_price = ?,
+                    subtotal_amount = ?,
+                    total_amount = CASE
+                        WHEN gst_percent > 0 THEN ROUND((? - COALESCE(discount_amount, 0)) * (1.0 + gst_percent / 100.0), 2)
+                        ELSE ROUND(? - COALESCE(discount_amount, 0), 2)
+                    END,
+                    updated_at = ?
+                WHERE vehicle_id = ?
+                """,
+                (selling_price, selling_price, selling_price, selling_price, now_str(), vehicle_id),
+            )
+            conn.execute(
+                """
+                UPDATE orders
+                SET paid_amount = ?
+                WHERE id IN (SELECT order_id FROM vehicle_sale_orders WHERE vehicle_id = ?)
+                """,
+                (selling_price, vehicle_id),
+            )
+        if purchase_price is not None:
+            conn.execute(
+                """
+                UPDATE vehicle_sale_orders
+                SET purchase_price = ?,
+                    purchase_total_cost = ? + COALESCE(repair_cost, 0),
+                    updated_at = ?
+                WHERE vehicle_id = ?
+                """,
+                (purchase_price, purchase_price, now_str(), vehicle_id),
+            )
         conn.commit()
         conn.close()
         return redirect(url_for("inventory_vehicle_edit", vehicle_id=vehicle_id, mode="view", saved="1"))
 
+    service_total = sum(float(s["amount"]) for s in services if s and s["amount"] is not None) if services else 0.0
     conn.close()
     if view_only:
-        return render_template("vehicle_inventory_detail.html", vehicle=vehicle, repairs=repairs)
-    return render_template("vehicle_edit.html", vehicle=vehicle, view_only=False)
+        return render_template("vehicle_inventory_detail.html", vehicle=vehicle, repairs=repairs, services=services, service_total=service_total)
+    return render_template("vehicle_edit.html", vehicle=vehicle, view_only=False, services=services, service_total=service_total)
 
 @app.route("/vendors")
 def vendors():
@@ -26102,7 +27175,9 @@ def api_vehicle_sell(vehicle_id: int):
       discount_amount      (optional, decimal, default 0)
       gst_percent          (optional, decimal, default 0)
       advance_amount       (optional, decimal, default 0)
-      payment_method       (optional: Cash/UPI/Bank/GPay/Card, default Cash)
+      payment_method       (optional: Cash/UPI/Bank/GPay/Card/Finance, default Cash)
+      payment_finance_name        (required when payment_method = Finance)
+      payment_commission_amount   (required when payment_method = Finance, decimal)
       delivery_date        (optional, YYYY-MM-DD)
     """
     conn = get_db()
@@ -26159,8 +27234,22 @@ def api_vehicle_sell(vehicle_id: int):
         gst_percent      = opt_money("gst_percent")
         advance_amount   = opt_money("advance_amount")
         payment_method   = req_str("payment_method") or "Cash"
-        if payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card"}:
+        if payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}:
             payment_method = "Cash"
+
+        payment_finance_name = None
+        payment_commission_amount = None
+        if payment_method == "Finance":
+            payment_finance_name = req_str("payment_finance_name")
+            if not payment_finance_name:
+                return jsonify({"success": False, "message": "Finance name is required for Finance payments."}), 400
+            _raw_comm = req_str("payment_commission_amount")
+            if not _raw_comm:
+                return jsonify({"success": False, "message": "Commission amount is required for Finance payments."}), 400
+            try:
+                payment_commission_amount = round(max(float(_raw_comm), 0.0), 2)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "Commission amount must be a number."}), 400
 
         subtotal_amount  = round(selling_price, 2)
         taxable_amount   = round(max(subtotal_amount - discount_amount, 0.0), 2)
@@ -26244,7 +27333,8 @@ def api_vehicle_sell(vehicle_id: int):
                 subtotal_amount, purchase_total_cost,
                 discount_amount, gst_percent, gst_amount,
                 advance_amount, total_amount,
-                payment_method, vehicle_image_filenames,
+                payment_method, payment_finance_name, payment_commission_amount,
+                vehicle_image_filenames,
                 created_at, updated_at
             ) VALUES (
                 ?, ?, ?,
@@ -26255,7 +27345,8 @@ def api_vehicle_sell(vehicle_id: int):
                 ?, ?,
                 ?, ?, ?,
                 ?, ?,
-                ?, ?,
+                ?, ?, ?,
+                ?,
                 ?, ?
             )
             """,
@@ -26268,7 +27359,8 @@ def api_vehicle_sell(vehicle_id: int):
                 subtotal_amount, purchase_total,
                 discount_amount, gst_percent, gst_amount,
                 advance_amount, total_amount,
-                payment_method, gallery_names,
+                payment_method, payment_finance_name, payment_commission_amount,
+                gallery_names,
                 now, now,
             ),
         )
@@ -26394,6 +27486,252 @@ def api_add_repair(vehicle_id):
 
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Vehicle Service Backend Functionality
+# ---------------------------------------------------------------------------
+
+def save_vehicle_service(
+    conn,
+    vehicle_id,
+    service_date,
+    service_done_by,
+    amount,
+    remarks="",
+    branch_code=None,
+) -> tuple[bool, str, dict | None]:
+    if not vehicle_id:
+        return False, "Vehicle is required.", None
+    try:
+        clean_vehicle_id = int(vehicle_id)
+    except (TypeError, ValueError):
+        return False, "Valid vehicle ID is required.", None
+
+    vehicle = conn.execute(
+        "SELECT id, vehicle_name, vehicle_number, model_year FROM vehicles WHERE id = ?",
+        (clean_vehicle_id,),
+    ).fetchone()
+    if not vehicle:
+        return False, "Vehicle not found.", None
+
+    clean_date = normalize_service_date(service_date)
+    if not clean_date:
+        if not service_date or not str(service_date).strip():
+            clean_date = date.today().isoformat()
+        else:
+            return False, "Invalid service date format (expected YYYY-MM-DD or DD-MM-YYYY).", None
+
+    clean_done_by = (str(service_done_by or "")).strip()
+    if not clean_done_by:
+        return False, "Service Done By / Person Name is required.", None
+
+    if amount is None or str(amount).strip() == "":
+        return False, "Service amount is required.", None
+    try:
+        clean_amount = float(amount)
+        if math.isnan(clean_amount) or math.isinf(clean_amount) or clean_amount < 0:
+            return False, "Service amount must be a number greater than or equal to 0.", None
+    except (TypeError, ValueError):
+        return False, "Service amount must be a valid numeric value.", None
+
+    clean_amount = round(clean_amount, 2)
+    clean_remarks = (str(remarks or "")).strip() or None
+    clean_branch = normalize_branch_code(branch_code) if branch_code else get_current_branch_code()
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO vehicle_services
+            (vehicle_id, service_date, service_done_by, amount, remarks, branch_code, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, SYSDATETIME(), SYSDATETIME())
+        """,
+        (
+            clean_vehicle_id,
+            clean_date,
+            clean_done_by,
+            clean_amount,
+            clean_remarks,
+            clean_branch,
+        ),
+    )
+    conn.commit()
+    service_id = cur.lastrowid
+
+    service_obj = {
+        "id": service_id,
+        "vehicle_id": clean_vehicle_id,
+        "service_date": clean_date,
+        "service_done_by": clean_done_by,
+        "amount": clean_amount,
+        "remarks": clean_remarks or "",
+        "vehicle_name": vehicle["vehicle_name"] or "",
+        "vehicle_number": vehicle["vehicle_number"] or "",
+        "model_year": vehicle["model_year"] or "",
+    }
+    return True, "Service added successfully", service_obj
+
+
+@app.route("/api/services", methods=["GET", "POST"])
+@app.route("/api/vehicles/<int:vehicle_id>/services", methods=["GET", "POST"])
+def api_services(vehicle_id: int | None = None):
+    conn = get_db()
+    try:
+        if request.method == "POST":
+            data = request.get_json(silent=True) or request.form or {}
+            v_id = vehicle_id or data.get("vehicle_id")
+            s_date = data.get("service_date")
+            s_done_by = data.get("service_done_by")
+            amt = data.get("amount")
+            rem = data.get("remarks")
+
+            ok, msg, service_obj = save_vehicle_service(
+                conn,
+                vehicle_id=v_id,
+                service_date=s_date,
+                service_done_by=s_done_by,
+                amount=amt,
+                remarks=rem,
+            )
+            if not ok:
+                return jsonify({"ok": False, "success": False, "message": msg, "error": msg}), 400
+            return jsonify({
+                "ok": True,
+                "success": True,
+                "message": "Service added successfully",
+                "service": service_obj,
+            }), 201
+
+        # GET request
+        v_id = vehicle_id or request.args.get("vehicle_id")
+        from_date = (request.args.get("from_date") or "").strip()
+        to_date = (request.args.get("to_date") or "").strip()
+        q = (request.args.get("q") or "").strip()
+
+        query = """
+            SELECT s.id, s.vehicle_id, s.service_date, s.service_done_by, s.amount, s.remarks, s.created_at,
+                   v.vehicle_name, v.vehicle_number, v.model_year
+            FROM vehicle_services s
+            JOIN vehicles v ON v.id = s.vehicle_id
+            WHERE 1=1
+        """
+        params = []
+        if v_id:
+            try:
+                params.append(int(v_id))
+                query += " AND s.vehicle_id = ?"
+            except ValueError:
+                pass
+        if from_date and to_date:
+            query += " AND s.service_date BETWEEN ? AND ?"
+            params.extend([from_date, to_date])
+        elif from_date:
+            query += " AND s.service_date >= ?"
+            params.append(from_date)
+        elif to_date:
+            query += " AND s.service_date <= ?"
+            params.append(to_date)
+        if q:
+            query += """ AND (
+                LOWER(COALESCE(v.vehicle_name, '')) LIKE ?
+                OR LOWER(COALESCE(v.vehicle_number, '')) LIKE ?
+                OR LOWER(COALESCE(s.service_done_by, '')) LIKE ?
+                OR LOWER(COALESCE(s.remarks, '')) LIKE ?
+            )"""
+            like = f"%{q.lower()}%"
+            params.extend([like, like, like, like])
+        query += " ORDER BY s.service_date DESC, s.id DESC"
+
+        rows = conn.execute(query, tuple(params)).fetchall()
+        services = []
+        total_amount = 0.0
+        for r in rows:
+            amt = float(r["amount"] or 0)
+            total_amount += amt
+            services.append({
+                "id": r["id"],
+                "vehicle_id": r["vehicle_id"],
+                "service_date": str(r["service_date"]),
+                "service_done_by": r["service_done_by"] or "",
+                "amount": amt,
+                "remarks": r["remarks"] or "",
+                "vehicle_name": r["vehicle_name"] or "",
+                "vehicle_number": r["vehicle_number"] or "",
+                "model_year": r["model_year"] or "",
+                "created_at": str(r["created_at"]) if r["created_at"] else "",
+            })
+        return jsonify({
+            "ok": True,
+            "success": True,
+            "services": services,
+            "count": len(services),
+            "total_services": len(services),
+            "total_amount": round(total_amount, 2),
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/service/add", methods=["GET", "POST"])
+def service_add():
+    conn = get_db()
+    prefill_vehicle_id = request.args.get("vehicle_id") or request.form.get("vehicle_id") or ""
+    prefill_vehicle = None
+    if prefill_vehicle_id:
+        try:
+            prefill_vehicle = conn.execute(
+                "SELECT id, vehicle_name, vehicle_number, model_year FROM vehicles WHERE id = ?",
+                (int(prefill_vehicle_id),),
+            ).fetchone()
+        except Exception:
+            prefill_vehicle = None
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or request.form or {}
+        v_id = data.get("vehicle_id") or prefill_vehicle_id
+        service_date = data.get("service_date")
+        service_done_by = data.get("service_done_by")
+        amount = data.get("amount")
+        remarks = data.get("remarks")
+
+        ok, msg, service_obj = save_vehicle_service(
+            conn,
+            vehicle_id=v_id,
+            service_date=service_date,
+            service_done_by=service_done_by,
+            amount=amount,
+            remarks=remarks,
+        )
+        if request.is_json:
+            conn.close()
+            return jsonify({"success": ok, "message": msg, "service": service_obj}), (201 if ok else 400)
+        if ok:
+            conn.close()
+            return redirect(url_for("reports", type="service", from_date=service_obj["service_date"], to_date=service_obj["service_date"]))
+
+        vehicles = conn.execute(
+            "SELECT id, vehicle_name, vehicle_number, model_year FROM vehicles WHERE LOWER(COALESCE(status, 'available')) <> 'transferred' ORDER BY vehicle_name"
+        ).fetchall()
+        conn.close()
+        return render_template(
+            "service_add.html",
+            error=msg,
+            prefill_vehicle=prefill_vehicle,
+            vehicles=vehicles,
+            today=date.today().isoformat(),
+        )
+
+    vehicles = conn.execute(
+        "SELECT id, vehicle_name, vehicle_number, model_year FROM vehicles WHERE LOWER(COALESCE(status, 'available')) <> 'transferred' ORDER BY vehicle_name"
+    ).fetchall()
+    conn.close()
+    return render_template(
+        "service_add.html",
+        prefill_vehicle=prefill_vehicle,
+        vehicles=vehicles,
+        today=date.today().isoformat(),
+    )
+
 
 @app.route("/api/vehicles/<int:vehicle_id>/rent", methods=["POST"])
 @jwt_required()
@@ -26967,8 +28305,9 @@ def api_sale_detail(sale_id: int):
         conn.close()
 
 
-@app.route("/api/sales/<int:sale_id>", methods=["PUT"])
-@jwt_required()
+@app.route("/api/sales/<int:sale_id>", methods=["PUT", "POST"])
+@app.route("/api/sales/<int:sale_id>/update", methods=["PUT", "POST"])
+@jwt_required(optional=True)
 def api_sale_update(sale_id: int):
     """
     Mobile Edit Sale.
@@ -27007,9 +28346,31 @@ def api_sale_update(sale_id: int):
 
         customer_phone = to_str("customer_phone")
         customer_address = to_str("customer_address")
+        customer_identifier = to_str("customer_identifier")
+        customer_id_proof_ref = to_str("customer_id_proof_ref")
+        model_year = to_str("model_year")
+        registration_no = to_str("registration_no")
+        owners = to_str("owners")
+        current_fc = to_str("current_fc")
+        seller_name = to_str("seller_name")
+        seller_phone = to_str("seller_phone")
+        seller_id = to_str("seller_id")
+        purchase_mode = to_str("purchase_mode")
+
         payment_method = to_str("payment_method")
-        if payment_method is not None and payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card"}:
+        if payment_method is not None and payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}:
             payment_method = payment_method or "Cash"
+        payment_finance_name = to_str("payment_finance_name")
+        payment_commission_amount = to_money("payment_commission_amount")
+        if "payment_commission_amount" in data and payment_commission_amount is None:
+            return jsonify({"success": False, "message": "payment_commission_amount must be a number."}), 400
+        _effective_method = payment_method if payment_method is not None else (row.get("payment_method") or "Cash")
+        if _effective_method == "Finance":
+            _eff_fin_name = payment_finance_name if payment_finance_name is not None else (row.get("payment_finance_name") or "")
+            if not _eff_fin_name:
+                return jsonify({"success": False, "message": "Finance name is required for Finance payments."}), 400
+            if payment_commission_amount is None and row.get("payment_commission_amount") is None:
+                return jsonify({"success": False, "message": "Commission amount is required for Finance payments."}), 400
 
         delivery_date = to_str("delivery_date")
 
@@ -27034,9 +28395,40 @@ def api_sale_update(sale_id: int):
         if customer_address is not None:
             set_clauses.append("customer_address = ?")
             params.append(customer_address)
+        if customer_identifier is not None:
+            set_clauses.append("customer_identifier = ?")
+            params.append(customer_identifier or None)
+        if customer_id_proof_ref is not None:
+            set_clauses.append("customer_id_proof_ref = ?")
+            params.append(customer_id_proof_ref[:10] if customer_id_proof_ref else None)
+        if model_year is not None:
+            set_clauses.append("model_year = ?")
+            params.append(int(model_year) if model_year.isdigit() else None)
+        if registration_no is not None:
+            set_clauses.append("registration_no = ?")
+            params.append(registration_no or None)
+        if owners is not None:
+            set_clauses.append("owners = ?")
+            params.append(int(owners) if owners.isdigit() else None)
+        if current_fc is not None:
+            set_clauses.append("current_fc = ?")
+            params.append(current_fc or None)
         if payment_method is not None:
             set_clauses.append("payment_method = ?")
             params.append(payment_method)
+        if _effective_method == "Finance":
+            if payment_finance_name is not None:
+                set_clauses.append("payment_finance_name = ?")
+                params.append(payment_finance_name)
+            if payment_commission_amount is not None:
+                set_clauses.append("payment_commission_amount = ?")
+                params.append(payment_commission_amount)
+        elif payment_method is not None:
+            # switched away from Finance -> clear finance details so profit is not inflated
+            set_clauses.append("payment_finance_name = ?")
+            params.append(None)
+            set_clauses.append("payment_commission_amount = ?")
+            params.append(None)
 
         needs_recalc = any(f in data for f in ("selling_price", "discount_amount", "gst_percent"))
         if needs_recalc:
@@ -27079,10 +28471,53 @@ def api_sale_update(sale_id: int):
             tuple(params),
         )
 
-        if delivery_date and row.get("order_id"):
+        if row.get("order_id"):
+            if delivery_date:
+                conn.execute(
+                    "UPDATE orders SET due_date = ? WHERE id = ?",
+                    (delivery_date, row.get("order_id")),
+                )
+            if selling_price is not None:
+                conn.execute(
+                    "UPDATE orders SET paid_amount = ? WHERE id = ?",
+                    (selling_price, row.get("order_id")),
+                )
+        if selling_price is not None and row.get("vehicle_id"):
             conn.execute(
-                "UPDATE orders SET due_date = ? WHERE id = ?",
-                (delivery_date, row.get("order_id")),
+                "UPDATE vehicles SET selling_price = ? WHERE id = ?",
+                (selling_price, row.get("vehicle_id")),
+            )
+        veh_set = []
+        veh_params = []
+        if seller_name is not None:
+            veh_set.append("purchase_customer_name = ?")
+            veh_params.append(seller_name)
+        if seller_phone is not None:
+            veh_set.append("purchase_customer_phone = ?")
+            veh_params.append(seller_phone)
+        if seller_id is not None:
+            veh_set.append("purchase_customer_id = ?")
+            veh_params.append(seller_id)
+        if purchase_mode is not None:
+            veh_set.append("purchase_mode = ?")
+            veh_params.append(purchase_mode)
+        if model_year is not None and model_year.isdigit():
+            veh_set.append("model_year = ?")
+            veh_params.append(int(model_year))
+        if registration_no is not None:
+            veh_set.append("registration_no = ?")
+            veh_params.append(registration_no)
+        if owners is not None and owners.isdigit():
+            veh_set.append("owners = ?")
+            veh_params.append(int(owners))
+        if current_fc is not None:
+            veh_set.append("current_fc = ?")
+            veh_params.append(current_fc)
+        if veh_set and row.get("vehicle_id"):
+            veh_params.append(row["vehicle_id"])
+            conn.execute(
+                f"UPDATE vehicles SET {', '.join(veh_set)} WHERE id = ?",
+                tuple(veh_params),
             )
 
         conn.commit()
@@ -27339,8 +28774,17 @@ def _serialize_sale_row(row):
         "gst_percent": float(row.get("gst_percent") or 0),
         "gst_amount": float(row.get("gst_amount") or 0),
         "advance_amount": float(row.get("advance_amount") or 0),
+        "paid_amount": float(row.get("selling_price") or 0),
+        "balance_amount": max(0.0, float(row.get("purchase_price") or 0) - float(row.get("selling_price") or 0)),
+        "payment_status": (
+            "Paid"
+            if (max(0.0, float(row.get("purchase_price") or 0) - float(row.get("selling_price") or 0)) <= 0)
+            else ("Partial" if float(row.get("selling_price") or 0) > 0 else "Unpaid")
+        ),
         "total_amount": float(row.get("total_amount") or 0),
         "payment_method": row.get("payment_method") or "-",
+        "payment_finance_name": row.get("payment_finance_name") or "",
+        "payment_commission_amount": float(row.get("payment_commission_amount") or 0),
         "customer_name": row.get("customer_name") or "-",
         "customer_phone": row.get("customer_phone") or "-",
         "customer_identifier": row.get("customer_identifier") or "-",
@@ -27407,6 +28851,48 @@ def api_expense_category_add():
     except Exception as e:
         conn.rollback()
         return jsonify({"success": False, "message": f"Unable to add category: {e}"}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/reports/expense-summary", methods=["GET"])
+@jwt_required()
+def api_expense_summary():
+    """Return the shared category/month expense summary for mobile clients."""
+    category = str(request.args.get("category") or "").strip()
+    month_key = str(request.args.get("month") or date.today().strftime("%Y-%m")).strip()
+    if not category:
+        return jsonify({
+            "success": True,
+            "category": "",
+            "month": month_key,
+            "total": 0.0,
+            "count": 0,
+            "breakdown": [],
+        })
+
+    conn = get_db()
+    try:
+        ensure_expenses_category_column(conn)
+        ensure_expense_categories_table(conn)
+        categories = [
+            row["name"] for row in conn.execute(
+                "SELECT name FROM expense_categories ORDER BY name"
+            ).fetchall() if row["name"]
+        ]
+        if not any(category.lower() == item.lower() for item in categories):
+            return jsonify({"success": False, "message": "Unknown expense category."}), 400
+        data = get_expense_summary_data(conn, category, month_key)
+        return jsonify({
+            "success": True,
+            "category": category,
+            "month": month_key,
+            "total": data["total"],
+            "count": data["count"],
+            "breakdown": data["breakdown"],
+        })
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Unable to load expense summary: {exc}"}), 500
     finally:
         conn.close()
 
@@ -27568,7 +29054,15 @@ def api_expense_add():
         ensure_expenses_category_column(conn)
         ensure_expense_categories_table(conn)
 
-        created_at = now_str()
+        expense_date_input = req_str("expense_date")
+        if expense_date_input:
+            try:
+                datetime.strptime(expense_date_input, "%Y-%m-%d")
+                created_at = f"{expense_date_input} {datetime.now().strftime('%H:%M:%S')}"
+            except (ValueError, TypeError):
+                created_at = now_str()
+        else:
+            created_at = now_str()
         staff_row = None
 
         if is_salary:
@@ -27858,7 +29352,8 @@ def api_dashboard():
                 SELECT COUNT(*) AS total_sales,
                        COALESCE(SUM(COALESCE(vso.total_amount,0)),0) AS total_revenue,
                        COALESCE(SUM(COALESCE(v.purchase_price,0)),0) AS total_purchase,
-                       COALESCE(SUM(COALESCE(vso.repair_cost,0)),0) AS total_repair
+                       COALESCE(SUM(COALESCE(vso.repair_cost,0)),0) AS total_repair,
+                       COALESCE(SUM(COALESCE(vso.payment_commission_amount,0)),0) AS total_commission
                 FROM vehicle_sale_orders vso
                 JOIN vehicles v ON v.id=vso.vehicle_id
                 LEFT JOIN orders o ON o.id=vso.order_id
@@ -27877,6 +29372,7 @@ def api_dashboard():
             # purchase cost.
             total_purchase = 0.0
             total_repair   = 0.0
+            total_commission = 0.0
             total_profit   = total_revenue
             active_rentals = int(q("""
                 SELECT COUNT(*) AS c FROM vehicle_rental_orders WHERE LOWER(status)='active'
@@ -27884,7 +29380,8 @@ def api_dashboard():
         else:
             total_purchase = float(sales_row["total_purchase"] or 0)
             total_repair   = float(sales_row["total_repair"] or 0)
-            total_profit   = total_revenue - total_purchase - total_repair
+            total_commission = float(sales_row["total_commission"] or 0)
+            total_profit   = total_revenue - total_purchase - total_repair + total_commission
             active_rentals = 0
 
         if rental_mode:
@@ -28008,6 +29505,7 @@ def api_dashboard():
                 "rented_count":    rented_count,
                 "profit":          total_profit,
                 "total_revenue":   total_revenue,
+                "total_commission": total_commission,
                 "active_rentals":  active_rentals,
             },
             "recent_vehicles": recent_vehicles,

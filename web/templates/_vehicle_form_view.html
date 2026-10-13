@@ -22,7 +22,10 @@
   .veh-head-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
   .veh-two-col { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr); gap: 16px; align-items: start; }
   .veh-two-col.reverse { grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.72fr); }
-  .veh-pane { border: 1px solid #dcbef0; border-radius: 18px; background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%); padding: 14px; min-width: 0; height: 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48); }
+  .veh-pane { border: 1px solid #dcbef0; border-radius: 18px; background: linear-gradient(180deg, #eadbfb 0%, #e5d4f8 100%); padding: 14px; min-width: 0; height: 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48); overflow-x: hidden; box-sizing: border-box; }
+  .veh-service-table .list-row > div { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+  .veh-expenses-stack { display: flex !important; flex-direction: column !important; gap: 20px !important; width: 100% !important; box-sizing: border-box !important; }
+  .veh-expenses-stack > .veh-pane { width: 100% !important; height: auto !important; box-sizing: border-box !important; }
   .veh-pane-title { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .veh-pane-title i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 12px; background: #f2ebff; color: #3d66e0; }
   .veh-pane-title strong { display: block; color: #3f2265; font-size: 1rem; }
@@ -149,9 +152,11 @@
     <a class="btn ghost js-back-button" href="{{ url_for('inventory', tab='vehicles') }}" data-fallback="{{ url_for('inventory', tab='vehicles') }}">Back</a>
     {% if view_only %}
     <a class="btn primary" href="{{ url_for('inventory_vehicle_edit', vehicle_id=vehicle.id, mode='edit') }}"><i class="bi bi-pencil-square"></i> Edit</a>
+    <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Service</a>
     {% endif %}
     {% if not view_only %}
     <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-wrench-adjustable"></i> Add Repair</a>
+    <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Service</a>
     <form method="post" action="{{ url_for('inventory_delete', vehicle_id=vehicle.id) }}" onsubmit="return confirm('Do you want to delete this vehicle?');">
       <button class="btn ghost hover-red-fill" type="submit"><i class="bi bi-trash"></i> Delete</button>
     </form>
@@ -431,6 +436,7 @@
           <label><span>Selling Price</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.selling_price or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="selling_price" value="{{ vehicle.selling_price or 0 }}" />{% endif %}</label>
           <label class="span-2"><span>Remark if any</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.remarks or '-' }}</div>{% else %}<textarea name="remarks">{{ vehicle.remarks or '' }}</textarea>{% endif %}</label>
           <label class="span-2"><span>Fine Details</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.fine_details or '-' }}</div>{% else %}<textarea name="fine_details">{{ vehicle.fine_details or '' }}</textarea>{% endif %}</label>
+          <label class="span-2"><span>Fine Amount</span>{% if view_only %}<div class="veh-readonly">{% if vehicle.fine_amount is defined and vehicle.fine_amount is not none %}&#8377; {{ vehicle.fine_amount }}{% else %}-{% endif %}</div>{% else %}<input type="number" name="fine_amount" min="0" step="1" inputmode="numeric" pattern="[0-9]*" placeholder="Fine amount" value="{% if vehicle.fine_amount is defined and vehicle.fine_amount is not none %}{{ vehicle.fine_amount }}{% endif %}" onkeydown="if(['.','-','+','e','E',','].indexOf(event.key)!==-1){event.preventDefault();}" oninput="if(!/^\d*$/.test(this.value)){this.value=this.value.replace(/\D.*$/,'');}" />{% endif %}</label>
           <label class="span-2">
             <span>Sale GST</span>
             {% if view_only %}
@@ -504,10 +510,10 @@
         <div class="veh-doc-stack">
           <div class="veh-doc-item">
             <div>
-              <strong>RC Book (Front)</strong>
+              <strong>RC Book</strong>
               {% if not view_only %}
               <div style="margin-top:4px;">
-                <label class="veh-doc-upload" for="rc_book_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book (Front)</span></label>
+                <label class="veh-doc-upload" for="rc_book_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book</span></label>
                 <input class="veh-doc-input" id="rc_book_file" type="file" name="rc_book" />
               </div>
               {% endif %}
@@ -517,7 +523,7 @@
                 {% set rc_lower = vehicle.rc_book_filename|lower %}
                 {% set rc_is_image = rc_lower.endswith('.png') or rc_lower.endswith('.jpg') or rc_lower.endswith('.jpeg') or rc_lower.endswith('.webp') or rc_lower.endswith('.gif') %}
                 {% if rc_is_image %}
-                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" alt="RC Book Front" data-preview-image />
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" alt="RC Book" data-preview-image />
                 {% else %}
                 <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
                 {% endif %}
@@ -525,34 +531,7 @@
                 <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_filename) }}" target="_blank" rel="noopener">Open file</a>
               {% else %}
                 <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
-                <span class="veh-doc-empty-note">No RC Book (Front) uploaded</span>
-              {% endif %}
-            </div>
-          </div>
-          <div class="veh-doc-item">
-            <div>
-              <strong>RC Book (Back)</strong>
-              {% if not view_only %}
-              <div style="margin-top:4px;">
-                <label class="veh-doc-upload" for="rc_book_back_file"><i class="bi bi-file-earmark-text"></i><span>Click to upload RC Book (Back)</span></label>
-                <input class="veh-doc-input" id="rc_book_back_file" type="file" name="rc_book_back" />
-              </div>
-              {% endif %}
-            </div>
-            <div class="veh-doc-preview">
-              {% if vehicle.rc_book_back_filename %}
-                {% set rcb_lower = vehicle.rc_book_back_filename|lower %}
-                {% set rcb_is_image = rcb_lower.endswith('.png') or rcb_lower.endswith('.jpg') or rcb_lower.endswith('.jpeg') or rcb_lower.endswith('.webp') or rcb_lower.endswith('.gif') %}
-                {% if rcb_is_image %}
-                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_back_filename) }}" alt="RC Book Back" data-preview-image />
-                {% else %}
-                <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
-                {% endif %}
-                <span class="veh-doc-name">{{ vehicle.rc_book_back_filename }}</span>
-                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.rc_book_back_filename) }}" target="_blank" rel="noopener">Open file</a>
-              {% else %}
-                <span class="veh-doc-icon"><i class="bi bi-file-earmark-text"></i></span>
-                <span class="veh-doc-empty-note">No RC Book (Back) uploaded</span>
+                <span class="veh-doc-empty-note">No RC Book uploaded</span>
               {% endif %}
             </div>
           </div>
@@ -583,6 +562,33 @@
               {% endif %}
             </div>
           </div>
+          <div class="veh-doc-item">
+            <div>
+              <strong>PUC Certificate</strong>
+              {% if not view_only %}
+              <div style="margin-top:4px;">
+                <label class="veh-doc-upload" for="puc_certificate_file"><i class="bi bi-patch-check"></i><span>Click to upload PUC</span></label>
+                <input class="veh-doc-input" id="puc_certificate_file" type="file" name="puc_certificate" />
+              </div>
+              {% endif %}
+            </div>
+            <div class="veh-doc-preview">
+              {% if vehicle.puc_certificate_filename %}
+                {% set puc_lower = vehicle.puc_certificate_filename|lower %}
+                {% set puc_is_image = puc_lower.endswith('.png') or puc_lower.endswith('.jpg') or puc_lower.endswith('.jpeg') or puc_lower.endswith('.webp') or puc_lower.endswith('.gif') %}
+                {% if puc_is_image %}
+                <img class="veh-doc-thumb" src="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.puc_certificate_filename) }}" alt="PUC Certificate" data-preview-image />
+                {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-file-earmark-medical"></i></span>
+                {% endif %}
+                <span class="veh-doc-name">{{ vehicle.puc_certificate_filename }}</span>
+                <a class="veh-inline-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ vehicle.puc_certificate_filename) }}" target="_blank" rel="noopener">Open file</a>
+              {% else %}
+                <span class="veh-doc-icon"><i class="bi bi-patch-check"></i></span>
+                <span class="veh-doc-empty-note">No PUC Certificate uploaded</span>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -606,7 +612,7 @@
           <label><span>Purchase Price</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.purchase_price or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="purchase_price" {% if app_setting('vehicle_add_required_purchase_price', '1') == '1' %}required{% endif %} value="{{ vehicle.purchase_price or 0 }}" data-purchase-price />{% endif %}</label>
           <label><span>Settlement Status</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_settlement_status or '-' }}</div>{% else %}{% set ss = (vehicle.purchase_settlement_status or 'Paid') %}<select name="purchase_settlement_status" required data-purchase-settlement-status><option value="Paid" {% if ss == 'Paid' %}selected{% endif %}>Paid</option><option value="Partial" {% if ss == 'Partial' %}selected{% endif %}>Partial</option><option value="Unpaid" {% if ss == 'Unpaid' %}selected{% endif %}>Unpaid</option></select>{% endif %}</label>
           <label><span>Paid Amount</span>{% if view_only %}<div class="veh-readonly">&#8377; {{ "%.2f"|format(vehicle.purchase_paid_amount or 0) }}</div>{% else %}<input type="number" step="0.01" min="0" name="purchase_paid_amount" required value="{{ vehicle.purchase_paid_amount if vehicle.purchase_paid_amount is not none else (vehicle.purchase_price or 0) }}" data-purchase-paid-amount />{% endif %}</label>
-          <label><span>Paymode</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_payment_mode or '-' }}</div>{% else %}{% set pm = (vehicle.purchase_payment_mode or 'Cash') %}<select name="purchase_payment_mode" required>{% for mode in ['Cash','UPI','Bank','GPay','Card','Finance'] %}<option value="{{ mode }}" {% if mode == pm %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>{% endif %}</label>
+          <label><span>Paymode</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_payment_mode or '-' }}</div>{% else %}{% set pm = (vehicle.purchase_payment_mode or 'Cash') %}<select name="purchase_payment_mode" required>{% for mode in ['Cash','UPI','Bank','GPay','Card'] %}<option value="{{ mode }}" {% if mode == pm %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>{% endif %}</label>
           <label class="span-2"><span>Paid Date &amp; Time</span>{% if view_only %}<div class="veh-readonly">{{ vehicle.purchase_paid_at|datetime_display if vehicle.purchase_paid_at else '-' }}</div>{% else %}<input type="datetime-local" name="purchase_paid_at" required data-default-now value="{{ (vehicle.purchase_paid_at|datetime_display)|replace(' ', 'T') if vehicle.purchase_paid_at else '' }}" />{% endif %}</label>
         </div>
       </div>
@@ -620,8 +626,8 @@
       <span>Vehicle Expenses</span>
     </div>
 
-    <div class="veh-two-col reverse">
-      <div class="veh-pane">
+    <div class="veh-expenses-stack" style="display: flex; flex-direction: column; gap: 20px; width: 100%; box-sizing: border-box;">
+      <div class="veh-pane" style="width: 100%; box-sizing: border-box; height: auto;">
         <div class="veh-pane-title">
           <i class="bi bi-tools"></i>
           <div>
@@ -631,28 +637,30 @@
 
         {% set repair_rows = repairs or [] %}
         {% if repair_rows %}
-        <div class="list-table" style="--list-cols: 0.9fr 1.6fr 0.7fr 0.9fr;">
-          <div class="list-row list-head">
-            <div>Date</div>
-            <div>Expenses For</div>
-            <div style="text-align:right;">Cost</div>
-            <div>Paymode</div>
-          </div>
-          {% set repair_total = 0.0 %}
-          {% for r in repair_rows %}
-          {% set repair_total = repair_total + ((r.cost or 0)|float) %}
-          <div class="list-row">
-            <div>{{ r.repair_date|date_dmy if r.repair_date else (r.created_at|date_dmy if r.created_at else '-') }}</div>
-            <div>{{ r.description or 'Repair' }}</div>
-            <div style="text-align:right;">&#8377; {{ "%.2f"|format(r.cost or 0) }}</div>
-            <div>{{ r.payment_mode or '-' }}</div>
-          </div>
-          {% endfor %}
-          <div class="list-row" style="font-weight:900;">
-            <div></div>
-            <div>Total</div>
-            <div style="text-align:right;">&#8377; {{ "%.2f"|format(repair_total or 0) }}</div>
-            <div></div>
+        <div style="width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; min-width:0; box-sizing:border-box;">
+          <div class="list-table" style="--list-cols: minmax(90px, 1fr) minmax(160px, 2fr) minmax(90px, 1fr) minmax(100px, 1fr); width:100%; min-width:440px; box-sizing:border-box;">
+            <div class="list-row list-head">
+              <div>Date</div>
+              <div>Expenses For</div>
+              <div style="text-align:right;">Cost</div>
+              <div>Paymode</div>
+            </div>
+            {% set repair_total = 0.0 %}
+            {% for r in repair_rows %}
+            {% set repair_total = repair_total + ((r.cost or 0)|float) %}
+            <div class="list-row">
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ r.repair_date|date_dmy if r.repair_date else (r.created_at|date_dmy if r.created_at else '-') }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ r.description or 'Repair' }}</div>
+              <div style="text-align:right; min-width:0; word-break:break-word; overflow-wrap:anywhere;">&#8377; {{ "%.2f"|format(r.cost or 0) }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ r.payment_mode or '-' }}</div>
+            </div>
+            {% endfor %}
+            <div class="list-row" style="font-weight:900;">
+              <div></div>
+              <div>Total</div>
+              <div style="text-align:right;">&#8377; {{ "%.2f"|format(repair_total or 0) }}</div>
+              <div></div>
+            </div>
           </div>
         </div>
         {% else %}
@@ -661,7 +669,56 @@
 
         <div class="veh-head-actions" style="margin-top: 12px;">
           <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-plus-circle"></i> Add Repair</a>
-          <a class="btn primary" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}"><i class="bi bi-bag-check"></i> Sold Out</a>
+          <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Add Service</a>
+          {% if (vehicle.status or '')|lower == 'sold' %}
+            <a class="btn primary" href="{{ url_for('order_detail', order_id=vehicle.sale_order_id, sale_id=vehicle.sale_id, source='orders') if (vehicle.sale_order_id or vehicle.sale_id) else url_for('orders') }}"><i class="bi bi-eye"></i> View Sale</a>
+          {% else %}
+            <a class="btn primary" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}"><i class="bi bi-bag-check"></i> Sell</a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="veh-pane" style="width: 100%; box-sizing: border-box; height: auto;">
+        <div class="veh-pane-title">
+          <i class="bi bi-gear-wide-connected"></i>
+          <div>
+            <strong>Vehicle Services</strong>
+          </div>
+        </div>
+
+        {% set service_rows = services or [] %}
+        {% if service_rows %}
+        <div class="veh-service-table-wrap" style="width:100%; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; min-width:0; box-sizing:border-box;">
+          <div class="list-table veh-service-table" style="--list-cols: minmax(95px, 1.1fr) minmax(140px, 1.4fr) minmax(95px, 1.1fr) minmax(160px, 2.4fr); width:100%; min-width:480px; box-sizing:border-box;">
+            <div class="list-row list-head">
+              <div>Date</div>
+              <div>Done By</div>
+              <div style="text-align:right;">Amount</div>
+              <div>Remarks</div>
+            </div>
+            {% set ns_service = namespace(total=0.0) %}
+            {% for s in service_rows %}
+            {% set ns_service.total = ns_service.total + ((s.amount or 0)|float) %}
+            <div class="list-row">
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ (s.service_date or s.created_at)|date_only_dmy }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ s.service_done_by or '-' }}</div>
+              <div style="text-align:right; min-width:0; word-break:break-word; overflow-wrap:anywhere;">&#8377; {{ "{:,.2f}".format((s.amount or 0)|float) }}</div>
+              <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ s.remarks or '-' }}</div>
+            </div>
+            {% endfor %}
+            <div class="list-row" style="font-weight:900;">
+              <div></div>
+              <div>Total</div>
+              <div style="text-align:right;">&#8377; {{ "{:,.2f}".format((service_total if (service_total is defined and service_total is not none) else ns_service.total)|float) }}</div>
+              <div></div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="muted" style="margin: 0;">No service records found.</p>
+        {% endif %}
+
+        <div class="veh-head-actions" style="margin-top: 12px;">
+          <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-plus-circle"></i> Add Service</a>
         </div>
       </div>
     </div>

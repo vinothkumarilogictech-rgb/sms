@@ -330,19 +330,19 @@
         <h3>Buyer Details</h3>
         <div class="sale-grid">
           <label>
-            Customer Name
+            Customer Name *
             <input type="text" name="customer_name" value="{{ form_data.customer_name or '' }}" placeholder="Customer name" required>
           </label>
           <label>
             Customer ID
-            <input type="text" name="customer_identifier" value="{{ form_data.customer_identifier or '' }}" placeholder="Customer ID" required>
+            <input type="text" name="customer_identifier" value="{{ form_data.customer_identifier or '' }}" placeholder="Customer ID">
           </label>
           <label>
             Reference Date
-            <input type="date" name="customer_id_proof_ref" value="{{ form_data.customer_id_proof_ref or '' }}" required>
+            <input type="date" name="customer_id_proof_ref" value="{{ form_data.customer_id_proof_ref or '' }}">
           </label>
           <label>
-            Customer Phone Number
+            Customer Phone Number *
             <input
               type="text"
               name="customer_phone"
@@ -407,11 +407,64 @@
         </div>
       </section>
 
-      <section class="sale-card sale-card-vehicle-theme">
+      <section class="sale-card sale-card-vehicle-theme" id="seller-details">
+        <h3>Seller Details</h3>
+        <div class="sale-grid">
+          <label>
+            Seller Name
+            <input type="text" name="seller_name" id="seller-name-input" value="{{ form_data.seller_name or '' }}" placeholder="Seller name">
+          </label>
+          <label>
+            Seller Mobile Number
+            <input type="text" name="seller_phone" id="seller-phone-input" value="{{ form_data.seller_phone or '' }}" placeholder="Seller mobile" inputmode="tel">
+          </label>
+          <label>
+            Seller ID
+            <input type="text" name="seller_id" id="seller-id-input" value="{{ form_data.seller_id or '' }}" placeholder="Seller ID">
+          </label>
+        </div>
+        <div class="sale-grid" style="margin-top: 12px;">
+          <label>
+            Purchase Mode
+            <select name="purchase_mode" id="purchase-mode-select">
+              {% for mode in ["Direct", "Exchange", "Finance", "Broker", "Agent"] %}
+              <option value="{{ mode }}" {% if (form_data.purchase_mode or 'Direct') == mode %}selected{% endif %}>{{ mode }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Seller Address
+            <input type="text" name="seller_address" id="seller-address-input" value="{{ form_data.seller_address or '' }}" placeholder="Seller address">
+          </label>
+          <label>
+            Seller Reference
+            <input type="text" name="seller_reference" id="seller-reference-input" value="{{ form_data.seller_reference or '' }}" placeholder="Seller reference">
+          </label>
+        </div>
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <div class="sale-proof">
+            <label>
+              Seller ID Document
+              <input type="file" name="seller_id_proof_file" accept="image/*,.pdf">
+            </label>
+            <div id="doc-seller-id">
+              {% if (form_data and form_data.seller_id_proof_url) or (sale_record and sale_record.seller_id_proof_url) %}
+              <a class="sale-proof-link" href="{{ form_data.seller_id_proof_url or sale_record.seller_id_proof_url }}" target="_blank" rel="noopener">
+                <i class="bi bi-paperclip"></i> View current Seller ID Document
+              </a>
+              {% else %}
+              <p class="summary-note">Upload seller ID document.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sale-card sale-card-vehicle-theme" id="vehicle-details">
         <h3>Vehicle Details</h3>
         <div class="sale-grid">
           <label>
-            Vehicle Name
+            Vehicle Name *
             <input
               type="text"
               name="vehicle_name"
@@ -420,10 +473,11 @@
               value="{{ form_data.vehicle_name or '' }}"
               placeholder="Enter vehicle name"
               autocomplete="off"
+              required
             >
           </label>
           <label>
-            Vehicle Number
+            Vehicle Number *
             <input
               type="text"
               name="vehicle_number"
@@ -432,61 +486,125 @@
               value="{{ form_data.vehicle_number or '' }}"
               placeholder="Enter vehicle number"
               autocomplete="off"
+              required
             >
           </label>
           <label>
             Order Date
-            <input type="text" name="order_date" value="{{ form_data.order_date or '' }}" readonly>
+            <input
+              type="datetime-local"
+              name="order_date"
+              id="order-date-input"
+              value="{{ form_data.order_date_local or form_data.order_date or '' }}"
+              step="60"
+            >
           </label>
         </div>
 
-        <div class="vehicle-summary" style="margin-top: 14px;">
-          <div class="vehicle-box">
-            <span>Model Year</span>
-            <strong id="vehicle-model">{{ selected_vehicle.model_year or "-" if selected_vehicle else "-" }}</strong>
-          </div>
-          <div class="vehicle-box">
-            <span>Chassis No</span>
-            <strong id="vehicle-registration">{{ selected_vehicle.registration_no or "-" if selected_vehicle else "-" }}</strong>
-          </div>
-          <div class="vehicle-box">
-            <span>Owners</span>
-            <strong id="vehicle-owners">{{ selected_vehicle.owners or "-" if selected_vehicle else "-" }}</strong>
-          </div>
+        <div class="sale-grid" style="margin-top: 12px;">
+          <label>
+            Model Year
+            <input type="number" name="model_year" id="vehicle-model-input" value="{{ form_data.model_year or (selected_vehicle.model_year if selected_vehicle else '') }}" placeholder="YYYY">
+          </label>
+          <label>
+            Chassis Number
+            <input type="text" name="registration_no" id="vehicle-registration-input" value="{{ form_data.registration_no or (selected_vehicle.registration_no if selected_vehicle else '') }}" placeholder="Chassis No">
+          </label>
+          <label>
+            Owner Count
+            <input type="number" min="1" name="owners" id="vehicle-owners-input" value="{{ form_data.owners or (selected_vehicle.owners if selected_vehicle else '') }}" placeholder="1">
+          </label>
         </div>
 
-        <div class="vehicle-summary" style="margin-top: 12px;">
-          <div class="vehicle-box">
-            <span>RC Book</span>
-            <strong id="doc-rc">
-              {% if selected_vehicle and selected_vehicle.rc_book_url %}<a href="{{ selected_vehicle.rc_book_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
-            </strong>
-          </div>
-          <div class="vehicle-box">
-            <span>Insurance Document</span>
-            <strong id="doc-insurance">
-              {% if selected_vehicle and selected_vehicle.insurance_document_url %}<a href="{{ selected_vehicle.insurance_document_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
-            </strong>
-          </div>
-          <div class="vehicle-box">
-            <span>RC Book (Back)</span>
-            <strong id="doc-rc-back">
-              {% if selected_vehicle and selected_vehicle.rc_book_back_url %}<a href="{{ selected_vehicle.rc_book_back_url }}" target="_blank" rel="noopener">View document</a>{% else %}-{% endif %}
-            </strong>
-          </div>
-          <div class="vehicle-box">
-            <span>Customer ID Proof</span>
-            <strong>
-              {% if sale_record and sale_record.customer_id_proof_url %}
-              <a href="{{ sale_record.customer_id_proof_url }}" target="_blank" rel="noopener">View document</a>
+        <div class="sale-grid" style="margin-top: 12px;">
+          <label>
+            Current FC
+            <input type="date" name="current_fc" id="vehicle-current-fc-input" value="{{ form_data.current_fc or (selected_vehicle.current_fc if selected_vehicle else '') }}">
+          </label>
+          <label>
+            KMs Driven
+            <input type="text" name="kms_driven" id="vehicle-kms-input" value="{{ form_data.kms_driven or (selected_vehicle.kms_driven if selected_vehicle else '') }}" placeholder="e.g. 15000">
+          </label>
+          <label>
+            Insurance Valid Till
+            <input type="date" name="insurance_end_date" id="vehicle-insurance-end-input" value="{{ form_data.insurance_end_date or (selected_vehicle.insurance_end_date if selected_vehicle else '') }}">
+          </label>
+        </div>
+
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <label>
+            PUC Valid Till
+            <input type="date" name="puc_valid_upto" id="vehicle-puc-valid-input" value="{{ form_data.puc_valid_upto or (selected_vehicle.puc_valid_upto if selected_vehicle else '') }}">
+          </label>
+        </div>
+
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <div class="sale-proof">
+            <label>
+              RC Book
+              <input type="file" name="rc_book_file" accept="image/*,.pdf">
+            </label>
+            <div id="doc-rc">
+              {% if (sale_record and sale_record.rc_book_url) or (selected_vehicle and selected_vehicle.rc_book_url) %}
+              <a class="sale-proof-link" href="{{ (sale_record.rc_book_url if sale_record and sale_record.rc_book_url else selected_vehicle.rc_book_url) }}" target="_blank" rel="noopener">
+                <i class="bi bi-paperclip"></i> View current RC Book
+              </a>
               {% else %}
-              -
+              <p class="summary-note">Upload vehicle RC Book.</p>
               {% endif %}
-            </strong>
+            </div>
+          </div>
+          <div class="sale-proof">
+            <label>
+              RC Book (Back)
+              <input type="file" name="rc_book_back_file" accept="image/*,.pdf">
+            </label>
+            <div id="doc-rc-back">
+              {% if (sale_record and sale_record.rc_book_back_url) or (selected_vehicle and selected_vehicle.rc_book_back_url) %}
+              <a class="sale-proof-link" href="{{ (sale_record.rc_book_back_url if sale_record and sale_record.rc_book_back_url else selected_vehicle.rc_book_back_url) }}" target="_blank" rel="noopener">
+                <i class="bi bi-paperclip"></i> View current RC Book Back
+              </a>
+              {% else %}
+              <p class="summary-note">Upload RC Book back page.</p>
+              {% endif %}
+            </div>
           </div>
         </div>
 
-        <div class="vehicle-gallery" id="vehicle-gallery">
+        <div class="sale-grid-2" style="margin-top: 12px;">
+          <div class="sale-proof">
+            <label>
+              Insurance Document
+              <input type="file" name="insurance_document_file" accept="image/*,.pdf">
+            </label>
+            <div id="doc-insurance">
+              {% if (sale_record and sale_record.insurance_document_url) or (selected_vehicle and selected_vehicle.insurance_document_url) %}
+              <a class="sale-proof-link" href="{{ (sale_record.insurance_document_url if sale_record and sale_record.insurance_document_url else selected_vehicle.insurance_document_url) }}" target="_blank" rel="noopener">
+                <i class="bi bi-paperclip"></i> View current Insurance
+              </a>
+              {% else %}
+              <p class="summary-note">Upload insurance document.</p>
+              {% endif %}
+            </div>
+          </div>
+          <div class="sale-proof">
+            <label>
+              PUC Certificate
+              <input type="file" name="puc_certificate_file" accept="image/*,.pdf">
+            </label>
+            <div id="doc-puc">
+              {% if (sale_record and sale_record.puc_certificate_url) or (selected_vehicle and selected_vehicle.puc_certificate_url) %}
+              <a class="sale-proof-link" href="{{ (sale_record.puc_certificate_url if sale_record and sale_record.puc_certificate_url else selected_vehicle.puc_certificate_url) }}" target="_blank" rel="noopener">
+                <i class="bi bi-paperclip"></i> View current PUC
+              </a>
+              {% else %}
+              <p class="summary-note">Upload PUC certificate.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="vehicle-gallery" id="vehicle-gallery" style="margin-top: 14px;">
           {% if selected_vehicle and selected_vehicle.image_urls %}
             {% for image_url in selected_vehicle.image_urls[:4] %}
             <img src="{{ image_url }}" alt="Bike image {{ loop.index }}">
@@ -526,15 +644,15 @@
         <div class="summary-grid">
           <label>
             Vehicle Selling Price
-            <input type="number" step="0.01" min="0" name="selling_price" id="summary-selling-price" value="{{ '%.2f'|format(selected_vehicle.selling_price or 0) if selected_vehicle else '0.00' }}">
+            <input type="number" step="0.01" min="0" name="selling_price" id="summary-selling-price" value="{{ form_data.selling_price or ('%.2f'|format(selected_vehicle.selling_price or 0) if selected_vehicle else '0.00') }}">
           </label>
           <label>
             Expense Price
-            <input type="number" step="0.01" min="0" name="repair_cost" id="summary-repair-cost" value="{{ '%.2f'|format(selected_vehicle.repair_cost or 0) if selected_vehicle else '0.00' }}">
+            <input type="number" step="0.01" min="0" name="repair_cost" id="summary-repair-cost" value="{{ form_data.repair_cost or ('%.2f'|format(selected_vehicle.repair_cost or 0) if selected_vehicle else '0.00') }}">
           </label>
           <label>
             Final Before GST
-            <input type="number" step="0.01" min="0" name="subtotal_amount" id="summary-subtotal" value="{{ '%.2f'|format(selected_vehicle.subtotal_amount or 0) if selected_vehicle else '0.00' }}">
+            <input type="number" step="0.01" min="0" name="subtotal_amount" id="summary-subtotal" value="{{ form_data.subtotal_amount or ('%.2f'|format(selected_vehicle.subtotal_amount or 0) if selected_vehicle else '0.00') }}">
           </label>
           <label>
             Discount %
@@ -572,10 +690,18 @@
 
         </div>
 
-        <div class="summary-total-row">
+        <div class="summary-total-row" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;">
           <div class="summary-total">
             <span>Total Amount</span>
             <strong id="summary-total">Rs 0.00</strong>
+          </div>
+          <div class="summary-total">
+            <span>Paid Amount</span>
+            <strong id="summary-paid-amount">Rs 0.00</strong>
+          </div>
+          <div class="summary-total">
+            <span>Balance Amount</span>
+            <strong id="summary-balance-amount" style="color: #b3261e;">Rs 0.00</strong>
           </div>
         </div>
 
@@ -604,9 +730,20 @@
   const vehicleIdInput = document.getElementById("vehicle-id");
   const vehicleNameInput = document.getElementById("vehicle-name-input");
   const vehicleNumberInput = document.getElementById("vehicle-number-input");
-  const modelEl = document.getElementById("vehicle-model");
-  const registrationEl = document.getElementById("vehicle-registration");
-  const ownersEl = document.getElementById("vehicle-owners");
+  const sellerNameInput = document.getElementById("seller-name-input");
+  const sellerPhoneInput = document.getElementById("seller-phone-input");
+  const sellerIdInput = document.getElementById("seller-id-input");
+  const sellerAddressInput = document.getElementById("seller-address-input");
+  const sellerReferenceInput = document.getElementById("seller-reference-input");
+  const docSellerIdEl = document.getElementById("doc-seller-id");
+  const purchaseModeSelect = document.getElementById("purchase-mode-select");
+  const modelInput = document.getElementById("vehicle-model-input");
+  const registrationInput = document.getElementById("vehicle-registration-input");
+  const ownersInput = document.getElementById("vehicle-owners-input");
+  const currentFcInput = document.getElementById("vehicle-current-fc-input");
+  const kmsDrivenInput = document.getElementById("vehicle-kms-input");
+  const insuranceEndDateInput = document.getElementById("vehicle-insurance-end-input");
+  const pucValidUptoInput = document.getElementById("vehicle-puc-valid-input");
   const purchasePriceEl = document.getElementById("purchase-price");
   const purchaseExpenseEl = document.getElementById("purchase-expense");
   const purchaseTotalEl = document.getElementById("purchase-total");
@@ -615,6 +752,7 @@
   const docRcEl = document.getElementById("doc-rc");
   const docInsuranceEl = document.getElementById("doc-insurance");
   const docRcBackEl = document.getElementById("doc-rc-back");
+  const docPucEl = document.getElementById("doc-puc");
   const summarySellingEl = document.getElementById("summary-selling-price");
   const summaryRepairEl = document.getElementById("summary-repair-cost");
   const summarySubtotalEl = document.getElementById("summary-subtotal");
@@ -675,9 +813,15 @@
     const preserveSummary = Boolean(options.preserveSummary);
     if (!vehicle) {
       vehicleIdInput.value = "";
-      modelEl.textContent = "-";
-      registrationEl.textContent = "-";
-      ownersEl.textContent = "-";
+      if (modelInput && !hasExistingSale) modelInput.value = "";
+      if (registrationInput && !hasExistingSale) registrationInput.value = "";
+      if (ownersInput && !hasExistingSale) ownersInput.value = "";
+      if (currentFcInput && !hasExistingSale) currentFcInput.value = "";
+      if (kmsDrivenInput && !hasExistingSale) kmsDrivenInput.value = "";
+      if (insuranceEndDateInput && !hasExistingSale) insuranceEndDateInput.value = "";
+      if (pucValidUptoInput && !hasExistingSale) pucValidUptoInput.value = "";
+      if (sellerAddressInput && !hasExistingSale) sellerAddressInput.value = "";
+      if (sellerReferenceInput && !hasExistingSale) sellerReferenceInput.value = "";
       if (purchasePriceEl) purchasePriceEl.textContent = "0.00";
       if (purchaseExpenseEl) purchaseExpenseEl.textContent = "0.00";
       if (purchaseTotalEl) purchaseTotalEl.textContent = "0.00";
@@ -688,9 +832,11 @@
       discountInput.value = "0.00";
       discountPercentInput.value = "0.00";
       gstPercentInput.value = "0.00";
-      if (docRcEl) docRcEl.textContent = "-";
-      if (docInsuranceEl) docInsuranceEl.textContent = "-";
-      if (docRcBackEl) docRcBackEl.textContent = "-";
+      if (docRcEl) docRcEl.innerHTML = '<p class="summary-note">Upload vehicle RC Book.</p>';
+      if (docInsuranceEl) docInsuranceEl.innerHTML = '<p class="summary-note">Upload insurance document.</p>';
+      if (docRcBackEl) docRcBackEl.innerHTML = '<p class="summary-note">Upload RC Book back page.</p>';
+      if (docPucEl) docPucEl.innerHTML = '<p class="summary-note">Upload PUC certificate.</p>';
+      if (docSellerIdEl) docSellerIdEl.innerHTML = '<p class="summary-note">Upload seller ID document.</p>';
       galleryEl.innerHTML = "";
       for (let i = 0; i < 4; i += 1) {
         const placeholder = document.createElement("div");
@@ -705,19 +851,29 @@
     vehicleIdInput.value = vehicle.id || "";
     vehicleNameInput.value = vehicle.vehicle_name || "";
     vehicleNumberInput.value = vehicle.vehicle_number || "";
-    modelEl.textContent = vehicle.model_year || "-";
-    registrationEl.textContent = vehicle.registration_no || "-";
-    ownersEl.textContent = vehicle.owners || "-";
+    if (modelInput && (!hasExistingSale || !modelInput.value)) modelInput.value = vehicle.model_year || "";
+    if (registrationInput && (!hasExistingSale || !registrationInput.value)) registrationInput.value = vehicle.registration_no || "";
+    if (ownersInput && (!hasExistingSale || !ownersInput.value)) ownersInput.value = vehicle.owners || "";
+    if (currentFcInput && (!hasExistingSale || !currentFcInput.value)) currentFcInput.value = vehicle.current_fc || "";
+    if (kmsDrivenInput && (!hasExistingSale || !kmsDrivenInput.value)) kmsDrivenInput.value = vehicle.kms_driven || "";
+    if (insuranceEndDateInput && (!hasExistingSale || !insuranceEndDateInput.value)) insuranceEndDateInput.value = vehicle.insurance_end_date || "";
+    if (pucValidUptoInput && (!hasExistingSale || !pucValidUptoInput.value)) pucValidUptoInput.value = vehicle.puc_valid_upto || "";
+    if (sellerNameInput && (!hasExistingSale || !sellerNameInput.value) && vehicle.purchase_customer_name) sellerNameInput.value = vehicle.purchase_customer_name;
+    if (sellerPhoneInput && (!hasExistingSale || !sellerPhoneInput.value) && vehicle.purchase_customer_phone) sellerPhoneInput.value = vehicle.purchase_customer_phone;
+    if (sellerIdInput && (!hasExistingSale || !sellerIdInput.value) && vehicle.purchase_customer_id) sellerIdInput.value = vehicle.purchase_customer_id;
+    if (sellerAddressInput && (!hasExistingSale || !sellerAddressInput.value) && vehicle.purchase_customer_address) sellerAddressInput.value = vehicle.purchase_customer_address;
+    if (sellerReferenceInput && (!hasExistingSale || !sellerReferenceInput.value) && vehicle.purchase_reference) sellerReferenceInput.value = vehicle.purchase_reference;
+    if (purchaseModeSelect && (!hasExistingSale || !purchaseModeSelect.value) && vehicle.purchase_mode) purchaseModeSelect.value = vehicle.purchase_mode;
+
     if (purchasePriceEl) purchasePriceEl.textContent = formatMoney(vehicle.purchase_price);
     if (purchaseExpenseEl) purchaseExpenseEl.textContent = formatMoney(vehicle.repair_cost);
     if (purchaseTotalEl) purchaseTotalEl.textContent = formatMoney(vehicle.purchase_total_cost);
     if (purchaseSellingEl) purchaseSellingEl.textContent = formatMoney(vehicle.selling_price);
-   if (!preserveSummary) {
-  summarySellingEl.value = formatMoney(vehicle.selling_price);
-  summaryRepairEl.value = formatMoney(vehicle.repair_cost);
 
-  // Final Before GST should be based only on Selling Price
-  summarySubtotalEl.value = formatMoney(vehicle.selling_price);
+    if (!preserveSummary) {
+      summarySellingEl.value = formatMoney(vehicle.selling_price);
+      summaryRepairEl.value = formatMoney(vehicle.repair_cost);
+      summarySubtotalEl.value = formatMoney(vehicle.selling_price);
       syncDiscountPercentFromAmount();
       if (vehicle.sale_gst_enabled) {
         if ((vehicle.sale_gst_mode || "percent") === "amount") {
@@ -732,9 +888,11 @@
         gstPercentInput.value = "0.00";
       }
     }
-    if (docRcEl) docRcEl.innerHTML = vehicle.rc_book_url ? `<a href="${vehicle.rc_book_url}" target="_blank" rel="noopener">View document</a>` : "-";
-    if (docInsuranceEl) docInsuranceEl.innerHTML = vehicle.insurance_document_url ? `<a href="${vehicle.insurance_document_url}" target="_blank" rel="noopener">View document</a>` : "-";
-    if (docRcBackEl) docRcBackEl.innerHTML = vehicle.rc_book_back_url ? `<a href="${vehicle.rc_book_back_url}" target="_blank" rel="noopener">View document</a>` : "-";
+
+    if (docRcEl) docRcEl.innerHTML = vehicle.rc_book_url ? `<a class="sale-proof-link" href="${vehicle.rc_book_url}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> View current RC Book</a>` : '<p class="summary-note">Upload vehicle RC Book.</p>';
+    if (docInsuranceEl) docInsuranceEl.innerHTML = vehicle.insurance_document_url ? `<a class="sale-proof-link" href="${vehicle.insurance_document_url}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> View current Insurance</a>` : '<p class="summary-note">Upload insurance document.</p>';
+    if (docRcBackEl) docRcBackEl.innerHTML = vehicle.rc_book_back_url ? `<a class="sale-proof-link" href="${vehicle.rc_book_back_url}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> View current RC Book Back</a>` : '<p class="summary-note">Upload RC Book back page.</p>';
+    if (docPucEl) docPucEl.innerHTML = vehicle.puc_certificate_url ? `<a class="sale-proof-link" href="${vehicle.puc_certificate_url}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> View current PUC</a>` : '<p class="summary-note">Upload PUC certificate.</p>';
 
     galleryEl.innerHTML = "";
     const images = Array.isArray(vehicle.image_urls) ? vehicle.image_urls.slice(0, 4) : [];
@@ -793,6 +951,18 @@ function recalcSubtotal() {
     }
     const total = taxable + gstAmount;
     summaryTotalEl.textContent = `Rs ${formatMoney(total)}`;
+
+    const sellingPrice = asMoney(summarySellingEl ? summarySellingEl.value : 0);
+    const purchaseCost = asMoney(purchasePriceEl ? purchasePriceEl.textContent : 0);
+    const balance = Math.max(0, purchaseCost - sellingPrice);
+
+    const paidEl = document.getElementById("summary-paid-amount");
+    if (paidEl) paidEl.textContent = `Rs ${formatMoney(sellingPrice)}`;
+    const balEl = document.getElementById("summary-balance-amount");
+    if (balEl) {
+      balEl.textContent = `Rs ${formatMoney(balance)}`;
+      balEl.style.color = balance > 0 ? "#b3261e" : "#166534";
+    }
   }
 
   function handleVehicleLookup(sourceField) {

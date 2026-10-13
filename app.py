@@ -816,6 +816,7 @@ def build_sql_server_connection_string(database_name: str | None = None) -> str:
             f"DATABASE={database};"
             "Trusted_Connection=yes;"
             f"TrustServerCertificate={trust_cert};"
+            "MARS_Connection=yes;"
         )
     user = os.getenv("DB_USERNAME")
     password = os.getenv("DB_PASSWORD")
@@ -825,6 +826,7 @@ def build_sql_server_connection_string(database_name: str | None = None) -> str:
         f"DATABASE={database};"
         f"UID={user};PWD={password};"
         f"TrustServerCertificate={trust_cert};"
+        "MARS_Connection=yes;"
     )
 
 
@@ -1073,6 +1075,11 @@ class CompatCursor:
                 if not self._cursor.nextset():
                     break
             self.lastrowid = int(row[0]) if row and row[0] is not None else None
+            try:
+                while self._cursor.nextset():
+                    pass
+            except Exception:
+                pass
             return self
         self._cursor.execute(query, params)
         return self
@@ -2020,6 +2027,55 @@ def jinja_datetime_display(value) -> str:
     return datetime_display(value)
 
 
+def as_display_datetime(value) -> str:
+    return datetime_display(value)
+
+
+def as_html_datetime_local(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%dT%H:%M")
+    text = str(value).strip()
+    if not text:
+        return ""
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})", text)
+    if m:
+        return f"{m.group(1)}T{m.group(2)}"
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).strftime("%Y-%m-%dT%H:%M")
+    except ValueError:
+        pass
+    d = date_only(text)
+    return f"{d}T00:00" if d and d != "-" else ""
+
+
+def parse_order_datetime(val: str | None, fallback=None) -> str:
+    text = str(val or "").strip()
+    if text:
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?", text)
+        if m:
+            sec = m.group(3) or "00"
+            return f"{m.group(1)} {m.group(2)}:{sec}"
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+        d = date_only(text)
+        if d and d != "-":
+            return f"{d} 00:00:00"
+    if fallback is not None:
+        if isinstance(fallback, datetime):
+            return fallback.strftime("%Y-%m-%d %H:%M:%S")
+        fb_text = str(fallback).strip()
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?", fb_text)
+        if m:
+            sec = m.group(3) or "00"
+            return f"{m.group(1)} {m.group(2)}:{sec}"
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def normalize_payment_mode(mode: str | None, default: str = "Cash") -> str:
     allowed = {"Cash", "GPay", "Card"}
     text = str(mode or "").strip()
@@ -2926,6 +2982,7 @@ def init_db(database_name: str | None = None):
             hypothecation NVARCHAR(255),
             remarks NVARCHAR(MAX),
             fine_details NVARCHAR(MAX),
+            fine_amount INT,
             created_at DATETIME2,
             updated_at DATETIME2,
             purchase_mode NVARCHAR(50),
@@ -3164,6 +3221,8 @@ def init_db(database_name: str | None = None):
             ALTER TABLE vehicles ADD remarks NVARCHAR(MAX) NULL;
         IF COL_LENGTH('vehicles', 'fine_details') IS NULL
             ALTER TABLE vehicles ADD fine_details NVARCHAR(MAX) NULL;
+        IF COL_LENGTH('vehicles', 'fine_amount') IS NULL
+            ALTER TABLE vehicles ADD fine_amount INT NULL;
         IF COL_LENGTH('vehicles', 'created_at') IS NULL
             ALTER TABLE vehicles ADD created_at DATETIME2 NULL;
         IF COL_LENGTH('vehicles', 'updated_at') IS NULL
@@ -7163,12 +7222,14 @@ def upsert_customer(
             return False
 
         try:
+            next_code_row = cur.execute("SELECT COALESCE(MAX(customer_code), 0) + 1 FROM customers").fetchone()
+            cust_code = int(next_code_row[0]) if next_code_row and next_code_row[0] is not None else 1
             cur.execute(
                 """
-                INSERT INTO customers (name, phone, address, notes, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO customers (name, phone, address, notes, created_at, customer_code)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (customer_name, phone, customer_address, customer_notes, now_str()),
+                (customer_name, phone, customer_address, customer_notes, now_str(), cust_code),
             )
         except Exception as exc:
             # Race-safe / normalization-safe: if a duplicate slips in, update existing instead.
@@ -11236,21 +11297,154 @@ def build_dashboard_search_results(
     *,
     from_date: str = "",
     to_date: str = "",
-) -> list[dict[str, str]]:
+) -> list[dict]:
     q = (q or "").strip()
     if not q:
         return []
 
     date_filter_active = bool(from_date and to_date)
     q_like = f"%{q}%"
-    q_compact = re.sub(r"[^a-z0-9]+", "", q.lower())
+    q_compact = re.sub(r"[^a-zA-Z0-9]+", "", q).lower()
     q_digits_only = re.sub(r"\D+", "", q)
     q_numeric_value = int(q_digits_only) if q_digits_only else None
-    search_results: list[dict[str, str]] = []
+    search_results: list[dict] = []
 
+    # 1. VEHICLE SEARCH ACROSS ALL STATUSES (Available, Sold, In Repair, In Progress, etc.)
+    try:
+        vehicle_sql = """
+            SELECT TOP 25
+                v.id,
+                v.vehicle_name,
+                v.vehicle_number,
+                v.registration_no,
+                v.model_year,
+                v.status,
+                v.purchase_price,
+                v.selling_price,
+                v.purchase_customer_name,
+                v.purchase_customer_phone,
+                COALESCE(
+                    (SELECT SUM(COALESCE(r.total_cost, r.cost, 0))
+                     FROM vehicle_repairs r
+                     WHERE r.vehicle_id = v.id),
+                    0
+                ) AS repair_cost,
+                (SELECT TOP 1 vso.order_id
+                 FROM vehicle_sale_orders vso
+                 WHERE vso.vehicle_id = v.id
+                 ORDER BY ISNULL(vso.updated_at, vso.created_at) DESC, vso.id DESC) AS sale_order_id,
+                (SELECT TOP 1 vso.total_amount
+                 FROM vehicle_sale_orders vso
+                 WHERE vso.vehicle_id = v.id
+                 ORDER BY ISNULL(vso.updated_at, vso.created_at) DESC, vso.id DESC) AS sale_total_amount,
+                (SELECT TOP 1 vso.customer_name
+                 FROM vehicle_sale_orders vso
+                 WHERE vso.vehicle_id = v.id
+                 ORDER BY ISNULL(vso.updated_at, vso.created_at) DESC, vso.id DESC) AS buyer_name
+            FROM vehicles v
+            WHERE LOWER(COALESCE(v.status, 'available')) <> 'transferred'
+              AND (
+                  ISNULL(v.vehicle_name, '') LIKE ?
+                  OR ISNULL(v.vehicle_number, '') LIKE ?
+                  OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.vehicle_number, '')), '-', ''), ' ', ''), '.', '') LIKE ?
+                  OR ISNULL(v.registration_no, '') LIKE ?
+                  OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.registration_no, '')), '-', ''), ' ', ''), '.', '') LIKE ?
+                  OR ISNULL(v.status, '') LIKE ?
+                  OR ISNULL(v.purchase_customer_name, '') LIKE ?
+                  OR ISNULL(v.purchase_customer_phone, '') LIKE ?
+                  OR EXISTS (
+                      SELECT 1 FROM vehicle_sale_orders vso
+                      WHERE vso.vehicle_id = v.id
+                        AND (
+                            ISNULL(vso.customer_name, '') LIKE ?
+                            OR ISNULL(vso.sale_code, '') LIKE ?
+                        )
+                  )
+                  OR (? IS NOT NULL AND v.id = ?)
+              )
+            ORDER BY
+                CASE
+                    WHEN LOWER(ISNULL(v.vehicle_number, '')) = LOWER(?) THEN 0
+                    WHEN LOWER(ISNULL(v.vehicle_name, '')) = LOWER(?) THEN 1
+                    ELSE 2
+                END,
+                ISNULL(v.updated_at, v.created_at) DESC, v.id DESC
+        """
+        vehicle_rows = conn.execute(
+            vehicle_sql,
+            (
+                q_like,
+                q_like,
+                f"%{q_compact}%",
+                q_like,
+                f"%{q_compact}%",
+                q_like,
+                q_like,
+                q_like,
+                q_like,
+                q_like,
+                q_numeric_value,
+                q_numeric_value,
+                q,
+                q,
+            ),
+        ).fetchall()
+
+        for row in vehicle_rows:
+            st_raw = normalize_vehicle_status(row.get("status"))
+            st_label = vehicle_status_label(st_raw)
+            p_cost = float(row.get("purchase_price") or 0)
+            r_cost = float(row.get("repair_cost") or 0)
+            s_price = float(row.get("sale_total_amount") or row.get("selling_price") or 0)
+            buyer = row.get("buyer_name") or ""
+            owner = row.get("purchase_customer_name") or ""
+            owner_phone = row.get("purchase_customer_phone") or ""
+
+            parts = [f"Status: {st_label}"]
+            if row.get("model_year"):
+                parts.append(f"Year: {row['model_year']}")
+            if p_cost > 0:
+                parts.append(f"Cost: ₹{p_cost:,.0f}")
+            if r_cost > 0:
+                parts.append(f"Repairs: ₹{r_cost:,.0f}")
+            if st_raw == "sold":
+                if s_price > 0:
+                    parts.append(f"Sold: ₹{s_price:,.0f}")
+                if buyer:
+                    parts.append(f"Buyer: {buyer}")
+            elif owner:
+                parts.append(f"Owner: {owner}")
+
+            search_results.append({
+                "id": int(row["id"]),
+                "href": url_for("inventory_vehicle_edit", vehicle_id=row["id"], mode="view"),
+                "title": f"{row['vehicle_name']} ({row['vehicle_number']})",
+                "vehicle_name": row.get("vehicle_name") or "",
+                "vehicle_number": row.get("vehicle_number") or "",
+                "registration_no": row.get("registration_no") or "",
+                "model_year": row.get("model_year"),
+                "status": st_label,
+                "status_raw": st_raw,
+                "purchase_price": p_cost,
+                "repair_cost": r_cost,
+                "selling_price": s_price,
+                "sale_order_id": row.get("sale_order_id"),
+                "sale_total_amount": float(row["sale_total_amount"]) if row.get("sale_total_amount") is not None else None,
+                "buyer_name": buyer,
+                "rc_owner_name": owner,
+                "rc_owner_phone": owner_phone,
+                "purchase_customer_name": owner,
+                "purchase_customer_phone": owner_phone,
+                "subtitle": " · ".join(parts),
+                "meta": f"Vehicle · {st_label}",
+            })
+    except Exception as exc:
+        traceback.print_exc()
+
+    # 2. CUSTOMER SEARCH
     try:
         customer_sql = """
-            SELECT TOP 8
+            SELECT TOP 6
                 c.id,
                 c.name,
                 c.phone,
@@ -11281,9 +11475,20 @@ def build_dashboard_search_results(
     except Exception:
         pass
 
+    # 3. ORDER SEARCH
     try:
-        order_sql = """
-            SELECT orders.*, customers.name, customers.phone
+        order_params = [
+            q_like, q_like, q_like, q_like, q_like, q_like, q_like, q_like, q_like,
+            q_like, q_like, q_like,
+            q_numeric_value, q_numeric_value, q_numeric_value, q_numeric_value,
+        ]
+        order_date_clause = ""
+        if date_filter_active:
+            order_date_clause = " AND CAST(orders.created_at AS DATE) BETWEEN ? AND ?"
+            order_params.extend([from_date, to_date])
+
+        order_sql = f"""
+            SELECT TOP 8 orders.*, customers.name, customers.phone
             FROM orders
             JOIN customers ON (
                 customers.id = orders.customer_id
@@ -11320,29 +11525,9 @@ def build_dashboard_search_results(
                     OR ISNULL(orders.customer_display_id, -1) = ?
                 ))
             )
+            {order_date_clause}
+            ORDER BY orders.created_at DESC
         """
-        order_params = [
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_like,
-            q_numeric_value,
-            q_numeric_value,
-            q_numeric_value,
-            q_numeric_value,
-        ]
-        if date_filter_active:
-            order_sql += " AND date(orders.created_at) BETWEEN ? AND ?"
-            order_params.extend([from_date, to_date])
-        order_sql += " ORDER BY orders.created_at DESC LIMIT 12"
         order_rows = conn.execute(order_sql, tuple(order_params)).fetchall()
         search_results.extend(
             {
@@ -11356,95 +11541,6 @@ def build_dashboard_search_results(
     except Exception:
         pass
 
-    try:
-        vehicle_sql = """
-            SELECT TOP 12
-                v.id,
-                v.vehicle_name,
-                v.vehicle_number,
-                v.registration_no,
-                v.current_fc,
-                v.notes,
-                v.purchase_customer_name,
-                v.purchase_customer_phone,
-                v.purchase_customer_address,
-                v.purchase_customer_id,
-                v.purchase_mode,
-                v.purchase_id_proof_ref,
-                v.purchase_finance_company,
-                v.purchase_finance_yard_ref,
-                v.purchase_finance_settlement_date,
-                v.purchase_agent_name,
-                v.purchase_agent_broker_details,
-                v.purchase_branch_from_branch,
-                v.purchase_branch_transfer_id,
-                v.purchase_branch_handled_by
-            FROM vehicles v
-            WHERE
-                ISNULL(v.vehicle_name, '') LIKE ?
-                OR ISNULL(v.vehicle_number, '') LIKE ?
-                OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.vehicle_number, '')), '-', ''), ' ', ''), '.', '') LIKE ?
-                OR ISNULL(v.registration_no, '') LIKE ?
-                OR REPLACE(REPLACE(REPLACE(LOWER(ISNULL(v.registration_no, '')), '-', ''), ' ', ''), '.', '') LIKE ?
-                OR ISNULL(v.current_fc, '') LIKE ?
-                OR ISNULL(v.notes, '') LIKE ?
-                OR ISNULL(v.purchase_customer_name, '') LIKE ?
-                OR ISNULL(v.purchase_customer_phone, '') LIKE ?
-                OR ISNULL(v.purchase_customer_address, '') LIKE ?
-                OR ISNULL(v.purchase_customer_id, '') LIKE ?
-                OR ISNULL(v.purchase_mode, '') LIKE ?
-                OR ISNULL(v.purchase_id_proof_ref, '') LIKE ?
-                OR ISNULL(v.purchase_finance_company, '') LIKE ?
-                OR ISNULL(v.purchase_finance_yard_ref, '') LIKE ?
-                OR ISNULL(v.purchase_finance_settlement_date, '') LIKE ?
-                OR ISNULL(v.purchase_agent_name, '') LIKE ?
-                OR ISNULL(v.purchase_agent_broker_details, '') LIKE ?
-                OR ISNULL(v.purchase_branch_from_branch, '') LIKE ?
-                OR ISNULL(v.purchase_branch_transfer_id, '') LIKE ?
-                OR ISNULL(v.purchase_branch_handled_by, '') LIKE ?
-                OR (? IS NOT NULL AND v.id = ?)
-            ORDER BY ISNULL(v.updated_at, v.created_at) DESC, v.id DESC
-        """
-        vehicle_rows = conn.execute(
-            vehicle_sql,
-            (
-                q_like,
-                q_like,
-                f"%{q_compact}%",
-                q_like,
-                f"%{q_compact}%",
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_like,
-                q_numeric_value,
-                q_numeric_value,
-            ),
-        ).fetchall()
-        search_results.extend(
-            {
-                "href": url_for("inventory_vehicle_edit", vehicle_id=row["id"], mode="view"),
-                "title": f"{row['vehicle_name']} ({row['vehicle_number']})",
-                "subtitle": f"{derive_vehicle_brand(row.get('vehicle_name'))} · {row.get('registration_no') or row.get('purchase_customer_name') or '-'} · {row.get('purchase_customer_phone') or row.get('current_fc') or '-'}",
-                "meta": "Vehicle",
-            }
-            for row in vehicle_rows
-        )
-    except Exception:
-        pass
-
     deduped_results = []
     seen_search_keys: set[tuple[str, str]] = set()
     for item in search_results:
@@ -11453,7 +11549,7 @@ def build_dashboard_search_results(
             continue
         seen_search_keys.add(key)
         deduped_results.append(item)
-    return deduped_results[:20]
+    return deduped_results[:30]
 
 
 def get_insurance_expiry_notifications(conn, limit: int = 12):
@@ -16268,6 +16364,15 @@ def order_new():
         except (TypeError, ValueError):
             return default
 
+    def to_int(value, default=None):
+        raw = str(value or "").strip()
+        if not raw:
+            return default
+        try:
+            return int(float(raw))
+        except (ValueError, TypeError):
+            return default
+
     def as_display_datetime(value) -> str:
         if isinstance(value, datetime):
             return value.strftime("%Y-%m-%d %H:%M")
@@ -16275,6 +16380,34 @@ def order_new():
         if not text:
             return datetime.now().strftime("%Y-%m-%d %H:%M")
         return text[:16]
+
+    def as_html_datetime_local(value) -> str:
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%dT%H:%M")
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%dT00:00")
+        text = str(value or "").strip().replace(" ", "T")
+        m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})", text)
+        if m:
+            return m.group(1)
+        return datetime.now().strftime("%Y-%m-%dT%H:%M")
+
+    def parse_order_datetime(val: str | None, fallback=None) -> datetime:
+        raw = str(val or "").strip().replace("T", " ")
+        if raw:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(raw, fmt)
+                except ValueError:
+                    pass
+        if isinstance(fallback, datetime):
+            return fallback
+        if fallback:
+            try:
+                return datetime.strptime(str(fallback).replace("T", " ")[:19], "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                pass
+        return datetime.now()
 
     def build_vehicle_payload(row) -> dict:
         payload = build_gallery_vehicle_payload(row)
@@ -16339,7 +16472,27 @@ def order_new():
 
     def fetch_sale_record(target_id: int) -> dict | None:
         row = conn.execute(
-            "SELECT * FROM vehicle_sale_orders WHERE id = ?",
+            """
+            SELECT vso.*,
+                   v.purchase_customer_name,
+                   v.purchase_customer_phone,
+                   v.purchase_customer_id,
+                   v.purchase_customer_address,
+                   v.purchase_mode,
+                   v.purchase_reference,
+                   v.purchase_id_proof_filename,
+                   v.rc_book_filename AS v_rc_book_filename,
+                   v.rc_book_back_filename AS v_rc_book_back_filename,
+                   v.insurance_document_filename AS v_insurance_document_filename,
+                   v.puc_certificate_filename AS v_puc_certificate_filename,
+                   v.kms_driven,
+                   v.insurance_end_date,
+                   v.puc_valid_upto,
+                   v.current_fc AS v_current_fc
+            FROM vehicle_sale_orders vso
+            LEFT JOIN vehicles v ON v.id = vso.vehicle_id
+            WHERE vso.id = ?
+            """,
             (target_id,),
         ).fetchone()
         if not row:
@@ -16382,30 +16535,27 @@ def order_new():
             if data.get("customer_with_bike_photo_filename")
             else ""
         )
-        data["rc_book_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['rc_book_filename']}")
-            if data.get("rc_book_filename")
-            else ""
-        )
-        data["rc_book_back_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['rc_book_back_filename']}")
-            if data.get("rc_book_back_filename")
-            else ""
-        )
-        data["insurance_document_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['insurance_document_filename']}")
-            if data.get("insurance_document_filename")
-            else ""
-        )
-        data["puc_certificate_url"] = (
-            url_for("static", filename=f"uploads/vehicles/{data['puc_certificate_filename']}")
-            if data.get("puc_certificate_filename")
-            else ""
-        )
+        rc_name = data.get("rc_book_filename") or data.get("v_rc_book_filename") or ""
+        rc_back_name = data.get("rc_book_back_filename") or data.get("v_rc_book_back_filename") or ""
+        ins_name = data.get("insurance_document_filename") or data.get("v_insurance_document_filename") or ""
+        puc_name = data.get("puc_certificate_filename") or data.get("v_puc_certificate_filename") or ""
+        seller_id_doc = data.get("purchase_id_proof_filename") or ""
+        data["rc_book_filename"] = rc_name
+        data["rc_book_back_filename"] = rc_back_name
+        data["insurance_document_filename"] = ins_name
+        data["puc_certificate_filename"] = puc_name
+        data["seller_id_proof_filename"] = seller_id_doc
+        data["rc_book_url"] = url_for("static", filename=f"uploads/vehicles/{rc_name}") if rc_name else ""
+        data["rc_book_back_url"] = url_for("static", filename=f"uploads/vehicles/{rc_back_name}") if rc_back_name else ""
+        data["insurance_document_url"] = url_for("static", filename=f"uploads/vehicles/{ins_name}") if ins_name else ""
+        data["puc_certificate_url"] = url_for("static", filename=f"uploads/vehicles/{puc_name}") if puc_name else ""
+        data["seller_id_proof_url"] = url_for("static", filename=f"uploads/vehicles/{seller_id_doc}") if seller_id_doc else ""
         return data
 
     sale_id_raw = (request.values.get("sale_id") or "").strip()
     sale_record = fetch_sale_record(int(sale_id_raw)) if sale_id_raw.isdigit() else None
+    prefill_vehicle_id = (request.values.get("vehicle_id") or "").strip()
+    prefill_vehicle = vehicle_map.get(int(prefill_vehicle_id)) if prefill_vehicle_id.isdigit() and int(prefill_vehicle_id) in vehicle_map else None
 
     def build_selected_vehicle(source_sale: dict | None, selected_id: int | None) -> dict | None:
         if selected_id and selected_id in vehicle_map:
@@ -16436,6 +16586,9 @@ def order_new():
             ],
         }
 
+    active_vehicle_id = str(sale_record["vehicle_id"]) if sale_record and sale_record.get("vehicle_id") else (str(prefill_vehicle["id"]) if prefill_vehicle else "")
+    active_vehicle = prefill_vehicle if (not sale_record and prefill_vehicle) else None
+
     form_data = {
         "sale_id": str(sale_record["id"]) if sale_record else "",
         "customer_name": sale_record.get("customer_name", "") if sale_record else "",
@@ -16443,12 +16596,34 @@ def order_new():
         "customer_phone": sale_record.get("customer_phone", "") if sale_record else "",
         "customer_address": sale_record.get("customer_address", "") if sale_record else "",
         "customer_id_proof_ref": date_only(sale_record.get("customer_id_proof_ref")) if sale_record else "",
-        "vehicle_id": str(sale_record["vehicle_id"]) if sale_record else "",
-        "vehicle_name": sale_record.get("vehicle_name", "") if sale_record else "",
-        "vehicle_number": sale_record.get("vehicle_number", "") if sale_record else "",
-        "selling_price": f"{as_money(sale_record.get('selling_price')):.2f}" if sale_record else "0.00",
-        "repair_cost": f"{as_money(sale_record.get('repair_cost')):.2f}" if sale_record else "0.00",
-        "subtotal_amount": f"{as_money(sale_record.get('subtotal_amount')):.2f}" if sale_record else "0.00",
+        "customer_id_proof_filename": sale_record.get("customer_id_proof_filename", "") if sale_record else "",
+        "customer_photo_filename": sale_record.get("customer_photo_filename", "") if sale_record else "",
+        "customer_with_bike_photo_filename": sale_record.get("customer_with_bike_photo_filename", "") if sale_record else "",
+        "seller_name": sale_record.get("purchase_customer_name", "") if sale_record else (active_vehicle.get("purchase_customer_name", "") if active_vehicle else ""),
+        "seller_phone": sale_record.get("purchase_customer_phone", "") if sale_record else (active_vehicle.get("purchase_customer_phone", "") if active_vehicle else ""),
+        "seller_id": sale_record.get("purchase_customer_id", "") if sale_record else (active_vehicle.get("purchase_customer_id", "") if active_vehicle else ""),
+        "seller_address": sale_record.get("purchase_customer_address", "") if sale_record else (active_vehicle.get("purchase_customer_address", "") if active_vehicle else ""),
+        "seller_reference": sale_record.get("purchase_reference", "") if sale_record else (active_vehicle.get("purchase_reference", "") if active_vehicle else ""),
+        "seller_id_proof_filename": sale_record.get("purchase_id_proof_filename", "") if sale_record else (active_vehicle.get("purchase_id_proof_filename", "") if active_vehicle else ""),
+        "seller_id_proof_url": sale_record.get("seller_id_proof_url", "") if sale_record else (url_for("static", filename=f"uploads/vehicles/{active_vehicle['purchase_id_proof_filename']}") if (active_vehicle and active_vehicle.get("purchase_id_proof_filename")) else ""),
+        "purchase_mode": sale_record.get("purchase_mode", "") if sale_record else (active_vehicle.get("purchase_mode", "Direct") if active_vehicle else "Direct"),
+        "vehicle_id": active_vehicle_id,
+        "vehicle_name": sale_record.get("vehicle_name", "") if sale_record else (active_vehicle.get("vehicle_name", "") if active_vehicle else ""),
+        "vehicle_number": sale_record.get("vehicle_number", "") if sale_record else (active_vehicle.get("vehicle_number", "") if active_vehicle else ""),
+        "model_year": str(sale_record.get("model_year") or "") if sale_record else (str(active_vehicle.get("model_year") or "") if active_vehicle else ""),
+        "registration_no": sale_record.get("registration_no", "") if sale_record else (active_vehicle.get("registration_no", "") if active_vehicle else ""),
+        "owners": str(sale_record.get("owners") or "") if sale_record else (str(active_vehicle.get("owners") or "") if active_vehicle else ""),
+        "current_fc": sale_record.get("current_fc", "") if sale_record else (active_vehicle.get("current_fc", "") if active_vehicle else ""),
+        "kms_driven": sale_record.get("kms_driven", "") if sale_record else (active_vehicle.get("kms_driven", "") if active_vehicle else ""),
+        "insurance_end_date": date_only(sale_record.get("insurance_end_date")) if sale_record else (date_only(active_vehicle.get("insurance_end_date")) if active_vehicle else ""),
+        "puc_valid_upto": date_only(sale_record.get("puc_valid_upto")) if sale_record else (date_only(active_vehicle.get("puc_valid_upto")) if active_vehicle else ""),
+        "rc_book_filename": sale_record.get("rc_book_filename", "") if sale_record else (active_vehicle.get("rc_book_filename", "") if active_vehicle else ""),
+        "rc_book_back_filename": sale_record.get("rc_book_back_filename", "") if sale_record else (active_vehicle.get("rc_book_back_filename", "") if active_vehicle else ""),
+        "insurance_document_filename": sale_record.get("insurance_document_filename", "") if sale_record else (active_vehicle.get("insurance_document_filename", "") if active_vehicle else ""),
+        "puc_certificate_filename": sale_record.get("puc_certificate_filename", "") if sale_record else (active_vehicle.get("puc_certificate_filename", "") if active_vehicle else ""),
+        "selling_price": f"{as_money(sale_record.get('selling_price')):.2f}" if sale_record else (f"{as_money(active_vehicle.get('selling_price')):.2f}" if active_vehicle else "0.00"),
+        "repair_cost": f"{as_money(sale_record.get('repair_cost')):.2f}" if sale_record else (f"{as_money(active_vehicle.get('repair_cost')):.2f}" if active_vehicle else "0.00"),
+        "subtotal_amount": f"{as_money(sale_record.get('subtotal_amount')):.2f}" if sale_record else (f"{as_money(active_vehicle.get('selling_price')):.2f}" if active_vehicle else "0.00"),
         "discount_amount": f"{as_money(sale_record.get('discount_amount')):.2f}" if sale_record else "0.00",
         "gst_percent": f"{as_money(sale_record.get('gst_percent')):.2f}" if sale_record else "0.00",
         "gst_amount": f"{as_money(sale_record.get('gst_amount')):.2f}" if sale_record else "0.00",
@@ -16457,6 +16632,7 @@ def order_new():
         "payment_finance_name": sale_record.get("payment_finance_name", "") if sale_record else "",
         "payment_commission_amount": f"{as_money(sale_record.get('payment_commission_amount')):.2f}" if sale_record and sale_record.get("payment_commission_amount") is not None else "",
         "order_date": as_display_datetime(sale_record.get("created_at")) if sale_record else datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "order_date_local": as_html_datetime_local(sale_record.get("created_at")) if sale_record else datetime.now().strftime("%Y-%m-%dT%H:%M"),
     }
 
     def render_order_form(error: str | None = None):
@@ -16485,9 +16661,22 @@ def order_new():
             "customer_phone": normalize_phone_input(request.form.get("customer_phone")),
             "customer_address": (request.form.get("customer_address") or "").strip(),
             "customer_id_proof_ref": (request.form.get("customer_id_proof_ref") or "").strip(),
+            "seller_name": (request.form.get("seller_name") or "").strip(),
+            "seller_phone": (request.form.get("seller_phone") or "").strip(),
+            "seller_id": (request.form.get("seller_id") or "").strip(),
+            "seller_address": (request.form.get("seller_address") or "").strip(),
+            "seller_reference": (request.form.get("seller_reference") or "").strip(),
+            "purchase_mode": (request.form.get("purchase_mode") or "Direct").strip() or "Direct",
             "vehicle_id": (request.form.get("vehicle_id") or "").strip(),
             "vehicle_name": (request.form.get("vehicle_name") or "").strip(),
             "vehicle_number": (request.form.get("vehicle_number") or "").strip(),
+            "model_year": (request.form.get("model_year") or "").strip(),
+            "registration_no": (request.form.get("registration_no") or "").strip(),
+            "owners": (request.form.get("owners") or "").strip(),
+            "current_fc": (request.form.get("current_fc") or "").strip(),
+            "kms_driven": (request.form.get("kms_driven") or "").strip(),
+            "insurance_end_date": (request.form.get("insurance_end_date") or "").strip(),
+            "puc_valid_upto": (request.form.get("puc_valid_upto") or "").strip(),
             "selling_price": (request.form.get("selling_price") or "0").strip() or "0",
             "repair_cost": (request.form.get("repair_cost") or "0").strip() or "0",
             "subtotal_amount": (request.form.get("subtotal_amount") or "0").strip() or "0",
@@ -16501,15 +16690,9 @@ def order_new():
             "order_date": (request.form.get("order_date") or "").strip() or datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
 
+        # Essential mandatory validation: Customer Name, Phone, and Vehicle
         if not form_data["customer_name"] or not form_data["customer_phone"]:
             return render_order_form("Customer name and phone number are required.")
-        if not form_data["customer_identifier"]:
-            return render_order_form("Customer ID is required.")
-        if not form_data["customer_id_proof_ref"]:
-            return render_order_form("Customer ID reference date is required.")
-        customer_id_proof_ref = form_data["customer_id_proof_ref"][:10]
-        if date_only(customer_id_proof_ref) == "-":
-            return render_order_form("Customer ID reference date is invalid.")
 
         vehicle_id = int(form_data["vehicle_id"]) if form_data["vehicle_id"].isdigit() else 0
         vehicle = vehicle_map.get(vehicle_id)
@@ -16517,15 +16700,39 @@ def order_new():
             return render_order_form("Select a vehicle from inventory by name or vehicle number.")
 
         sale_record = fetch_sale_record(int(form_data["sale_id"])) if form_data["sale_id"].isdigit() else None
+
+        # Resolve order date for database storage (datetime2 for orders / vehicle_sale_orders)
+        order_date_dt = parse_order_datetime(
+            form_data.get("order_date"),
+            fallback=sale_record.get("created_at") if sale_record else None,
+        )
+        if isinstance(order_date_dt, datetime):
+            order_date_sql = order_date_dt.strftime("%Y-%m-%d %H:%M:%S")
+            order_due_date = order_date_dt.strftime("%Y-%m-%d")
+        else:
+            order_date_sql = str(order_date_dt)
+            order_due_date = order_date_sql[:10]
+
+        # Prevent duplicate sales for the same vehicle
+        if not sale_record:
+            current_veh_st = normalize_vehicle_status(vehicle.get("status"))
+            if current_veh_st == "sold":
+                return render_order_form("This vehicle has already been sold. Please select an available vehicle.")
+
+        # Optional reference date handling
+        customer_id_proof_ref = None
+        if form_data["customer_id_proof_ref"]:
+            ref_raw = form_data["customer_id_proof_ref"][:10]
+            if date_only(ref_raw) != "-":
+                customer_id_proof_ref = ref_raw
+
+        # Upload handling with fallback retention
         customer_id_proof_filename = save_vehicle_sale_upload(
             request.files.get("customer_id_proof_file"),
             fallback=sale_record.get("customer_id_proof_filename") if sale_record else None,
             customer_name=form_data["customer_name"],
             doc_label="id proof",
         )
-        if not customer_id_proof_filename:
-            return render_order_form("Customer ID proof is required.")
-
         customer_photo_filename = save_vehicle_sale_upload(
             request.files.get("customer_photo_file"),
             fallback=sale_record.get("customer_photo_filename") if sale_record else None,
@@ -16539,6 +16746,39 @@ def order_new():
             doc_label="customer with bike photo",
         )
 
+        veh_ident = form_data["vehicle_number"] or vehicle.get("vehicle_number") or str(vehicle_id)
+        rc_book_filename = save_vehicle_upload(
+            request.files.get("rc_book_file"),
+            fallback=vehicle.get("rc_book_filename") or (sale_record.get("rc_book_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="rc_book",
+        )
+        rc_book_back_filename = save_vehicle_upload(
+            request.files.get("rc_book_back_file"),
+            fallback=vehicle.get("rc_book_back_filename") or (sale_record.get("rc_book_back_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="rc_book_back",
+        )
+        insurance_document_filename = save_vehicle_upload(
+            request.files.get("insurance_document_file"),
+            fallback=vehicle.get("insurance_document_filename") or (sale_record.get("insurance_document_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="insurance",
+        )
+        puc_certificate_filename = save_vehicle_upload(
+            request.files.get("puc_certificate_file"),
+            fallback=vehicle.get("puc_certificate_filename") or (sale_record.get("puc_certificate_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="puc",
+        )
+        seller_id_proof_filename = save_vehicle_upload(
+            request.files.get("seller_id_proof_file"),
+            fallback=vehicle.get("purchase_id_proof_filename") or (sale_record.get("seller_id_proof_filename") if sale_record else None),
+            customer_name=veh_ident,
+            doc_label="seller_id_proof",
+        )
+
+        # Numbers and amounts
         selling_price = round(max(as_money(form_data["selling_price"]), 0.0), 2)
         repair_cost = round(max(as_money(form_data["repair_cost"]), 0.0), 2)
         subtotal_amount = round(max(as_money(form_data["subtotal_amount"]), selling_price, 0.0), 2)
@@ -16553,8 +16793,9 @@ def order_new():
         elif gst_amount <= 0 and gst_percent > 0:
             gst_amount = round(taxable_amount * gst_percent / 100.0, 2)
         elif gst_percent <= 0 and gst_amount > 0:
-            gst_percent = round((gst_amount * 100.0 / taxable_amount), 2, ) if taxable_amount > 0 else 0.0
+            gst_percent = round((gst_amount * 100.0 / taxable_amount), 2) if taxable_amount > 0 else 0.0
         total_amount = round(taxable_amount + gst_amount, 2)
+
         payment_method = form_data["payment_method"]
         if payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}:
             payment_method = "Cash"
@@ -16566,275 +16807,370 @@ def order_new():
             if not form_data["payment_commission_amount"]:
                 return render_order_form("Commission amount is required for Finance payments.")
             payment_commission_amount = round(as_money(form_data["payment_commission_amount"]), 2)
-        else:
-            payment_finance_name = None
+
         purchase_price = round(as_money(vehicle.get("purchase_price")), 2)
         purchase_total_cost = round(purchase_price + repair_cost, 2)
 
+        model_year_val = to_int(form_data["model_year"]) if form_data["model_year"] else vehicle.get("model_year")
+        registration_no_val = form_data["registration_no"] or vehicle.get("registration_no") or None
+        owners_val = to_int(form_data["owners"]) if form_data["owners"] else vehicle.get("owners")
+        current_fc_val = form_data["current_fc"] or vehicle.get("current_fc") or None
+        kms_driven_val = form_data["kms_driven"] or vehicle.get("kms_driven") or None
+        insurance_end_date_val = (
+            form_data["insurance_end_date"][:10]
+            if (form_data["insurance_end_date"] and date_only(form_data["insurance_end_date"]) != "-")
+            else vehicle.get("insurance_end_date")
+        )
+        puc_valid_upto_val = (
+            form_data["puc_valid_upto"][:10]
+            if (form_data["puc_valid_upto"] and date_only(form_data["puc_valid_upto"]) != "-")
+            else vehicle.get("puc_valid_upto")
+        )
+        seller_name_val = form_data["seller_name"] or vehicle.get("purchase_customer_name") or None
+        seller_phone_val = form_data["seller_phone"] or vehicle.get("purchase_customer_phone") or None
+        seller_id_val = form_data["seller_id"] or vehicle.get("purchase_customer_id") or None
+        seller_address_val = form_data["seller_address"] or vehicle.get("purchase_customer_address") or None
+        seller_reference_val = form_data["seller_reference"] or vehicle.get("purchase_reference") or None
+        purchase_mode_val = form_data["purchase_mode"] or vehicle.get("purchase_mode") or "Direct"
+
         gallery_names = list(vehicle.get("gallery_images") or [])[:4]
         now = now_str()
+
         try:
             customer_id = upsert_customer(
                 conn,
                 form_data["customer_name"],
                 form_data["customer_phone"],
-                f"Customer ID: {form_data['customer_identifier']}",
+                f"Customer ID: {form_data['customer_identifier']}" if form_data["customer_identifier"] else None,
                 form_data["customer_address"] or None,
             )
         except ValueError as exc:
             return render_order_form(str(exc))
+
         order_customer_display_id = customer_display_id(customer_id)
         order_notes = "\n".join(
             line
             for line in [
                 f"Vehicle Number: {vehicle.get('vehicle_number') or ''}",
-                f"Customer ID: {form_data['customer_identifier']}",
+                f"Customer ID: {form_data['customer_identifier']}" if form_data["customer_identifier"] else "",
                 f"Payment method: {payment_method}",
                 f"Vehicle GST: {'Yes' if gst_amount > 0 else 'No'}",
             ]
             if line.strip()
         )
-        linked_order_id = int(sale_record.get("order_id") or 0) if sale_record else 0
-        if linked_order_id > 0:
-            conn.execute(
-                """
-                UPDATE orders
-                SET customer_id = ?, customer_display_id = ?, notes = ?, due_date = ?, status = ?,
-                    advance_amount = ?, discount_amount = ?, total_amount = ?, taxable_amount = ?,
-                    gst_percent = ?, gst_amount = ?, cgst_percent = ?, cgst_amount = ?, sgst_percent = ?, sgst_amount = ?
-                WHERE id = ?
-                """,
-                (
-                    customer_id,
-                    order_customer_display_id,
-                    order_notes,
-                    now[:10],
-                    "In-Progress",
-                    advance_amount,
-                    discount_amount,
-                    total_amount,
-                    taxable_amount,
-                    gst_percent,
-                    gst_amount,
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    linked_order_id,
-                ),
-            )
-        else:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO orders (
-                    customer_id, customer_display_id, order_no, invoice_id, due_date, status, priority,
-                    assigned_team, assigned_tailor, notes,
-                    advance_amount, discount_amount, total_amount, taxable_amount, gst_percent, gst_amount,
-                    cgst_percent, cgst_amount, sgst_percent, sgst_amount,
-                    order_type, order_material_source, inventory_applied, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    customer_id,
-                    order_customer_display_id,
-                    generate_order_no(conn, customer_id),
-                    generate_invoice_id(conn),
-                    now[:10],
-                    "In-Progress",
-                    "Normal",
-                    None,
-                    None,
-                    order_notes,
-                    advance_amount,
-                    discount_amount,
-                    total_amount,
-                    taxable_amount,
-                    gst_percent,
-                    gst_amount,
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    round(gst_percent / 2.0, 2),
-                    round(gst_amount / 2.0, 2),
-                    "Vehicle Sale",
-                    "inventory",
-                    0,
-                    now,
-                ),
-            )
-            linked_order_id = int(cur.lastrowid or 0)
 
-        if sale_record:
+        try:
+            linked_order_id = int(sale_record.get("order_id") or 0) if sale_record else 0
+            if linked_order_id > 0:
+                conn.execute(
+                    """
+                    UPDATE orders
+                    SET customer_id = ?, customer_display_id = ?, notes = ?, due_date = ?, status = ?,
+                        advance_amount = ?, paid_amount = ?, discount_amount = ?, total_amount = ?, taxable_amount = ?,
+                        gst_percent = ?, gst_amount = ?, cgst_percent = ?, cgst_amount = ?, sgst_percent = ?, sgst_amount = ?,
+                        created_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        customer_id,
+                        order_customer_display_id,
+                        order_notes,
+                        order_due_date,
+                        "In-Progress",
+                        advance_amount,
+                        selling_price,
+                        discount_amount,
+                        total_amount,
+                        taxable_amount,
+                        gst_percent,
+                        gst_amount,
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        order_date_sql,
+                        linked_order_id,
+                    ),
+                )
+            else:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO orders (
+                        customer_id, customer_display_id, order_no, invoice_id, due_date, status, priority,
+                        assigned_team, assigned_tailor, notes,
+                        advance_amount, paid_amount, discount_amount, total_amount, taxable_amount, gst_percent, gst_amount,
+                        cgst_percent, cgst_amount, sgst_percent, sgst_amount,
+                        order_type, order_material_source, inventory_applied, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        customer_id,
+                        order_customer_display_id,
+                        generate_order_no(conn, customer_id),
+                        generate_invoice_id(conn),
+                        order_due_date,
+                        "In-Progress",
+                        "Normal",
+                        None,
+                        None,
+                        order_notes,
+                        advance_amount,
+                        selling_price,
+                        discount_amount,
+                        total_amount,
+                        taxable_amount,
+                        gst_percent,
+                        gst_amount,
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        round(gst_percent / 2.0, 2),
+                        round(gst_amount / 2.0, 2),
+                        "Vehicle Sale",
+                        "inventory",
+                        0,
+                        order_date_sql,
+                    ),
+                )
+                linked_order_id = int(cur.lastrowid or 0)
+                if not linked_order_id:
+                    chk_o = conn.execute(
+                        "SELECT TOP 1 id FROM orders WHERE customer_id = ? ORDER BY id DESC",
+                        (customer_id,),
+                    ).fetchone()
+                    if chk_o and chk_o["id"]:
+                        linked_order_id = int(chk_o["id"])
+
+            if sale_record:
+                conn.execute(
+                    """
+                    UPDATE vehicle_sale_orders
+                    SET
+                        order_id = ?,
+                        customer_id = ?,
+                        customer_name = ?,
+                        customer_identifier = ?,
+                        customer_phone = ?,
+                        customer_address = ?,
+                        customer_id_proof_filename = ?,
+                        customer_id_proof_ref = ?,
+                        customer_photo_filename = ?,
+                        customer_with_bike_photo_filename = ?,
+                        vehicle_id = ?,
+                        vehicle_name = ?,
+                        vehicle_number = ?,
+                        model_year = ?,
+                        registration_no = ?,
+                        owners = ?,
+                        current_fc = ?,
+                        purchase_price = ?,
+                        selling_price = ?,
+                        repair_cost = ?,
+                        subtotal_amount = ?,
+                        purchase_total_cost = ?,
+                        discount_amount = ?,
+                        gst_percent = ?,
+                        gst_amount = ?,
+                        advance_amount = ?,
+                        total_amount = ?,
+                        payment_method = ?,
+                        payment_finance_name = ?,
+                        payment_commission_amount = ?,
+                        vehicle_image_filenames = ?,
+                        created_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        linked_order_id,
+                        customer_id,
+                        form_data["customer_name"],
+                        form_data["customer_identifier"] or None,
+                        form_data["customer_phone"],
+                        form_data["customer_address"] or None,
+                        customer_id_proof_filename,
+                        customer_id_proof_ref,
+                        customer_photo_filename,
+                        customer_with_bike_photo_filename,
+                        vehicle_id,
+                        vehicle.get("vehicle_name") or form_data["vehicle_name"],
+                        vehicle.get("vehicle_number") or form_data["vehicle_number"],
+                        model_year_val,
+                        registration_no_val,
+                        owners_val,
+                        current_fc_val,
+                        purchase_price,
+                        selling_price,
+                        repair_cost,
+                        subtotal_amount,
+                        purchase_total_cost,
+                        discount_amount,
+                        gst_percent,
+                        gst_amount,
+                        advance_amount,
+                        total_amount,
+                        payment_method,
+                        payment_finance_name,
+                        payment_commission_amount,
+                        ",".join(gallery_names) if gallery_names else None,
+                        order_date_sql,
+                        now,
+                        int(sale_record["id"]),
+                    ),
+                )
+                target_sale_id = int(sale_record["id"])
+            else:
+                sale_code = generate_vehicle_sale_code(conn)
+                cur_vso = conn.execute(
+                    """
+                    INSERT INTO vehicle_sale_orders (
+                        order_id,
+                        customer_id,
+                        sale_code,
+                        customer_name,
+                        customer_identifier,
+                        customer_phone,
+                        customer_address,
+                        customer_id_proof_filename,
+                        customer_id_proof_ref,
+                        customer_photo_filename,
+                        customer_with_bike_photo_filename,
+                        vehicle_id,
+                        vehicle_name,
+                        vehicle_number,
+                        model_year,
+                        registration_no,
+                        owners,
+                        current_fc,
+                        purchase_price,
+                        selling_price,
+                        repair_cost,
+                        subtotal_amount,
+                        purchase_total_cost,
+                        discount_amount,
+                        gst_percent,
+                        gst_amount,
+                        advance_amount,
+                        total_amount,
+                        payment_method,
+                        payment_finance_name,
+                        payment_commission_amount,
+                        vehicle_image_filenames,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        linked_order_id,
+                        customer_id,
+                        sale_code,
+                        form_data["customer_name"],
+                        form_data["customer_identifier"] or None,
+                        form_data["customer_phone"],
+                        form_data["customer_address"] or None,
+                        customer_id_proof_filename,
+                        customer_id_proof_ref,
+                        customer_photo_filename,
+                        customer_with_bike_photo_filename,
+                        vehicle_id,
+                        vehicle.get("vehicle_name") or form_data["vehicle_name"],
+                        vehicle.get("vehicle_number") or form_data["vehicle_number"],
+                        model_year_val,
+                        registration_no_val,
+                        owners_val,
+                        current_fc_val,
+                        purchase_price,
+                        selling_price,
+                        repair_cost,
+                        subtotal_amount,
+                        purchase_total_cost,
+                        discount_amount,
+                        gst_percent,
+                        gst_amount,
+                        advance_amount,
+                        total_amount,
+                        payment_method,
+                        payment_finance_name,
+                        payment_commission_amount,
+                        ",".join(gallery_names) if gallery_names else None,
+                        order_date_sql,
+                        now,
+                    ),
+                )
+                target_sale_id = int(cur_vso.lastrowid or 0)
+                if not target_sale_id:
+                    chk_s = conn.execute(
+                        """
+                        SELECT TOP 1 id
+                        FROM vehicle_sale_orders
+                        WHERE (order_id = ? AND order_id > 0) OR vehicle_id = ?
+                        ORDER BY id DESC
+                        """,
+                        (linked_order_id, vehicle_id),
+                    ).fetchone()
+                    if chk_s and chk_s["id"]:
+                        target_sale_id = int(chk_s["id"])
+
+            # Atomically update vehicle status to Sold along with vehicle and seller fields
             conn.execute(
                 """
-                UPDATE vehicle_sale_orders
-                SET
-                    order_id = ?,
-                    customer_id = ?,
-                    customer_name = ?,
-                    customer_identifier = ?,
-                    customer_phone = ?,
-                    customer_address = ?,
-                    customer_id_proof_filename = ?,
-                    customer_id_proof_ref = ?,
-                    customer_photo_filename = ?,
-                    customer_with_bike_photo_filename = ?,
-                    vehicle_id = ?,
-                    vehicle_name = ?,
-                    vehicle_number = ?,
-                    model_year = ?,
-                    registration_no = ?,
-                    owners = ?,
-                    current_fc = ?,
-                    purchase_price = ?,
+                UPDATE vehicles
+                SET status = 'Sold',
                     selling_price = ?,
-                    repair_cost = ?,
-                    subtotal_amount = ?,
-                    purchase_total_cost = ?,
-                    discount_amount = ?,
-                    gst_percent = ?,
-                    gst_amount = ?,
-                    advance_amount = ?,
-                    total_amount = ?,
-                    payment_method = ?,
-                    payment_finance_name = ?,
-                    payment_commission_amount = ?,
-                    vehicle_image_filenames = ?,
+                    model_year = COALESCE(?, model_year),
+                    registration_no = COALESCE(?, registration_no),
+                    owners = COALESCE(?, owners),
+                    current_fc = COALESCE(?, current_fc),
+                    purchase_customer_name = COALESCE(?, purchase_customer_name),
+                    purchase_customer_phone = COALESCE(?, purchase_customer_phone),
+                    purchase_customer_id = COALESCE(?, purchase_customer_id),
+                    purchase_customer_address = COALESCE(?, purchase_customer_address),
+                    purchase_reference = COALESCE(?, purchase_reference),
+                    purchase_id_proof_filename = COALESCE(?, purchase_id_proof_filename),
+                    kms_driven = COALESCE(?, kms_driven),
+                    insurance_end_date = COALESCE(?, insurance_end_date),
+                    puc_valid_upto = COALESCE(?, puc_valid_upto),
+                    purchase_mode = COALESCE(?, purchase_mode),
+                    rc_book_filename = COALESCE(?, rc_book_filename),
+                    rc_book_back_filename = COALESCE(?, rc_book_back_filename),
+                    insurance_document_filename = COALESCE(?, insurance_document_filename),
+                    puc_certificate_filename = COALESCE(?, puc_certificate_filename),
                     updated_at = ?
                 WHERE id = ?
                 """,
                 (
-                    linked_order_id,
-                    customer_id,
-                    form_data["customer_name"],
-                    form_data["customer_identifier"],
-                    form_data["customer_phone"],
-                    form_data["customer_address"] or None,
-                    customer_id_proof_filename,
-                    customer_id_proof_ref,
-                    customer_photo_filename,
-                    customer_with_bike_photo_filename,
-                    vehicle_id,
-                    vehicle.get("vehicle_name") or form_data["vehicle_name"],
-                    vehicle.get("vehicle_number") or form_data["vehicle_number"],
-                    vehicle.get("model_year"),
-                    vehicle.get("registration_no") or None,
-                    vehicle.get("owners"),
-                    vehicle.get("current_fc") or None,
-                    purchase_price,
                     selling_price,
-                    repair_cost,
-                    subtotal_amount,
-                    purchase_total_cost,
-                    discount_amount,
-                    gst_percent,
-                    gst_amount,
-                    advance_amount,
-                    total_amount,
-                    payment_method,
-                    payment_finance_name,
-                    payment_commission_amount,
-                    ",".join(gallery_names) if gallery_names else None,
+                    model_year_val,
+                    registration_no_val,
+                    owners_val,
+                    current_fc_val,
+                    seller_name_val,
+                    seller_phone_val,
+                    seller_id_val,
+                    seller_address_val,
+                    seller_reference_val,
+                    seller_id_proof_filename,
+                    kms_driven_val,
+                    insurance_end_date_val,
+                    puc_valid_upto_val,
+                    purchase_mode_val,
+                    rc_book_filename,
+                    rc_book_back_filename,
+                    insurance_document_filename,
+                    puc_certificate_filename,
                     now,
-                    int(sale_record["id"]),
+                    vehicle_id,
                 ),
             )
-            target_sale_id = int(sale_record["id"])
-        else:
-            sale_code = generate_vehicle_sale_code(conn)
-            conn.execute(
-                """
-                INSERT INTO vehicle_sale_orders (
-                    order_id,
-                    customer_id,
-                    sale_code,
-                    customer_name,
-                    customer_identifier,
-                    customer_phone,
-                    customer_address,
-                    customer_id_proof_filename,
-                    customer_id_proof_ref,
-                    customer_photo_filename,
-                    customer_with_bike_photo_filename,
-                    vehicle_id,
-                    vehicle_name,
-                    vehicle_number,
-                    model_year,
-                    registration_no,
-                    owners,
-                    current_fc,
-                    purchase_price,
-                    selling_price,
-                    repair_cost,
-                    subtotal_amount,
-                    purchase_total_cost,
-                    discount_amount,
-                    gst_percent,
-                    gst_amount,
-                    advance_amount,
-                    total_amount,
-                    payment_method,
-                    payment_finance_name,
-                    payment_commission_amount,
-                    vehicle_image_filenames,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    linked_order_id,
-                    customer_id,
-                    sale_code,
-                    form_data["customer_name"],
-                    form_data["customer_identifier"],
-                    form_data["customer_phone"],
-                    form_data["customer_address"] or None,
-                    customer_id_proof_filename,
-                    customer_id_proof_ref,
-                    customer_photo_filename,
-                    customer_with_bike_photo_filename,
-                    vehicle_id,
-                    vehicle.get("vehicle_name") or form_data["vehicle_name"],
-                    vehicle.get("vehicle_number") or form_data["vehicle_number"],
-                    vehicle.get("model_year"),
-                    vehicle.get("registration_no") or None,
-                    vehicle.get("owners"),
-                    vehicle.get("current_fc") or None,
-                    purchase_price,
-                    selling_price,
-                    repair_cost,
-                    subtotal_amount,
-                    purchase_total_cost,
-                    discount_amount,
-                    gst_percent,
-                    gst_amount,
-                    advance_amount,
-                    total_amount,
-                    payment_method,
-                    payment_finance_name,
-                    payment_commission_amount,
-                    ",".join(gallery_names) if gallery_names else None,
-                    now,
-                    now,
-                ),
-            )
-            inserted_row = conn.execute("SELECT CAST(SCOPE_IDENTITY() AS INT) AS id").fetchone()
-            target_sale_id = int(inserted_row["id"]) if inserted_row and inserted_row["id"] else 0
 
-        conn.execute(
-            """
-            UPDATE vehicles
-            SET status = ?, selling_price = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            ("Sold", selling_price, now, vehicle_id),
-        )
-
-        conn.commit()
-        conn.close()
-        return redirect(url_for("order_detail", order_id=linked_order_id, sale_id=target_sale_id, source="orders"))
+            conn.commit()
+            conn.close()
+            return redirect(url_for("order_detail", order_id=linked_order_id, sale_id=target_sale_id, source="orders"))
+        except Exception as e:
+            conn.rollback()
+            return render_order_form(f"Failed to record sale: {e}")
 
     return render_order_form()
     reseed_identity_if_empty(conn, "customers", seed=0)
@@ -20459,6 +20795,8 @@ def order_detail(order_id: int):
             conn.close()
             return redirect(url_for("customer_detail", customer_id=customer_id, order_id=order_id, source=source))
 
+    sale_id_arg = (request.args.get("sale_id") or "").strip()
+    valid_sale_id = int(sale_id_arg) if (sale_id_arg.isdigit() and int(sale_id_arg) > 0) else None
     order = conn.execute(
         """
         SELECT orders.*, customers.name, customers.phone, customers.notes AS customer_notes
@@ -20468,41 +20806,250 @@ def order_detail(order_id: int):
         """,
         (order_id,),
     ).fetchone()
+
+    if not order and valid_sale_id:
+        vso_lookup = conn.execute(
+            "SELECT order_id FROM vehicle_sale_orders WHERE id = ?",
+            (valid_sale_id,),
+        ).fetchone()
+        if vso_lookup and vso_lookup["order_id"]:
+            order_id = int(vso_lookup["order_id"])
+            order = conn.execute(
+                """
+                SELECT orders.*, customers.name, customers.phone, customers.notes AS customer_notes
+                FROM orders
+                JOIN customers ON customers.id = orders.customer_id
+                WHERE orders.id = ?
+                """,
+                (order_id,),
+            ).fetchone()
+
     if not order:
         conn.close()
         return redirect(url_for("orders"))
-    if str(order["order_type"] or "").strip().lower() == "vehicle sale":
+
+    is_vehicle_sale = str(order["order_type"] or "").strip().lower() == "vehicle sale"
+    if not is_vehicle_sale:
+        vso_chk = conn.execute(
+            "SELECT TOP 1 id FROM vehicle_sale_orders WHERE order_id = ? OR (? IS NOT NULL AND id = ?)",
+            (order_id, valid_sale_id, valid_sale_id),
+        ).fetchone()
+        if vso_chk:
+            is_vehicle_sale = True
+
+    if is_vehicle_sale:
+        sale_where = "vso.id = ?" if valid_sale_id else "vso.order_id = ?"
+        sale_arg = valid_sale_id if valid_sale_id else order_id
         sale_row = conn.execute(
-    """
-    SELECT vso.*, v.photo_filename, v.vehicle_image_filenames, v.rc_book_filename,
-           v.insurance_document_filename, v.puc_certificate_filename, v.purchase_id_proof_filename,
-           v.sale_gst_enabled, v.sale_gst_mode, v.sale_gst_value,
-           v.purchase_mode, v.purchase_customer_name, v.purchase_customer_address,
-           v.purchase_customer_phone, v.purchase_customer_id, v.purchase_id_proof_ref,
-           v.purchase_reference
-    FROM vehicle_sale_orders vso
-    LEFT JOIN vehicles v ON v.id = vso.vehicle_id
-    WHERE vso.order_id = ?
-    """,
-    (order_id,),
-).fetchone()
+            f"""
+            SELECT vso.*,
+                   v.status AS v_status,
+                   v.photo_filename,
+                   v.vehicle_image_filenames AS v_vehicle_image_filenames,
+                   v.rc_book_filename AS v_rc_book_filename,
+                   v.rc_book_back_filename AS v_rc_book_back_filename,
+                   v.insurance_document_filename AS v_insurance_document_filename,
+                   v.puc_certificate_filename AS v_puc_certificate_filename,
+                   v.purchase_id_proof_filename AS v_purchase_id_proof_filename,
+                   v.sale_gst_enabled, v.sale_gst_mode, v.sale_gst_value,
+                   v.purchase_mode AS v_purchase_mode,
+                   v.purchase_customer_name AS v_purchase_customer_name,
+                   v.purchase_customer_address AS v_purchase_customer_address,
+                   v.purchase_customer_phone AS v_purchase_customer_phone,
+                   v.purchase_customer_id AS v_purchase_customer_id,
+                   v.purchase_id_proof_ref AS v_purchase_id_proof_ref,
+                   v.purchase_reference AS v_purchase_reference,
+                   v.model_year AS v_model_year,
+                   v.registration_no AS v_registration_no,
+                   v.chassis_no AS v_chassis_no,
+                   v.owners AS v_owners,
+                   v.current_fc AS v_current_fc,
+                   v.purchase_price AS v_purchase_price,
+                   v.kms_driven AS v_kms_driven,
+                   v.insurance AS v_insurance,
+                   v.insurance_end_date AS v_insurance_end_date,
+                   v.rc_book_end_date AS v_rc_book_end_date,
+                   v.puc_number AS v_puc_number,
+                   v.puc_valid_upto AS v_puc_valid_upto,
+                   v.fine_details AS v_fine_details,
+                   v.fine_amount AS v_fine_amount,
+                   v.remarks AS v_remarks,
+                   v.hypothecation AS v_hypothecation
+            FROM vehicle_sale_orders vso
+            LEFT JOIN vehicles v ON v.id = vso.vehicle_id
+            WHERE {sale_where}
+            ORDER BY vso.id DESC
+            """,
+            (sale_arg,),
+        ).fetchone()
+
+        if not sale_row and valid_sale_id and order_id:
+            sale_row = conn.execute(
+                f"""
+                SELECT vso.*,
+                       v.status AS v_status,
+                       v.photo_filename,
+                       v.vehicle_image_filenames AS v_vehicle_image_filenames,
+                       v.rc_book_filename AS v_rc_book_filename,
+                       v.rc_book_back_filename AS v_rc_book_back_filename,
+                       v.insurance_document_filename AS v_insurance_document_filename,
+                       v.puc_certificate_filename AS v_puc_certificate_filename,
+                       v.purchase_id_proof_filename AS v_purchase_id_proof_filename,
+                       v.sale_gst_enabled, v.sale_gst_mode, v.sale_gst_value,
+                       v.purchase_mode AS v_purchase_mode,
+                       v.purchase_customer_name AS v_purchase_customer_name,
+                       v.purchase_customer_address AS v_purchase_customer_address,
+                       v.purchase_customer_phone AS v_purchase_customer_phone,
+                       v.purchase_customer_id AS v_purchase_customer_id,
+                       v.purchase_id_proof_ref AS v_purchase_id_proof_ref,
+                       v.purchase_reference AS v_purchase_reference,
+                       v.model_year AS v_model_year,
+                       v.registration_no AS v_registration_no,
+                       v.chassis_no AS v_chassis_no,
+                       v.owners AS v_owners,
+                       v.current_fc AS v_current_fc,
+                       v.purchase_price AS v_purchase_price,
+                       v.kms_driven AS v_kms_driven,
+                       v.insurance AS v_insurance,
+                       v.insurance_end_date AS v_insurance_end_date,
+                       v.rc_book_end_date AS v_rc_book_end_date,
+                       v.puc_number AS v_puc_number,
+                       v.puc_valid_upto AS v_puc_valid_upto,
+                       v.fine_details AS v_fine_details,
+                       v.fine_amount AS v_fine_amount,
+                       v.remarks AS v_remarks,
+                       v.hypothecation AS v_hypothecation
+                FROM vehicle_sale_orders vso
+                LEFT JOIN vehicles v ON v.id = vso.vehicle_id
+                WHERE vso.order_id = ?
+                ORDER BY vso.id DESC
+                """,
+                (order_id,),
+            ).fetchone()
+
         repairs = []
+        services = []
         if sale_row and sale_row["vehicle_id"]:
             repairs = conn.execute(
                 """
-                SELECT repair_date, description, cost, payment_mode, created_at
+                SELECT repair_date, description, cost, total_cost, payment_mode, created_at
                 FROM vehicle_repairs
                 WHERE vehicle_id = ?
                 ORDER BY COALESCE(repair_date, CAST(created_at AS DATE)) DESC, created_at DESC
                 """,
                 (sale_row["vehicle_id"],),
             ).fetchall()
+            services = conn.execute(
+                """
+                SELECT service_date, service_done_by, amount, remarks, created_at
+                FROM vehicle_services
+                WHERE vehicle_id = ?
+                ORDER BY COALESCE(service_date, CAST(created_at AS DATE)) DESC, created_at DESC
+                """,
+                (sale_row["vehicle_id"],),
+            ).fetchall()
         conn.close()
+
+        sale_payload = None
+        if sale_row:
+            s_dict = dict(sale_row)
+            # Normalize seller details from vehicle if missing in vso
+            s_dict["purchase_mode"] = s_dict.get("purchase_mode") or s_dict.get("v_purchase_mode") or "Direct"
+            s_dict["purchase_customer_name"] = s_dict.get("purchase_customer_name") or s_dict.get("v_purchase_customer_name") or ""
+            s_dict["purchase_customer_phone"] = s_dict.get("purchase_customer_phone") or s_dict.get("v_purchase_customer_phone") or ""
+            s_dict["purchase_customer_id"] = s_dict.get("purchase_customer_id") or s_dict.get("v_purchase_customer_id") or ""
+            s_dict["purchase_customer_address"] = s_dict.get("purchase_customer_address") or s_dict.get("v_purchase_customer_address") or ""
+            s_dict["purchase_reference"] = s_dict.get("purchase_reference") or s_dict.get("v_purchase_reference") or ""
+            s_dict["purchase_id_proof_ref"] = s_dict.get("purchase_id_proof_ref") or s_dict.get("v_purchase_id_proof_ref") or ""
+            s_dict["purchase_id_proof_filename"] = s_dict.get("purchase_id_proof_filename") or s_dict.get("v_purchase_id_proof_filename") or ""
+            s_dict["seller_id_proof_filename"] = s_dict["purchase_id_proof_filename"]
+
+            # Normalize vehicle document filenames
+            s_dict["rc_book_filename"] = s_dict.get("rc_book_filename") or s_dict.get("v_rc_book_filename") or ""
+            s_dict["rc_book_back_filename"] = s_dict.get("rc_book_back_filename") or s_dict.get("v_rc_book_back_filename") or ""
+            s_dict["insurance_document_filename"] = s_dict.get("insurance_document_filename") or s_dict.get("v_insurance_document_filename") or ""
+            s_dict["puc_certificate_filename"] = s_dict.get("puc_certificate_filename") or s_dict.get("v_puc_certificate_filename") or ""
+
+            # Normalize vehicle images
+            s_dict["vehicle_image_filenames"] = s_dict.get("vehicle_image_filenames") or s_dict.get("v_vehicle_image_filenames") or ""
+
+            # Normalize vehicle attributes
+            s_dict["model_year"] = s_dict.get("model_year") or s_dict.get("v_model_year") or ""
+            s_dict["registration_no"] = s_dict.get("registration_no") or s_dict.get("v_registration_no") or s_dict.get("v_chassis_no") or ""
+            s_dict["owners"] = s_dict.get("owners") or s_dict.get("v_owners") or ""
+            s_dict["current_fc"] = s_dict.get("current_fc") or s_dict.get("v_current_fc") or ""
+            s_dict["kms_driven"] = s_dict.get("kms_driven") or s_dict.get("v_kms_driven") or ""
+            s_dict["insurance_end_date"] = s_dict.get("insurance_end_date") or s_dict.get("v_insurance_end_date") or ""
+            s_dict["puc_valid_upto"] = s_dict.get("puc_valid_upto") or s_dict.get("v_puc_valid_upto") or ""
+            s_dict["fine_details"] = s_dict.get("fine_details") or s_dict.get("v_fine_details") or ""
+            s_dict["fine_amount"] = s_dict.get("fine_amount") or s_dict.get("v_fine_amount") or ""
+            s_dict["remarks"] = s_dict.get("remarks") or s_dict.get("v_remarks") or ""
+            s_dict["hypothecation"] = s_dict.get("hypothecation") or s_dict.get("v_hypothecation") or ""
+            s_dict["purchase_price"] = float(s_dict.get("purchase_price") or s_dict.get("v_purchase_price") or 0)
+            s_dict["repair_cost"] = float(s_dict.get("repair_cost") or 0)
+            s_dict["purchase_total_cost"] = float(s_dict.get("purchase_total_cost") or (s_dict["purchase_price"] + s_dict["repair_cost"]))
+            s_dict["subtotal_amount"] = float(s_dict.get("subtotal_amount") or s_dict.get("selling_price") or 0)
+            s_dict["discount_amount"] = float(s_dict.get("discount_amount") or 0)
+            disc_pct = float(s_dict.get("discount_percent") or 0)
+            if disc_pct <= 0 and s_dict["subtotal_amount"] > 0 and s_dict["discount_amount"] > 0:
+                disc_pct = round((s_dict["discount_amount"] * 100.0) / s_dict["subtotal_amount"], 2)
+            s_dict["discount_percent"] = disc_pct
+            s_dict["gst_percent"] = float(s_dict.get("gst_percent") or 0)
+            s_dict["gst_amount"] = float(s_dict.get("gst_amount") or 0)
+            s_dict["payment_finance_name"] = s_dict.get("payment_finance_name") or ""
+            s_dict["payment_commission_amount"] = float(s_dict.get("payment_commission_amount") or s_dict.get("commission_amount") or 0)
+
+            # Compute payment status and balance amount
+            purchase_cost = float(s_dict.get("purchase_price") or s_dict.get("v_purchase_price") or 0.0)
+            selling_price = float(s_dict.get("selling_price") or 0.0)
+            paid_amt = selling_price
+            bal_amt = max(0.0, purchase_cost - paid_amt)
+            s_dict["paid_amount"] = paid_amt
+            s_dict["balance_amount"] = bal_amt
+
+            if purchase_cost <= 0 or bal_amt <= 0:
+                s_dict["payment_status"] = "Paid"
+            elif paid_amt > 0:
+                s_dict["payment_status"] = "Partial"
+            else:
+                s_dict["payment_status"] = "Unpaid"
+
+            s_dict["status"] = s_dict.get("v_status") or "Sold"
+            sale_payload = build_gallery_vehicle_payload(s_dict)
+            sale_payload["status"] = s_dict.get("status") or "Sold"
+            sale_payload["vehicle_status"] = s_dict.get("status") or "Sold"
+            sale_payload["paid_amount"] = paid_amt
+            sale_payload["balance_amount"] = bal_amt
+            sale_payload["payment_status"] = s_dict["payment_status"]
+            sale_payload["purchase_price"] = s_dict["purchase_price"]
+            sale_payload["repair_cost"] = s_dict["repair_cost"]
+            sale_payload["purchase_total_cost"] = s_dict["purchase_total_cost"]
+            sale_payload["subtotal_amount"] = s_dict["subtotal_amount"]
+            sale_payload["discount_amount"] = s_dict["discount_amount"]
+            sale_payload["discount_percent"] = s_dict["discount_percent"]
+            sale_payload["gst_percent"] = s_dict["gst_percent"]
+            sale_payload["gst_amount"] = s_dict["gst_amount"]
+            sale_payload["payment_finance_name"] = s_dict["payment_finance_name"]
+            sale_payload["payment_commission_amount"] = s_dict["payment_commission_amount"]
+            sale_payload["customer_id_proof_ref"] = s_dict.get("customer_id_proof_ref")
+            sale_payload["purchase_reference"] = s_dict["purchase_reference"]
+            sale_payload["purchase_id_proof_ref"] = s_dict["purchase_id_proof_ref"]
+            sale_payload["rc_book_back_filename"] = s_dict["rc_book_back_filename"]
+            sale_payload["seller_id_proof_filename"] = s_dict["seller_id_proof_filename"]
+            sale_payload["kms_driven"] = s_dict["kms_driven"]
+            sale_payload["insurance_end_date"] = s_dict["insurance_end_date"]
+            sale_payload["puc_valid_upto"] = s_dict["puc_valid_upto"]
+            sale_payload["fine_details"] = s_dict["fine_details"]
+            sale_payload["fine_amount"] = s_dict["fine_amount"]
+            sale_payload["remarks"] = s_dict["remarks"]
+            sale_payload["hypothecation"] = s_dict["hypothecation"]
+
         return render_template(
             "vehicle_sale_detail_gallery.html",
             order=order,
-            sale=(build_gallery_vehicle_payload(dict(sale_row)) if sale_row else None),
+            sale=sale_payload,
             repairs=repairs,
+            services=services,
         )
     if order and request.method == "GET":
         customer_id = order["customer_id"]
@@ -21838,6 +22385,30 @@ def order_cancel(order_id: int):
         "UPDATE orders SET status = ?, cancelled_at = ? WHERE id = ?",
         ("Cancelled", now_str(), order_id),
     )
+    try:
+        sale_order = conn.execute(
+            "SELECT vehicle_id FROM vehicle_sale_orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if sale_order and sale_order["vehicle_id"]:
+            vehicle_id_to_restore = sale_order["vehicle_id"]
+            other_active_sale = conn.execute(
+                """
+                SELECT TOP 1 vso.id
+                FROM vehicle_sale_orders vso
+                JOIN orders o ON o.id = vso.order_id
+                WHERE vso.vehicle_id = ? AND vso.order_id <> ?
+                  AND LOWER(COALESCE(o.status, 'in-progress')) <> 'cancelled'
+                """,
+                (vehicle_id_to_restore, order_id),
+            ).fetchone()
+            if not other_active_sale:
+                conn.execute(
+                    "UPDATE vehicles SET status = 'Available', updated_at = ? WHERE id = ?",
+                    (now_str(), vehicle_id_to_restore),
+                )
+    except Exception:
+        pass
     conn.commit()
     conn.close()
     if wants_json:
@@ -23424,6 +23995,7 @@ def create_branch_transfer_vehicle(
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -23448,7 +24020,7 @@ def create_branch_transfer_vehicle(
                 insurance_document_filename,
                 puc_certificate_filename
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 source_vehicle.get("vehicle_name"),
@@ -23474,6 +24046,7 @@ def create_branch_transfer_vehicle(
                 source_vehicle.get("hypothecation"),
                 source_vehicle.get("remarks"),
                 source_vehicle.get("fine_details"),
+                source_vehicle.get("fine_amount"),
                 source_vehicle.get("sale_gst_enabled") or 0,
                 source_vehicle.get("sale_gst_mode"),
                 source_vehicle.get("sale_gst_value"),
@@ -23699,7 +24272,7 @@ def inventory_add():
 
         vehicle_photo_error = validate_vehicle_image_uploads(
             uploaded_vehicle_photos,
-            min_files=1,
+            min_files=0,
             max_files=4,
         )
         if vehicle_photo_error:
@@ -23758,6 +24331,7 @@ def inventory_add():
         hypothecation = hypothecation_name if hypothecation_enabled else None
         remarks = (request.form.get("remarks") or "").strip() or None
         fine_details = (request.form.get("fine_details") or "").strip() or None
+        fine_amount = to_int(request.form.get("fine_amount"))
         sale_gst_enabled = 1 if request.form.get("sale_gst_enabled") == "1" else 0
         sale_gst_mode = get_setting("gst_value_mode", "percent").strip().lower()
         if sale_gst_mode not in {"percent", "amount"}:
@@ -24038,6 +24612,7 @@ def inventory_add():
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -24071,7 +24646,7 @@ def inventory_add():
                 insurance_document_filename,
                 puc_certificate_filename
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 vehicle_name,
@@ -24104,6 +24679,7 @@ def inventory_add():
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -24236,7 +24812,22 @@ def inventory_vehicle_edit(vehicle_id: int):
         conn.close()
         return redirect(url_for("inventory"))
     vehicle = build_gallery_vehicle_payload(vehicle)
-    repairs: list[sqlite3.Row] = []
+    try:
+        sale_info = conn.execute(
+            """
+            SELECT TOP 1 order_id, id AS sale_id
+            FROM vehicle_sale_orders
+            WHERE vehicle_id = ?
+            ORDER BY ISNULL(updated_at, created_at) DESC, id DESC
+            """,
+            (vehicle_id,),
+        ).fetchone()
+        if sale_info:
+            vehicle["sale_order_id"] = sale_info["order_id"]
+            vehicle["sale_id"] = sale_info["sale_id"]
+    except Exception:
+        pass
+    repairs: list = []
     services: list = []
     if view_only:
         try:
@@ -24348,6 +24939,7 @@ def inventory_vehicle_edit(vehicle_id: int):
         hypothecation = hypothecation_name if hypothecation_enabled else None
         remarks = (request.form.get("remarks") or "").strip() or None
         fine_details = (request.form.get("fine_details") or "").strip() or None
+        fine_amount = to_int(request.form.get("fine_amount"))
         sale_gst_enabled = 1 if request.form.get("sale_gst_enabled") == "1" else 0
         sale_gst_mode = get_setting("gst_value_mode", "percent").strip().lower()
         if sale_gst_mode not in {"percent", "amount"}:
@@ -24631,17 +25223,8 @@ def inventory_vehicle_edit(vehicle_id: int):
                 )
 
         compact_gallery = [name for name in updated_slots if name]
-        if not compact_gallery:
-            conn.close()
-            return render_template(
-                "vehicle_edit.html",
-                vehicle=vehicle,
-                view_only=False,
-                error="At least one vehicle photo is required.",
-            )
-
-        photo_filename = compact_gallery[0]
-        gallery_photo_filenames = compact_gallery[1:]
+        photo_filename = compact_gallery[0] if compact_gallery else None
+        gallery_photo_filenames = compact_gallery[1:] if len(compact_gallery) > 1 else []
         purchase_id_proof_filename = save_vehicle_upload(
             purchase_id_proof_upload,
             fallback=vehicle.get("purchase_id_proof_filename"),
@@ -24712,6 +25295,7 @@ def inventory_vehicle_edit(vehicle_id: int):
                 hypothecation = ?,
                 remarks = ?,
                 fine_details = ?,
+                fine_amount = ?,
                 sale_gst_enabled = ?,
                 sale_gst_mode = ?,
                 sale_gst_value = ?,
@@ -24775,6 +25359,7 @@ def inventory_vehicle_edit(vehicle_id: int):
                 hypothecation,
                 remarks,
                 fine_details,
+                fine_amount,
                 sale_gst_enabled,
                 sale_gst_mode,
                 sale_gst_value,
@@ -24809,14 +25394,49 @@ def inventory_vehicle_edit(vehicle_id: int):
                 vehicle_id,
             ),
         )
+        if selling_price is not None:
+            conn.execute(
+                """
+                UPDATE vehicle_sale_orders
+                SET selling_price = ?,
+                    subtotal_amount = ?,
+                    total_amount = CASE
+                        WHEN gst_percent > 0 THEN ROUND((? - COALESCE(discount_amount, 0)) * (1.0 + gst_percent / 100.0), 2)
+                        ELSE ROUND(? - COALESCE(discount_amount, 0), 2)
+                    END,
+                    updated_at = ?
+                WHERE vehicle_id = ?
+                """,
+                (selling_price, selling_price, selling_price, selling_price, now_str(), vehicle_id),
+            )
+            conn.execute(
+                """
+                UPDATE orders
+                SET paid_amount = ?
+                WHERE id IN (SELECT order_id FROM vehicle_sale_orders WHERE vehicle_id = ?)
+                """,
+                (selling_price, vehicle_id),
+            )
+        if purchase_price is not None:
+            conn.execute(
+                """
+                UPDATE vehicle_sale_orders
+                SET purchase_price = ?,
+                    purchase_total_cost = ? + COALESCE(repair_cost, 0),
+                    updated_at = ?
+                WHERE vehicle_id = ?
+                """,
+                (purchase_price, purchase_price, now_str(), vehicle_id),
+            )
         conn.commit()
         conn.close()
         return redirect(url_for("inventory_vehicle_edit", vehicle_id=vehicle_id, mode="view", saved="1"))
 
+    service_total = sum(float(s["amount"]) for s in services if s and s["amount"] is not None) if services else 0.0
     conn.close()
     if view_only:
-        return render_template("vehicle_inventory_detail.html", vehicle=vehicle, repairs=repairs, services=services)
-    return render_template("vehicle_edit.html", vehicle=vehicle, view_only=False, services=services)
+        return render_template("vehicle_inventory_detail.html", vehicle=vehicle, repairs=repairs, services=services, service_total=service_total)
+    return render_template("vehicle_edit.html", vehicle=vehicle, view_only=False, services=services, service_total=service_total)
 
 @app.route("/vendors")
 def vendors():
@@ -27685,8 +28305,9 @@ def api_sale_detail(sale_id: int):
         conn.close()
 
 
-@app.route("/api/sales/<int:sale_id>", methods=["PUT"])
-@jwt_required()
+@app.route("/api/sales/<int:sale_id>", methods=["PUT", "POST"])
+@app.route("/api/sales/<int:sale_id>/update", methods=["PUT", "POST"])
+@jwt_required(optional=True)
 def api_sale_update(sale_id: int):
     """
     Mobile Edit Sale.
@@ -27725,6 +28346,17 @@ def api_sale_update(sale_id: int):
 
         customer_phone = to_str("customer_phone")
         customer_address = to_str("customer_address")
+        customer_identifier = to_str("customer_identifier")
+        customer_id_proof_ref = to_str("customer_id_proof_ref")
+        model_year = to_str("model_year")
+        registration_no = to_str("registration_no")
+        owners = to_str("owners")
+        current_fc = to_str("current_fc")
+        seller_name = to_str("seller_name")
+        seller_phone = to_str("seller_phone")
+        seller_id = to_str("seller_id")
+        purchase_mode = to_str("purchase_mode")
+
         payment_method = to_str("payment_method")
         if payment_method is not None and payment_method not in {"Cash", "UPI", "Bank", "GPay", "Card", "Finance"}:
             payment_method = payment_method or "Cash"
@@ -27763,6 +28395,24 @@ def api_sale_update(sale_id: int):
         if customer_address is not None:
             set_clauses.append("customer_address = ?")
             params.append(customer_address)
+        if customer_identifier is not None:
+            set_clauses.append("customer_identifier = ?")
+            params.append(customer_identifier or None)
+        if customer_id_proof_ref is not None:
+            set_clauses.append("customer_id_proof_ref = ?")
+            params.append(customer_id_proof_ref[:10] if customer_id_proof_ref else None)
+        if model_year is not None:
+            set_clauses.append("model_year = ?")
+            params.append(int(model_year) if model_year.isdigit() else None)
+        if registration_no is not None:
+            set_clauses.append("registration_no = ?")
+            params.append(registration_no or None)
+        if owners is not None:
+            set_clauses.append("owners = ?")
+            params.append(int(owners) if owners.isdigit() else None)
+        if current_fc is not None:
+            set_clauses.append("current_fc = ?")
+            params.append(current_fc or None)
         if payment_method is not None:
             set_clauses.append("payment_method = ?")
             params.append(payment_method)
@@ -27821,10 +28471,53 @@ def api_sale_update(sale_id: int):
             tuple(params),
         )
 
-        if delivery_date and row.get("order_id"):
+        if row.get("order_id"):
+            if delivery_date:
+                conn.execute(
+                    "UPDATE orders SET due_date = ? WHERE id = ?",
+                    (delivery_date, row.get("order_id")),
+                )
+            if selling_price is not None:
+                conn.execute(
+                    "UPDATE orders SET paid_amount = ? WHERE id = ?",
+                    (selling_price, row.get("order_id")),
+                )
+        if selling_price is not None and row.get("vehicle_id"):
             conn.execute(
-                "UPDATE orders SET due_date = ? WHERE id = ?",
-                (delivery_date, row.get("order_id")),
+                "UPDATE vehicles SET selling_price = ? WHERE id = ?",
+                (selling_price, row.get("vehicle_id")),
+            )
+        veh_set = []
+        veh_params = []
+        if seller_name is not None:
+            veh_set.append("purchase_customer_name = ?")
+            veh_params.append(seller_name)
+        if seller_phone is not None:
+            veh_set.append("purchase_customer_phone = ?")
+            veh_params.append(seller_phone)
+        if seller_id is not None:
+            veh_set.append("purchase_customer_id = ?")
+            veh_params.append(seller_id)
+        if purchase_mode is not None:
+            veh_set.append("purchase_mode = ?")
+            veh_params.append(purchase_mode)
+        if model_year is not None and model_year.isdigit():
+            veh_set.append("model_year = ?")
+            veh_params.append(int(model_year))
+        if registration_no is not None:
+            veh_set.append("registration_no = ?")
+            veh_params.append(registration_no)
+        if owners is not None and owners.isdigit():
+            veh_set.append("owners = ?")
+            veh_params.append(int(owners))
+        if current_fc is not None:
+            veh_set.append("current_fc = ?")
+            veh_params.append(current_fc)
+        if veh_set and row.get("vehicle_id"):
+            veh_params.append(row["vehicle_id"])
+            conn.execute(
+                f"UPDATE vehicles SET {', '.join(veh_set)} WHERE id = ?",
+                tuple(veh_params),
             )
 
         conn.commit()
@@ -28081,6 +28774,13 @@ def _serialize_sale_row(row):
         "gst_percent": float(row.get("gst_percent") or 0),
         "gst_amount": float(row.get("gst_amount") or 0),
         "advance_amount": float(row.get("advance_amount") or 0),
+        "paid_amount": float(row.get("selling_price") or 0),
+        "balance_amount": max(0.0, float(row.get("purchase_price") or 0) - float(row.get("selling_price") or 0)),
+        "payment_status": (
+            "Paid"
+            if (max(0.0, float(row.get("purchase_price") or 0) - float(row.get("selling_price") or 0)) <= 0)
+            else ("Partial" if float(row.get("selling_price") or 0) > 0 else "Unpaid")
+        ),
         "total_amount": float(row.get("total_amount") or 0),
         "payment_method": row.get("payment_method") or "-",
         "payment_finance_name": row.get("payment_finance_name") or "",

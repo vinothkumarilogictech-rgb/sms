@@ -945,10 +945,6 @@
                 <input name="purchase_price" inputmode="decimal" placeholder="e.g., 45000" />
               </div>
               <div class="bd-field">
-                <label>Selling Price</label>
-                <input name="selling_price" inputmode="decimal" placeholder="e.g., 52000" />
-              </div>
-              <div class="bd-field">
                 <label>Model Year</label>
                 <input name="model_year" inputmode="numeric" placeholder="e.g., 2021" />
               </div>
@@ -1320,7 +1316,7 @@
     });
   })();
 
-  // GLOBAL BIKE SEARCH — dropdown style
+  // GLOBAL BIKE SEARCH — Server-side search across all vehicle statuses
 (function () {
   const searchInput = document.getElementById('bdSearchInput');
   const dropdown    = document.getElementById('bdSearchDropdown');
@@ -1329,90 +1325,105 @@
   const fromDate    = document.getElementById('bdFromDate');
   const toDate      = document.getElementById('bdToDate');
   const dateClear   = document.getElementById('bdDateClear');
-  let bikeData = [];
+  let searchTimer   = null;
+  let activeAbortController = null;
 
-  async function loadBikeData() {
-    try {
-      const res = await fetch('/api/vehicles?status=all');
-      bikeData = await res.json();
-      if (!Array.isArray(bikeData)) bikeData = [];
-    } catch (e) { console.error('Failed to load bike data:', e); }
+  function escHtml(t) {
+    if (!t) return '';
+    const d = document.createElement('div');
+    d.textContent = String(t);
+    return d.innerHTML;
   }
-
-  function escHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
   function badgeCls(status) {
     const s = (status || '').toLowerCase();
-    if (s === 'sold') return 'badge-sold';
-    if (s === 'in progress') return 'badge-progress';
+    if (s.includes('sold')) return 'badge-sold';
+    if (s.includes('progress') || s.includes('repair')) return 'badge-progress';
     return 'badge-available';
   }
 
- function matchesQuery(bike, q) {
-    if (!q) return true;
-    const fields = [
-      bike.search_blob,
-      bike.vehicle_name,
-      bike.vehicle_number,
-      bike.registration_no,
-      bike.brand,
-      bike.rc_number,
-      bike.purchase_customer_name,
-      bike.purchase_customer_phone,
-      bike.purchase_agent_name,
-      bike.purchase_co_name,
-      bike.rc_owner_name,
-      String(bike.purchase_price || ''),
-      String(bike.selling_price || ''),
-      bike.status,
-    ];
-    return fields.some(val => val && String(val).toLowerCase().includes(q));
-  }
-
-  function matchesDate(bike, from, to) {
-    if (!from && !to) return true;
-    const raw = bike.sale_date || bike.purchase_date || bike.created_at || bike.date;
-    if (!raw) return true;
-    const d = new Date(raw);
-    if (from && d < new Date(from)) return false;
-    if (to   && d > new Date(to + 'T23:59:59')) return false;
-    return true;
-  }
-
   function renderDropdown(results) {
-    if (!results.length) {
+    if (!results || !results.length) {
       resultsBody.innerHTML = '<div class="bd-search-dropdown-empty">No vehicles found.</div>';
       return;
     }
-    resultsBody.innerHTML = results.slice(0, 30).map(bike => {
-      const name   = escHtml(bike.vehicle_name || bike.vehicle_number || 'Vehicle');
-      const number = escHtml(bike.vehicle_number || '');
-      const status = bike.status || 'Available';
-      const href   = bike.id ? '/vehicle/' + encodeURIComponent(bike.id) : '/gallery';
-      const price  = bike.purchase_price ? '₹' + Number(bike.purchase_price).toLocaleString('en-IN') : '';
-      const owner  = escHtml(bike.rc_owner_name || bike.purchase_customer_name || '');
-      const ownerPhone = escHtml(bike.rc_owner_phone || bike.purchase_customer_phone || bike.purchase_agent_phone || '');
+    resultsBody.innerHTML = results.slice(0, 30).map(item => {
+      const name = escHtml(item.vehicle_name || item.title || 'Vehicle');
+      const year = item.model_year ? ` (${item.model_year})` : '';
+      const number = escHtml(item.vehicle_number || '');
+      const regNo = item.registration_no ? ` · Chassis: ${escHtml(item.registration_no)}` : '';
+      const status = escHtml(item.status || 'Available');
+      const href = item.href || (item.id ? `/inventory/${encodeURIComponent(item.id)}/edit?mode=view` : '#');
+      const pCost = item.purchase_price ? `Cost: ₹${Number(item.purchase_price).toLocaleString('en-IN')}` : '';
+      const rCost = item.repair_cost ? `Repairs: ₹${Number(item.repair_cost).toLocaleString('en-IN')}` : '';
+      const financial = [pCost, rCost].filter(Boolean).join(' · ');
+      const isSold = (item.status_raw === 'sold' || (item.status || '').toLowerCase() === 'sold');
+      const salePrice = item.sale_total_amount || item.selling_price;
+      const soldInfo = isSold ? `Sold: ₹${Number(salePrice || 0).toLocaleString('en-IN')}${item.buyer_name ? ' to ' + escHtml(item.buyer_name) : ''}` : '';
+      const owner = escHtml(item.rc_owner_name || item.purchase_customer_name || '');
+      const ownerPhone = escHtml(item.rc_owner_phone || item.purchase_customer_phone || '');
+      const ownerInfo = owner ? `Owner: ${owner}${ownerPhone ? ' (' + ownerPhone + ')' : ''}` : '';
+
       return `<a href="${href}" class="bd-search-dropdown-row">
         <div class="col-module">Vehicle</div>
         <div class="col-type">Bike</div>
         <div class="col-result">
-          <strong>${name}</strong>
-          <small>${number}${price ? ' · ' + price : ''} &nbsp;<span class="bd-search-badge ${badgeCls(status)}">${status}</span></small>
-          ${owner ? `<small style="display:block;color:#6c2f8f;font-weight:700;padding-top:10px;">Owner Name : ${owner}${ownerPhone ? `<br>Owner Number : ${ownerPhone}` : ''}</small>` : ''}      
-          </div>
+          <strong>${name}${year}</strong>
+          <small>${number}${regNo} &nbsp;<span class="bd-search-badge ${badgeCls(status)}">${status}</span></small>
+          ${financial ? `<small style="display:block;color:#475569;margin-top:2px;">${financial}</small>` : ''}
+          ${soldInfo ? `<small style="display:block;color:#b3261e;font-weight:700;margin-top:2px;">${soldInfo}</small>` : ''}
+          ${ownerInfo ? `<small style="display:block;color:#6c2f8f;font-weight:700;margin-top:2px;">${ownerInfo}</small>` : ''}
+        </div>
       </a>`;
     }).join('');
   }
 
+  async function performSearch() {
+    const q = (searchInput.value || '').trim();
+    const from = fromDate ? fromDate.value : '';
+    const to = toDate ? toDate.value : '';
+
+    if (!q) {
+      dropdown.classList.remove('visible');
+      resultsBody.innerHTML = '';
+      return;
+    }
+
+    if (activeAbortController) {
+      activeAbortController.abort();
+    }
+    activeAbortController = new AbortController();
+
+    try {
+      const params = new URLSearchParams({ q });
+      if (from) params.set('from_date', from);
+      if (to) params.set('to_date', to);
+      const res = await fetch(`/api/dashboard/search?${params.toString()}`, {
+        signal: activeAbortController.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) throw new Error('Search request failed');
+      const data = await res.json();
+      renderDropdown(data.results || []);
+      dropdown.classList.add('visible');
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.error('Search error:', e);
+        resultsBody.innerHTML = '<div class="bd-search-dropdown-empty">No vehicles found.</div>';
+        dropdown.classList.add('visible');
+      }
+    }
+  }
+
   function doSearch() {
-    const q    = searchInput.value.trim().toLowerCase();
-    const from = fromDate.value;
-    const to   = toDate.value;
+    const q = (searchInput.value || '').trim();
     clearBtn.style.display = q ? 'block' : 'none';
-    if (!q && !from && !to) { dropdown.classList.remove('visible'); return; }
-    const results = bikeData.filter(b => matchesQuery(b, q) && matchesDate(b, from, to));
-    renderDropdown(results);
-    dropdown.classList.add('visible');
+    if (!q) {
+      dropdown.classList.remove('visible');
+      return;
+    }
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(performSearch, 200);
   }
 
   function applyDashboardDateFilter() {
@@ -1429,38 +1440,48 @@
   }
 
   searchInput.addEventListener('input', doSearch);
-  fromDate.addEventListener('change', applyDashboardDateFilter);
-  toDate.addEventListener('change', applyDashboardDateFilter);
+  if (fromDate) fromDate.addEventListener('change', applyDashboardDateFilter);
+  if (toDate) toDate.addEventListener('change', applyDashboardDateFilter);
 
   clearBtn.addEventListener('click', () => {
     searchInput.value = '';
     clearBtn.style.display = 'none';
     dropdown.classList.remove('visible');
+    resultsBody.innerHTML = '';
+    if (activeAbortController) activeAbortController.abort();
     searchInput.focus();
   });
 
-  dateClear.addEventListener('click', () => {
-    fromDate.value = '';
-    toDate.value = '';
-    const url = new URL(window.location.href);
-    url.searchParams.delete('from_date');
-    url.searchParams.delete('to_date');
-    window.location.href = url.toString();
-    doSearch();
-  });
+  if (dateClear) {
+    dateClear.addEventListener('click', () => {
+      if (fromDate) fromDate.value = '';
+      if (toDate) toDate.value = '';
+      const url = new URL(window.location.href);
+      url.searchParams.delete('from_date');
+      url.searchParams.delete('to_date');
+      window.location.href = url.toString();
+      doSearch();
+    });
+  }
 
   document.addEventListener('click', e => {
-    if (!document.getElementById('bdSearchWrap').contains(e.target))
+    const wrap = document.getElementById('bdSearchWrap');
+    if (wrap && !wrap.contains(e.target)) {
       dropdown.classList.remove('visible');
+    }
   });
 
   searchInput.addEventListener('focus', () => {
-    if (searchInput.value.trim()) dropdown.classList.add('visible');
+    if (searchInput.value.trim()) {
+      if (resultsBody.children.length > 0) {
+        dropdown.classList.add('visible');
+      } else {
+        performSearch();
+      }
+    }
     const notifyDropdown = document.getElementById('bdNotifyDropdown');
     if (notifyDropdown) notifyDropdown.classList.remove('visible');
   });
-
-  loadBikeData();
 })();
 
 // UNIFIED DROPDOWNS CONTROLLER LOGIC

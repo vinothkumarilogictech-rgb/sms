@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-  .sale-view-shell { display: grid; gap: 12px; max-height: calc(100vh - 110px); overflow: hidden; }
+  .sale-view-shell { display: grid; gap: 14px; margin-bottom: 30px; }
   .sale-view-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .sale-view-topbar h1 { margin: 0; font-size: 1.35rem; font-weight: 1000; }
   .sale-view-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .sale-view-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr); gap: 12px; min-height: 0; }
-  .sale-view-stack { display: grid; gap: 12px; min-height: 0; }
+  .sale-view-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.95fr); gap: 14px; }
+  .sale-view-stack { display: grid; gap: 14px; align-content: start; }
   .sale-panel { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: 0 10px 22px rgba(39, 28, 64, 0.08); min-width: 0; }
   .sale-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .sale-panel-title { margin: 0; font-size: 0.96rem; font-weight: 1000; }
@@ -15,29 +15,38 @@
   .sale-mini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .sale-mini-field { border: 1px solid rgba(15, 23, 42, 0.08); border-radius: 10px; background: #fcfbff; padding: 8px 10px; min-width: 0; }
   .sale-mini-field span { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.03em; }
-  .sale-mini-field strong { display: block; margin-top: 3px; font-size: 0.9rem; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sale-mini-field strong { display: block; margin-top: 3px; font-size: 0.88rem; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sale-image-card { display: grid; gap: 10px; }
-  .sale-main-image { width: 100%; height: 220px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); background: #f7f7fb; display: block; }
-  .sale-image-placeholder { height: 220px; border-radius: 12px; border: 1px solid var(--line); background: #f7f7fb; display: grid; place-items: center; color: var(--muted); font-weight: 900; }
+  .sale-main-image { width: 100%; height: 210px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); background: #f7f7fb; display: block; }
+  .sale-image-placeholder { height: 210px; border-radius: 12px; border: 1px solid var(--line); background: #f7f7fb; display: grid; place-items: center; color: var(--muted); font-weight: 900; }
   .sale-vehicle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sale-summary-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(15, 23, 42, 0.08); font-weight: 800; }
+  .sale-summary-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 5px 0; border-bottom: 1px solid rgba(15, 23, 42, 0.08); font-weight: 800; font-size: 0.86rem; }
   .sale-summary-row:last-child { border-bottom: 0; }
   .sale-summary-row.total { color: #b3261e; font-weight: 1000; font-size: 1.05rem; }
+  .sale-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
+  .sale-badge-paid { background: #dcfce7; color: #166534; }
+  .sale-badge-partial { background: #fef3c7; color: #92400e; }
+  .sale-badge-unpaid { background: #fee2e2; color: #991b1b; }
+  .sale-photo-thumb { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
+  .sale-thumb-wrap { display: flex; align-items: center; gap: 8px; }
+  .sale-empty-note { color: var(--muted); font-size: 0.78rem; font-style: italic; font-weight: normal; }
+  .sale-doc-link { color: #6c2f8f; font-weight: 900; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  .sale-doc-link:hover { text-decoration: underline; }
+
   .sale-modal-backdrop { position: fixed; inset: 0; z-index: 10050; background: rgba(15, 23, 42, 0.46); display: none; align-items: center; justify-content: center; padding: 22px; }
   .sale-modal-backdrop.open { display: flex; }
-  .sale-modal { width: min(760px, 96vw); max-height: 86vh; overflow: auto; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28); }
-  .sale-modal-head { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .sale-modal { width: min(780px, 96vw); max-height: 86vh; overflow: auto; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28); }
+  .sale-modal-head { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 2; }
   .sale-modal-head h2 { margin: 0; font-size: 1.05rem; font-weight: 1000; }
   .sale-modal-close { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: #fff; cursor: pointer; display: grid; place-items: center; }
   .sale-modal-body { padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .sale-modal-body .sale-mini-field strong { white-space: normal; }
-  .sale-doc-link { color: #6c2f8f; font-weight: 900; text-decoration: none; }
 
   /* ── DETAIL COMPONENT SLIDER CAROUSEL STYLES ── */
   .sale-detail-carousel {
     position: relative;
     width: 100%;
-    height: 220px;
+    height: 210px;
     overflow: hidden;
     border-radius: 12px;
     box-sizing: border-box;
@@ -108,8 +117,11 @@
     border-radius: 3px;
   }
 
+  .sale-history-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .sale-history-table th, .sale-history-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  .sale-history-table th { background: #faf5ff; color: #4a2370; font-weight: 800; font-size: 0.76rem; text-transform: uppercase; }
+
   @media (max-width: 980px) {
-    .sale-view-shell { max-height: none; overflow: visible; }
     .sale-view-layout { grid-template-columns: 1fr; }
   }
   @media (max-width: 620px) {
@@ -120,63 +132,136 @@
 {% set buyer_name = sale.customer_name if sale and sale.customer_name else order.name %}
 {% set buyer_phone = sale.customer_phone if sale and sale.customer_phone else order.phone %}
 {% set main_image = sale.photo_filename if sale and sale.photo_filename else (sale.gallery_images[0] if sale and sale.gallery_images else '') %}
+{% set p_status = sale.payment_status if sale and sale.payment_status else ('Paid' if (sale.balance_amount|default(0)|float <= 0) else 'Partial' if (sale.paid_amount|default(0)|float > 0) else 'Unpaid') %}
 
 <section class="sale-view-shell">
   <div class="sale-view-topbar">
     <h1>Vehicle Sale Detail</h1>
     <div class="sale-view-actions">
-      {% if sale %}<a class="btn primary" href="{{ url_for('order_new', sale_id=sale.id) }}">Edit</a>{% endif %}
-      <a class="btn ghost" href="{{ url_for('order_print_a4', order_id=order.id) }}">Print</a>
-      <a class="btn ghost js-back-button" href="{{ url_for('orders') }}" data-fallback="{{ url_for('orders') }}">Back</a>
+      {% if sale %}<a class="btn primary" href="{{ url_for('order_new', sale_id=sale.id) }}"><i class="bi bi-pencil"></i> Edit</a>{% endif %}
+      <a class="btn ghost" href="{{ url_for('order_print_a4', order_id=order.id) }}"><i class="bi bi-printer"></i> Print</a>
+      {% if repairs or services %}
+      <button class="btn ghost" type="button" data-sale-modal="repairsModal"><i class="bi bi-tools"></i> Repairs & Services ({{ (repairs|length) + (services|length) }})</button>
+      {% endif %}
+      <a class="btn ghost js-back-button" href="{{ url_for('orders') }}" data-fallback="{{ url_for('orders') }}"><i class="bi bi-arrow-left"></i> Back</a>
     </div>
   </div>
 
   <div class="sale-view-layout">
     <div class="sale-view-stack">
+      <!-- BUYER DETAILS PANEL -->
       <section class="sale-panel">
         <div class="sale-panel-head">
           <h2 class="sale-panel-title">Buyer Details</h2>
           <button class="sale-eye-btn" type="button" data-sale-modal="buyerModal" aria-label="View buyer full details"><i class="bi bi-eye"></i></button>
         </div>
         <div class="sale-mini-grid">
-          <div class="sale-mini-field"><span>Name</span><strong>{{ buyer_name or "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Phone</span><strong>{{ buyer_phone or "-" }}</strong></div>
-          <div class="sale-mini-field"><span>ID Proof</span><strong>{{ sale.customer_identifier if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.customer_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
-          <div class="sale-mini-field"><span>Customer Photo</span><strong>{% if sale and sale.customer_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
-          <div class="sale-mini-field"><span>Customer With Bike</span><strong>{% if sale and sale.customer_with_bike_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+          <div class="sale-mini-field"><span>Buyer Name</span><strong>{{ buyer_name or "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Phone Number</span><strong>{{ buyer_phone or "-" }}</strong></div>
+          <div class="sale-mini-field"><span>ID Proof Number</span><strong>{{ sale.customer_identifier if sale and sale.customer_identifier and sale.customer_identifier != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Reference Date</span><strong>{{ sale.customer_id_proof_ref|date_dmy if sale and sale.customer_id_proof_ref and sale.customer_id_proof_ref != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale and sale.customer_address and sale.customer_address != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field">
+            <span>ID Proof Document</span>
+            <strong>
+              {% if sale and sale.customer_id_proof_filename %}
+              <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> Open Document</a>
+              {% else %}
+              <span class="sale-empty-note">No file uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
+          <div class="sale-mini-field">
+            <span>Customer Photo</span>
+            <strong>
+              {% if sale and sale.customer_photo_filename %}
+              <div class="sale-thumb-wrap">
+                <img src="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" alt="Customer" class="sale-photo-thumb" />
+                <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">View Photo</a>
+              </div>
+              {% else %}
+              <span class="sale-empty-note">No image uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
+          <div class="sale-mini-field">
+            <span>Customer With Bike (Sale Proof Photo)</span>
+            <strong>
+              {% if sale and sale.customer_with_bike_photo_filename %}
+              <div class="sale-thumb-wrap">
+                <img src="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" alt="Customer with Bike" class="sale-photo-thumb" />
+                <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">View Sale Proof Photo</a>
+              </div>
+              {% else %}
+              <span class="sale-empty-note">No image uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
         </div>
       </section>
 
+      <!-- SELLER DETAILS PANEL -->
       <section class="sale-panel">
         <div class="sale-panel-head">
           <h2 class="sale-panel-title">Seller Details</h2>
           <button class="sale-eye-btn" type="button" data-sale-modal="sellerModal" aria-label="View seller full details"><i class="bi bi-eye"></i></button>
         </div>
         <div class="sale-mini-grid">
-          <div class="sale-mini-field"><span>Name</span><strong>{{ sale.purchase_customer_name if sale and sale.purchase_customer_name else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Mobile</span><strong>{{ sale.purchase_customer_phone if sale and sale.purchase_customer_phone else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Seller Name</span><strong>{{ sale.purchase_customer_name if sale and sale.purchase_customer_name else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Seller Mobile</span><strong>{{ sale.purchase_customer_phone if sale and sale.purchase_customer_phone else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Seller ID</span><strong>{{ sale.purchase_customer_id if sale and sale.purchase_customer_id else "-" }}</strong></div>
           <div class="sale-mini-field"><span>Purchase Mode</span><strong>{{ (sale.purchase_mode or "Direct")|capitalize if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>ID</span><strong>{{ sale.purchase_customer_id if sale and sale.purchase_customer_id else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Seller Reference</span><strong>{{ sale.purchase_reference if sale and sale.purchase_reference else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Seller ID Date</span><strong>{{ sale.purchase_id_proof_ref|date_dmy if sale and sale.purchase_id_proof_ref else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Address</span><strong>{{ sale.purchase_customer_address if sale and sale.purchase_customer_address else "-" }}</strong></div>
+          <div class="sale-mini-field">
+            <span>Seller ID Document</span>
+            <strong>
+              {% if sale and (sale.seller_id_proof_filename or sale.purchase_id_proof_filename) %}
+              <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ (sale.seller_id_proof_filename or sale.purchase_id_proof_filename)) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> Open Document</a>
+              {% else %}
+              <span class="sale-empty-note">No file uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
         </div>
       </section>
 
+      <!-- SALE & PAYMENT DETAILS PANEL -->
       <section class="sale-panel">
         <div class="sale-panel-head">
-          <h2 class="sale-panel-title">Payment Summary</h2>
+          <h2 class="sale-panel-title">Sale & Payment Details</h2>
+          <span class="sale-badge {% if p_status == 'Paid' %}sale-badge-paid{% elif p_status == 'Partial' %}sale-badge-partial{% else %}sale-badge-unpaid{% endif %}">{{ p_status }}</span>
         </div>
         <div>
+          <div class="sale-summary-row"><span>Invoice / Order No</span><strong>{{ order.order_no or order.invoice_id or (sale.sale_code if sale else '-') }}</strong></div>
+          <div class="sale-summary-row"><span>Sale Date & Time</span><strong>{{ (sale.created_at or order.created_at)|datetime_display if (sale or order) else "-" }}</strong></div>
           <div class="sale-summary-row"><span>Selling Price</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('selling_price', 0) if sale else 0)|float) }}</strong></div>
-          <div class="sale-summary-row"><span>Repair Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('repair_cost', 0) if sale else 0)|float) }}</strong></div>
-          <div class="sale-summary-row"><span>Discount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('discount_amount', 0) if sale else 0)|float) }}</strong></div>
-          <div class="sale-summary-row total"><span>Total</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('total_amount', 0) if sale else 0) or (order.total_amount or 0))|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Purchase Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('purchase_price', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Repair / Expense Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('repair_cost', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Total Purchase Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('purchase_total_cost', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Final Before GST</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('subtotal_amount', 0) if sale else (sale.get('selling_price', 0) if sale else 0))|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Discount Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('discount_amount', 0) if sale else 0)|float) }}{% if sale and (sale.get('discount_percent')|float > 0) %} ({{ "%.2f"|format(sale.get('discount_percent')|float) }}%){% endif %}</strong></div>
+          <div class="sale-summary-row"><span>GST Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('gst_amount', 0) if sale else 0)|float) }}{% if sale and (sale.get('gst_percent')|float > 0) %} ({{ "%.2f"|format(sale.get('gst_percent')|float) }}%){% endif %}</strong></div>
+          <div class="sale-summary-row total"><span>Total Amount</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('total_amount', 0) if sale else 0) or (order.total_amount or 0))|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Paid Amount</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('paid_amount', 0) if sale else 0) or (sale.get('selling_price', 0) if sale else 0))|float) }}</strong></div>
+          {% if ((sale.get('advance_amount', 0) if sale else 0) or (order.advance_amount or 0))|float > 0 %}
+          <div class="sale-summary-row"><span>Advance Paid</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('advance_amount', 0) if sale else 0) or (order.advance_amount or 0))|float) }}</strong></div>
+          {% endif %}
+          <div class="sale-summary-row" style="color: {% if (sale.get('balance_amount', 0) if sale else 0) > 0 %}#b3261e{% else %}#166534{% endif %}; font-weight: 900;"><span>Balance Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('balance_amount', 0) if sale else 0)|float) }}</strong></div>
+          <div class="sale-summary-row"><span>Payment Method</span><strong>{{ sale.payment_method if sale and sale.payment_method else (order.payment_method or "Cash") }}</strong></div>
+          {% if (sale.payment_method if sale else order.payment_method)|lower == 'finance' %}
+          <div class="sale-summary-row"><span>Finance Name</span><strong>{{ sale.payment_finance_name if sale and sale.payment_finance_name else "-" }}</strong></div>
+          <div class="sale-summary-row"><span>Commission Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('payment_commission_amount', 0) if sale else 0)|float) }}</strong></div>
+          {% endif %}
+          <div class="sale-summary-row"><span>Payment Status</span><strong>{{ p_status }}</strong></div>
         </div>
       </section>
     </div>
 
     <div class="sale-view-stack">
-      <section class="sale-panel sale-image-card" style="padding:0; overflow:hidden; height:220px; position:relative;">
+      <!-- BIKE IMAGE SLIDER -->
+      <section class="sale-panel sale-image-card" style="padding:0; overflow:hidden; height:210px; position:relative;">
         {% if sale and sale.gallery_images and sale.gallery_images|length > 0 %}
         <div class="sale-detail-carousel">
           {% for img in sale.gallery_images %}
@@ -202,6 +287,7 @@
         {% endif %}
       </section>
 
+      <!-- VEHICLE DETAILS PANEL -->
       <section class="sale-panel">
         <div class="sale-panel-head">
           <h2 class="sale-panel-title">Vehicle Details</h2>
@@ -209,51 +295,142 @@
         </div>
         <div class="sale-mini-grid sale-vehicle-grid">
           <div class="sale-mini-field"><span>Bike Name</span><strong>{{ sale.vehicle_name if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Vehicle No</span><strong>{{ sale.vehicle_number if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Model Year</span><strong>{{ sale.model_year if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Chassis No</span><strong>{{ sale.registration_no if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Current FC</span><strong>{{ sale.current_fc if sale else "-" }}</strong></div>
-          <div class="sale-mini-field"><span>Owners</span><strong>{{ sale.owners if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Vehicle Number</span><strong>{{ sale.vehicle_number if sale else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Order Date</span><strong>{{ (sale.created_at or order.created_at)|datetime_display if (sale or order) else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Model Year</span><strong>{{ sale.model_year if sale and sale.model_year else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Chassis Number</span><strong>{{ sale.registration_no if sale and sale.registration_no and sale.registration_no != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Owner Count</span><strong>{{ sale.owners if sale and sale.owners else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Current FC</span><strong>{{ sale.current_fc|date_dmy if sale and sale.current_fc and sale.current_fc != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>KMs Driven</span><strong>{{ sale.kms_driven if sale and sale.kms_driven and sale.kms_driven != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>Insurance Valid Till</span><strong>{{ sale.insurance_end_date|date_dmy if sale and sale.insurance_end_date and sale.insurance_end_date != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field"><span>PUC Valid Till</span><strong>{{ sale.puc_valid_upto|date_dmy if sale and sale.puc_valid_upto and sale.puc_valid_upto != 'None' else "-" }}</strong></div>
+          <div class="sale-mini-field">
+            <span>RC Book</span>
+            <strong>
+              {% if sale and sale.rc_book_filename %}
+              <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> View RC</a>
+              {% else %}
+              <span class="sale-empty-note">No file uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
+          <div class="sale-mini-field">
+            <span>RC Book Back</span>
+            <strong>
+              {% if sale and sale.rc_book_back_filename %}
+              <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_back_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> View RC Back</a>
+              {% else %}
+              <span class="sale-empty-note">No file uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
+          <div class="sale-mini-field">
+            <span>Insurance Document</span>
+            <strong>
+              {% if sale and sale.insurance_document_filename %}
+              <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.insurance_document_filename) }}" target="_blank" rel="noopener"><i class="bi bi-shield-check"></i> View Insurance</a>
+              {% else %}
+              <span class="sale-empty-note">No file uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
+          <div class="sale-mini-field">
+            <span>PUC Certificate</span>
+            <strong>
+              {% if sale and sale.puc_certificate_filename %}
+              <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.puc_certificate_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-check"></i> View PUC</a>
+              {% else %}
+              <span class="sale-empty-note">No file uploaded</span>
+              {% endif %}
+            </strong>
+          </div>
         </div>
       </section>
     </div>
   </div>
 </section>
 
+<!-- BUYER FULL DETAILS MODAL -->
 <div class="sale-modal-backdrop" id="buyerModal" role="dialog" aria-modal="true" aria-labelledby="buyerModalTitle">
   <div class="sale-modal">
     <div class="sale-modal-head"><h2 id="buyerModalTitle">Buyer Full Details</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
     <div class="sale-modal-body">
-      <div class="sale-mini-field"><span>Name</span><strong>{{ buyer_name or "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Phone</span><strong>{{ buyer_phone or "-" }}</strong></div>
-      <div class="sale-mini-field"><span>ID Proof</span><strong>{{ sale.customer_identifier if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Buyer Name</span><strong>{{ buyer_name or "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Phone Number</span><strong>{{ buyer_phone or "-" }}</strong></div>
+      <div class="sale-mini-field"><span>ID Proof Number</span><strong>{{ sale.customer_identifier if sale and sale.customer_identifier and sale.customer_identifier != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Reference Date</span><strong>{{ sale.customer_id_proof_ref|date_dmy if sale and sale.customer_id_proof_ref and sale.customer_id_proof_ref != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Address</span><strong>{{ sale.customer_address if sale and sale.customer_address and sale.customer_address != 'None' else "-" }}</strong></div>
       <div class="sale-mini-field"><span>Order ID</span><strong>{{ order.order_no or order.invoice_id or order.id }}</strong></div>
       <div class="sale-mini-field"><span>Status</span><strong>{{ order.status or "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Payment Method</span><strong>{{ sale.payment_method if sale and sale.payment_method else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.customer_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
-      <div class="sale-mini-field"><span>Customer Photo</span><strong>{% if sale and sale.customer_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
-      <div class="sale-mini-field"><span>Customer With Bike</span><strong>{% if sale and sale.customer_with_bike_photo_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Payment Method</span><strong>{{ sale.payment_method if sale and sale.payment_method else (order.payment_method or "Cash") }}</strong></div>
+      <div class="sale-mini-field"><span>Payment Status</span><strong>{{ p_status }}</strong></div>
+      <div class="sale-mini-field">
+        <span>ID Proof Document</span>
+        <strong>
+          {% if sale and sale.customer_id_proof_filename %}
+          <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_id_proof_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> Open Document</a>
+          {% else %}
+          <span class="sale-empty-note">No file uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
+      <div class="sale-mini-field">
+        <span>Customer Photo</span>
+        <strong>
+          {% if sale and sale.customer_photo_filename %}
+          <div class="sale-thumb-wrap">
+            <img src="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" alt="Customer" class="sale-photo-thumb" />
+            <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_photo_filename) }}" target="_blank" rel="noopener">Open Photo</a>
+          </div>
+          {% else %}
+          <span class="sale-empty-note">No image uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
+      <div class="sale-mini-field" style="grid-column: span 2;">
+        <span>Customer With Bike (Sale Proof)</span>
+        <strong>
+          {% if sale and sale.customer_with_bike_photo_filename %}
+          <div class="sale-thumb-wrap">
+            <img src="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" alt="Customer with Bike" class="sale-photo-thumb" />
+            <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicle_sales/' ~ sale.customer_with_bike_photo_filename) }}" target="_blank" rel="noopener">Open Sale Proof Photo</a>
+          </div>
+          {% else %}
+          <span class="sale-empty-note">No image uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- SELLER FULL DETAILS MODAL -->
 <div class="sale-modal-backdrop" id="sellerModal" role="dialog" aria-modal="true" aria-labelledby="sellerModalTitle">
   <div class="sale-modal">
     <div class="sale-modal-head"><h2 id="sellerModalTitle">Seller Full Details</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
     <div class="sale-modal-body">
       <div class="sale-mini-field"><span>Purchase Mode</span><strong>{{ (sale.purchase_mode or "Direct")|capitalize if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Name</span><strong>{{ sale.purchase_customer_name if sale and sale.purchase_customer_name else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Mobile</span><strong>{{ sale.purchase_customer_phone if sale and sale.purchase_customer_phone else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Seller Name</span><strong>{{ sale.purchase_customer_name if sale and sale.purchase_customer_name else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Seller Mobile</span><strong>{{ sale.purchase_customer_phone if sale and sale.purchase_customer_phone else "-" }}</strong></div>
       <div class="sale-mini-field"><span>Address</span><strong>{{ sale.purchase_customer_address if sale and sale.purchase_customer_address else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>ID</span><strong>{{ sale.purchase_customer_id if sale and sale.purchase_customer_id else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>ID Date</span><strong>{{ sale.purchase_id_proof_ref|date_dmy if sale and sale.purchase_id_proof_ref else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Reference</span><strong>{{ sale.purchase_reference if sale and sale.purchase_reference else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>ID File</span><strong>{% if sale and sale.purchase_id_proof_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.purchase_id_proof_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Seller ID</span><strong>{{ sale.purchase_customer_id if sale and sale.purchase_customer_id else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Seller ID Date</span><strong>{{ sale.purchase_id_proof_ref|date_dmy if sale and sale.purchase_id_proof_ref else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Seller Reference</span><strong>{{ sale.purchase_reference if sale and sale.purchase_reference else "-" }}</strong></div>
+      <div class="sale-mini-field">
+        <span>Seller ID Document</span>
+        <strong>
+          {% if sale and (sale.seller_id_proof_filename or sale.purchase_id_proof_filename) %}
+          <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ (sale.seller_id_proof_filename or sale.purchase_id_proof_filename)) }}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Open file</a>
+          {% else %}
+          <span class="sale-empty-note">No file uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- VEHICLE FULL DETAILS MODAL -->
 <div class="sale-modal-backdrop" id="vehicleModal" role="dialog" aria-modal="true" aria-labelledby="vehicleModalTitle">
   <div class="sale-modal">
     <div class="sale-modal-head"><h2 id="vehicleModalTitle">Vehicle Full Details</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
@@ -262,20 +439,133 @@
       <div class="sale-mini-field"><span>Bike Name</span><strong>{{ sale.vehicle_name if sale else "-" }}</strong></div>
       <div class="sale-mini-field"><span>Vehicle Number</span><strong>{{ sale.vehicle_number if sale else "-" }}</strong></div>
       <div class="sale-mini-field"><span>Brand</span><strong>{{ sale.brand if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Model Year</span><strong>{{ sale.model_year if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Chassis No</span><strong>{{ sale.registration_no if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Current FC</span><strong>{{ sale.current_fc if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Owners</span><strong>{{ sale.owners if sale else "-" }}</strong></div>
-      <div class="sale-mini-field"><span>Subtotal</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('subtotal_amount', 0) if sale else 0)|float) }}</strong></div>
-      <div class="sale-mini-field"><span>GST</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('gst_amount', 0) if sale else 0)|float) }}</strong></div>
-      <div class="sale-mini-field"><span>Advance</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('advance_amount', 0) if sale else 0)|float) }}</strong></div>
-      <div class="sale-mini-field"><span>Total</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('total_amount', 0) if sale else 0) or (order.total_amount or 0))|float) }}</strong></div>
-      <div class="sale-mini-field"><span>RC Book</span><strong>{% if sale and sale.rc_book_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
-      <div class="sale-mini-field"><span>Insurance</span><strong>{% if sale and sale.insurance_document_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.insurance_document_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
-      <div class="sale-mini-field"><span>PUC</span><strong>{% if sale and sale.puc_certificate_filename %}<a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.puc_certificate_filename) }}" target="_blank" rel="noopener">Open file</a>{% else %}-{% endif %}</strong></div>
+      <div class="sale-mini-field"><span>Model Year</span><strong>{{ sale.model_year if sale and sale.model_year else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Chassis Number</span><strong>{{ sale.registration_no if sale and sale.registration_no and sale.registration_no != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Owner Count</span><strong>{{ sale.owners if sale and sale.owners else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Current FC</span><strong>{{ sale.current_fc|date_dmy if sale and sale.current_fc and sale.current_fc != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Order Date</span><strong>{{ (sale.created_at or order.created_at)|datetime_display if (sale or order) else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>KMs Driven</span><strong>{{ sale.kms_driven if sale and sale.kms_driven and sale.kms_driven != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Insurance Valid Till</span><strong>{{ sale.insurance_end_date|date_dmy if sale and sale.insurance_end_date and sale.insurance_end_date != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>PUC Valid Till</span><strong>{{ sale.puc_valid_upto|date_dmy if sale and sale.puc_valid_upto and sale.puc_valid_upto != 'None' else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Fine Details</span><strong>{{ sale.fine_details if sale and sale.fine_details else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Fine Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('fine_amount', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Hypothecation</span><strong>{{ sale.hypothecation if sale and sale.hypothecation else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Remarks</span><strong>{{ sale.remarks if sale and sale.remarks else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Purchase Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('purchase_price', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Expense / Repair Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('repair_cost', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Total Purchase Cost</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('purchase_total_cost', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Selling Price</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('selling_price', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Final Before GST</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('subtotal_amount', 0) if sale else (sale.get('selling_price', 0) if sale else 0))|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Discount Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('discount_amount', 0) if sale else 0)|float) }}{% if sale and sale.get('discount_percent') and (sale.get('discount_percent')|float > 0) %} ({{ "%.2f"|format(sale.get('discount_percent')|float) }}%){% endif %}</strong></div>
+      <div class="sale-mini-field"><span>GST Rate (%)</span><strong>{{ "%.2f"|format((sale.get('gst_percent', 0) if sale else 0)|float) }}%</strong></div>
+      <div class="sale-mini-field"><span>GST Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('gst_amount', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Paid Amount</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('paid_amount', 0) if sale else 0) or (sale.get('selling_price', 0) if sale else 0))|float) }}</strong></div>
+      {% if ((sale.get('advance_amount', 0) if sale else 0) or (order.advance_amount or 0))|float > 0 %}
+      <div class="sale-mini-field"><span>Advance Paid</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('advance_amount', 0) if sale else 0) or (order.advance_amount or 0))|float) }}</strong></div>
+      {% endif %}
+      <div class="sale-mini-field"><span>Balance Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('balance_amount', 0) if sale else 0)|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Total Sale Amount</span><strong>&#8377;{{ "{:,.0f}".format(((sale.get('total_amount', 0) if sale else 0) or (order.total_amount or 0))|float) }}</strong></div>
+      <div class="sale-mini-field"><span>Payment Method</span><strong>{{ sale.payment_method if sale and sale.payment_method else (order.payment_method or "Cash") }}</strong></div>
+      {% if (sale.payment_method if sale else order.payment_method)|lower == 'finance' %}
+      <div class="sale-mini-field"><span>Finance Name</span><strong>{{ sale.payment_finance_name if sale and sale.payment_finance_name else "-" }}</strong></div>
+      <div class="sale-mini-field"><span>Commission Amount</span><strong>&#8377;{{ "{:,.0f}".format((sale.get('payment_commission_amount', 0) if sale else 0)|float) }}</strong></div>
+      {% endif %}
+      <div class="sale-mini-field"><span>Payment Status</span><strong>{{ p_status }}</strong></div>
+      <div class="sale-mini-field">
+        <span>RC Book</span>
+        <strong>
+          {% if sale and sale.rc_book_filename %}
+          <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> Open Document</a>
+          {% else %}
+          <span class="sale-empty-note">No file uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
+      <div class="sale-mini-field">
+        <span>RC Book Back</span>
+        <strong>
+          {% if sale and sale.rc_book_back_filename %}
+          <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.rc_book_back_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> Open Document</a>
+          {% else %}
+          <span class="sale-empty-note">No file uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
+      <div class="sale-mini-field">
+        <span>Insurance Document</span>
+        <strong>
+          {% if sale and sale.insurance_document_filename %}
+          <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.insurance_document_filename) }}" target="_blank" rel="noopener"><i class="bi bi-shield-check"></i> Open Document</a>
+          {% else %}
+          <span class="sale-empty-note">No file uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
+      <div class="sale-mini-field">
+        <span>PUC Certificate</span>
+        <strong>
+          {% if sale and sale.puc_certificate_filename %}
+          <a class="sale-doc-link" href="{{ url_for('static', filename='uploads/vehicles/' ~ sale.puc_certificate_filename) }}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-check"></i> Open Document</a>
+          {% else %}
+          <span class="sale-empty-note">No file uploaded</span>
+          {% endif %}
+        </strong>
+      </div>
     </div>
   </div>
 </div>
+
+<!-- REPAIRS & SERVICES MODAL -->
+{% if repairs or services %}
+<div class="sale-modal-backdrop" id="repairsModal" role="dialog" aria-modal="true" aria-labelledby="repairsModalTitle">
+  <div class="sale-modal" style="width: min(850px, 96vw);">
+    <div class="sale-modal-head"><h2 id="repairsModalTitle">Vehicle Repairs & Services History</h2><button class="sale-modal-close" type="button" aria-label="Close"><i class="bi bi-x-lg"></i></button></div>
+    <div style="padding: 16px; display: grid; gap: 16px;">
+      {% if repairs %}
+      <div>
+        <h3 style="margin: 0 0 8px; font-size: 0.95rem; color: #4a2370;">Repairs ({{ repairs|length }})</h3>
+        <table class="sale-history-table">
+          <thead>
+            <tr><th>Date</th><th>Description</th><th>Cost</th><th>Mode</th></tr>
+          </thead>
+          <tbody>
+            {% for r in repairs %}
+            <tr>
+              <td>{{ (r.repair_date or r.created_at)|date_dmy }}</td>
+              <td>{{ r.description or "-" }}</td>
+              <td>&#8377;{{ "{:,.2f}".format((r.total_cost or r.cost or 0)|float) }}</td>
+              <td>{{ r.payment_mode or "-" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if services %}
+      <div>
+        <h3 style="margin: 0 0 8px; font-size: 0.95rem; color: #4a2370;">Services ({{ services|length }})</h3>
+        <table class="sale-history-table">
+          <thead>
+            <tr><th>Date</th><th>Done By</th><th>Amount</th><th>Remarks</th></tr>
+          </thead>
+          <tbody>
+            {% for s in services %}
+            <tr>
+              <td>{{ (s.service_date or s.created_at)|date_dmy }}</td>
+              <td>{{ s.service_done_by or "-" }}</td>
+              <td>&#8377;{{ "{:,.2f}".format((s.amount or 0)|float) }}</td>
+              <td>{{ s.remarks or "-" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <script>
   (function () {

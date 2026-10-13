@@ -670,7 +670,11 @@
         <div class="veh-head-actions" style="margin-top: 12px;">
           <a class="btn ghost" href="{{ url_for('expense_repair_add', vehicle_id=vehicle.id) }}"><i class="bi bi-plus-circle"></i> Add Repair</a>
           <a class="btn ghost" href="{{ url_for('service_add', vehicle_id=vehicle.id) }}"><i class="bi bi-gear-wide-connected"></i> Add Service</a>
-          <a class="btn primary" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}"><i class="bi bi-bag-check"></i> Sold Out</a>
+          {% if (vehicle.status or '')|lower == 'sold' %}
+            <a class="btn primary" href="{{ url_for('order_detail', order_id=vehicle.sale_order_id, sale_id=vehicle.sale_id, source='orders') if (vehicle.sale_order_id or vehicle.sale_id) else url_for('orders') }}"><i class="bi bi-eye"></i> View Sale</a>
+          {% else %}
+            <a class="btn primary" href="{{ url_for('order_new', vehicle_id=vehicle.id) }}"><i class="bi bi-bag-check"></i> Sell</a>
+          {% endif %}
         </div>
       </div>
       <div class="veh-pane" style="width: 100%; box-sizing: border-box; height: auto;">
@@ -691,20 +695,20 @@
               <div style="text-align:right;">Amount</div>
               <div>Remarks</div>
             </div>
-            {% set service_total = 0.0 %}
+            {% set ns_service = namespace(total=0.0) %}
             {% for s in service_rows %}
-            {% set service_total = service_total + ((s.amount or 0)|float) %}
+            {% set ns_service.total = ns_service.total + ((s.amount or 0)|float) %}
             <div class="list-row">
               <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ (s.service_date or s.created_at)|date_only_dmy }}</div>
               <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ s.service_done_by or '-' }}</div>
-              <div style="text-align:right; min-width:0; word-break:break-word; overflow-wrap:anywhere;">&#8377; {{ "%.2f"|format(s.amount or 0) }}</div>
+              <div style="text-align:right; min-width:0; word-break:break-word; overflow-wrap:anywhere;">&#8377; {{ "{:,.2f}".format((s.amount or 0)|float) }}</div>
               <div style="min-width:0; word-break:break-word; overflow-wrap:anywhere;">{{ s.remarks or '-' }}</div>
             </div>
             {% endfor %}
             <div class="list-row" style="font-weight:900;">
               <div></div>
               <div>Total</div>
-              <div style="text-align:right;">&#8377; {{ "%.2f"|format(service_total or 0) }}</div>
+              <div style="text-align:right;">&#8377; {{ "{:,.2f}".format((service_total if (service_total is defined and service_total is not none) else ns_service.total)|float) }}</div>
               <div></div>
             </div>
           </div>
